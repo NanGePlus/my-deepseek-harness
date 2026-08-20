@@ -51,7 +51,8 @@ export interface MonacoEditorModule {
  */
 export async function loadMonacoEditor(): Promise<MonacoEditorModule | undefined> {
   try {
-    return await import('monaco-editor') as MonacoEditorModule
+    // monaco-editor's published types are wider than this widget face.
+    return await import('monaco-editor') as unknown as MonacoEditorModule
   } catch (error: unknown) {
     // Dynamic import rejects when monaco-editor is missing or AMD-only.
     void error

@@ -4,7 +4,7 @@
 import type {
   ClientResponse, HostFrame, IApiClient, ModelSelection, MuxFrame,
   RpcError, RpcReceipt, RpcRequest, RpcResponse, SessionId, SessionModels, SessionSearchItem, SkillEntry,
-  WorkspaceId, WorkspaceView,
+  WorkspaceId, WorkspaceView, FileReadResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import { RpcId } from '@deepseek-ai/dsh-client-connection/client'
 import type { SessionRemotes } from '../src/client/sessions/remotes.ts'
@@ -142,13 +142,7 @@ export class FakeApiClient implements IApiClient {
   }>> =
     () => Promise.resolve(ok({ entries: [] }))
 
-  onReadFile: (payload: unknown) => Promise<RpcResponse<{
-    kind: 'text' | 'bytes'
-    path: string
-    text?: string
-    data?: string
-    mediaType?: string
-  }>> = (payload) => {
+  onReadFile: (payload: unknown) => Promise<RpcResponse<FileReadResult>> = (payload) => {
     const request = payload as { path: string; kind: 'text' | 'bytes' }
     if (request.kind === 'bytes') {
       return Promise.resolve(ok({
