@@ -3,9 +3,10 @@
  */
 
 import { z } from 'zod'
-import type { DirectoryEntry } from './host.ts'
+import type { DirectoryEntry, WorkspaceEntry } from './host.ts'
 import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
+import { workspaceIdSchema } from './sessions.schema.ts'
 
 /** host.describe request payload (empty object literal). */
 export const hostDescribeRequestSchema = z.object({}) satisfies z.ZodType<Wire<RequestPayload<'host.describe'>>>
@@ -63,6 +64,28 @@ export const hostCreateDirectoryRequestSchema = z.object({
 export const hostCreateDirectoryValueSchema = z.object({
   path: z.string(),
 }) satisfies z.ZodType<Wire<ResponseValue<'host.createDirectory'>>>
+
+/** One row of host.listWorkspaceEntries. */
+export const workspaceEntrySchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  isDirectory: z.boolean(),
+  hidden: z.boolean(),
+}) satisfies z.ZodType<Wire<WorkspaceEntry>>
+
+/** host.listWorkspaceEntries request payload. */
+export const hostListWorkspaceEntriesRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.listWorkspaceEntries'>>>
+
+/** host.listWorkspaceEntries response value. */
+export const hostListWorkspaceEntriesValueSchema = z.object({
+  path: z.string(),
+  entries: z.array(workspaceEntrySchema),
+  truncated: z.boolean(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.listWorkspaceEntries'>>>
+
 /** host.openPath request payload. */
 export const hostOpenPathRequestSchema = z.object({
   path: z.string().min(1),
