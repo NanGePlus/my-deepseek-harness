@@ -2609,6 +2609,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         path: `${request.payload.path}/${request.payload.name}`,
       }),
       openPath: request => ok(request, { opened: true as const }),
+      watchPath: () => (async function* () {})(),
     },
     workspace: {
       list: request => ok(request, {

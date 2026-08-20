@@ -18,6 +18,7 @@ import {
   hostCreateDirectoryRequestSchema, hostCreateDirectoryValueSchema,
   hostDescribeRequestSchema, hostDescribeValueSchema,
   hostListDirectoryRequestSchema, hostListDirectoryValueSchema,
+  watchPathFrameSchema,
 } from '../src/api/host.schema.ts'
 import {
   workspaceArchiveSessionRequestSchema, workspaceArchiveSessionValueSchema,
@@ -508,6 +509,14 @@ describe('events frame schemas', () => {
     expect(() => muxFrameSchema.parse({ type: 'session/queue', sessionId: 's', items: 'x' })).toThrow()
     expect(() => muxFrameSchema.parse({ type: 'session/queue', sessionId: 's', items: [{ id: '', role: 'user', content: [], source: { kind: 'user' } }] })).toThrow()
     expect(() => muxFrameSchema.parse({ type: 'session/queue', sessionId: 's', items: [{ id: 'm', role: 'assistant', content: [], source: { kind: 'user' } }] })).toThrow()
+  })
+
+  it('accepts every watchPath frame branch', () => {
+    expect(() => watchPathFrameSchema.parse({ type: 'host/path-changed', path: '/w/a.ts' })).not.toThrow()
+    expect(() => watchPathFrameSchema.parse({
+      type: 'stream/error',
+      error: { code: 'workspace-path-out-of-bounds', message: 'm', details: { workspaceId: 'w', path: '/x' } },
+    })).not.toThrow()
   })
 
   it('accepts every host frame branch', () => {

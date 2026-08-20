@@ -237,6 +237,10 @@ export class FakeApiClient implements IApiClient {
       this.onCreateWorkspaceDirectory(payload),
     ),
     openPath: (payload: unknown) => this.record('host.openPath', payload, this.onOpenPath(payload)),
+    watchPath: (_payload, _signal, onOpen) => {
+      onOpen?.()
+      return (async function* () {})()
+    },
   }
 
   // The archive-set field defaults at the binding below so list stubs keep

@@ -30,7 +30,7 @@ Web 文件编辑器需要在 Session 绑定 Workspace 内经 Host 读取可编�
 
 - `ui-file-editor` 的打开／保存经 `WorkspaceRuntime` 调用这些 RPC（[打开／Tab／保存](2026-08-20-editor-surface-open-tabs-save.md)）。
 - 删除、重命名与 Workspace 内建目录见 [Host 路径变更](2026-08-21-host-delete-rename-path.zh.md)。
-- `watchPath` 仍为独立 Issue。
+- 外部变更检测见 [host watchPath](2026-08-21-host-watch-path.md)。
 - V1 不设文件大小上限；超大读跟随 Node 内存行为。
 
 ## 测试

@@ -3,7 +3,7 @@
  * together; introduce protocolVersion only when an independently released client appears.
  */
 
-import type { RpcRequest, RpcResponse } from './rpc.ts'
+import type { RpcRequest, RpcResponse, RpcError } from './rpc.ts'
 import type { WorkspaceId } from './workspace.ts'
 
 /** One directory row of a listing: a child entry or a breadcrumb ancestor. */
@@ -89,6 +89,11 @@ export interface PathMutationResult {
   /** Absolute host path affected by the mutation. */
   path: string
 }
+
+/** host.watchPath stream frame: one external change on the watched path. */
+export type WatchPathFrame =
+  | { type: 'host/path-changed'; path: string }
+  | { type: 'stream/error'; error: RpcError }
 
 /** host.listDirectory response value: one directory level plus its ancestry. */
 export interface DirectoryListing {
@@ -240,4 +245,14 @@ export interface HostApi {
     request: RpcRequest<{ path: string }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<{ opened: true }>>
+
+  /**
+   * Push external disk changes for one opened path inside a registered
+   * Workspace until the caller aborts the stream. Watches only the given
+   * path via Host `fs.watch`; out-of-bounds paths fail before streaming.
+   */
+  watchPath(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string }>,
+    signal: AbortSignal,
+  ): AsyncIterable<RpcRequest<WatchPathFrame>>
 }

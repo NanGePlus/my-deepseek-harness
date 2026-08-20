@@ -31,7 +31,7 @@ Monaco 经 `loadMonacoEditor()`（`import('monaco-editor')`）加载。jsdom 通
 ## 后果
 
 - 关闭 dirty Tab 会丢弃缓冲，直到 US-27。
-- `watchPath`／外部变更对话框仍属后续 issue。
+- `watchPath`／外部变更对话框见 [host watchPath](2026-08-21-host-watch-path.md)。
 - ui-file-editor 的 client 工厂包含 monaco-editor（数 MB）；PRD 接受这一体积。
 - 本切片里 Monaco worker 是占位 `Worker`；分词仍来自内联的语言贡献。
 

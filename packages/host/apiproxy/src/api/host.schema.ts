@@ -6,6 +6,7 @@ import { z } from 'zod'
 import type { DirectoryEntry, GitStatusEntry, WorkspaceEntry, FileTextRead, FileBytesRead } from './host.ts'
 import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
+import { rpcErrorSchema } from './rpc.schema.ts'
 import { workspaceIdSchema } from './sessions.schema.ts'
 
 /** host.describe request payload (empty object literal). */
@@ -194,3 +195,15 @@ export const hostOpenPathRequestSchema = z.object({
 export const hostOpenPathValueSchema = z.object({
   opened: z.literal(true),
 }) satisfies z.ZodType<Wire<ResponseValue<'host.openPath'>>>
+
+/** host.watchPath GET query: workspace-bound absolute path to watch. */
+export const hostWatchPathQuerySchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+})
+
+/** host.watchPath stream frame union. */
+export const watchPathFrameSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('host/path-changed'), path: z.string() }),
+  z.object({ type: z.literal('stream/error'), error: rpcErrorSchema }),
+])

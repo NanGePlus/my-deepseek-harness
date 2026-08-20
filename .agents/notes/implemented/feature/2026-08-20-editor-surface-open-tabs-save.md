@@ -31,7 +31,7 @@ Monaco loads through `loadMonacoEditor()` (`import('monaco-editor')`). jsdom use
 ## Consequences
 
 - Closing a dirty tab discards the buffer until US-27.
-- `watchPath` / external-change dialogs remain a later issue.
+- `watchPath` / external-change dialogs are documented in [host watchPath](2026-08-21-host-watch-path.md).
 - The ui-file-editor client factory includes monaco-editor (multi-megabyte); that cost is accepted in the PRD.
 - Monaco workers are a dummy `Worker` in this slice; tokenization still runs from the inlined language contributions.
 

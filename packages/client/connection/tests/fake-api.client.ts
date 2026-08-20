@@ -161,6 +161,10 @@ export class FakeApiClient implements IApiClient {
       Promise.resolve(ok({ path: '' })),
     ),
     openPath: payload => this.record('host.openPath', payload, this.onOpenPath(payload)),
+    watchPath: (_payload, _signal, onOpen) => {
+      onOpen?.()
+      return (async function* () {})()
+    },
   }
 
   readonly workspace: IApiClient['workspace'] = {
