@@ -1,188 +1,196 @@
-# 设计系统文档：DeepSeek Harness 文件编辑器
+# Design system document: DeepSeek Harness file editor
 
-> UI 模式：`spec-driven`（规范驱动 UI）
+English | [中文](DESIGN.zh.md)
 
-## 1. 概览与创意北极星
+> UI mode: `spec-driven` (spec-driven UI)
+>
+> Global tokens, palettes, and type scale change only through a Design Issue; UI implementation PRs must not edit them. Page layout and product copy live in the PRD. Runtime `--dsw-*` values are owned by [`ui-theme`](../../packages/client/ui-theme/README.md) sheets; this file is the brand-board mapping. See [web-styling.md](../web-styling.md) and the [file-editor design-system Agent Note](../../.agents/notes/implemented/process/2026-08-20-file-editor-design-system.md).
 
-### 创意北极星：「并排工坊」
+## 1. Overview and creative north star
 
-文件编辑器不是独立产品，而是 DeepSeek Harness Web 内嵌于 details 栏的可收起编码面板：对话为主、编辑为辅。视觉 100% 继承 `ui-theme` 的 `--dsw-alias-*` token，Monaco 主题由同一 token 派生，随 light/dark 与对话区同步切换。
+### Creative north star: 「Side-by-side workshop」
 
-打破模板感的方式：用表面色阶与 ghost 交互态建立层次，而非卡片阴影或粗边框；文件树紧凑如 IDE、编辑区与对话代码块同 surface，使用户感到「编辑的就是会话里看到的那种代码」。双层 Tab（details 分段 + 文件 Tab）在窄栏内用底边强调与 warn 圆点传递状态，避免额外装饰。
+The file editor is not a standalone product. It is a collapsible coding panel nested in the DeepSeek Harness Web details column: conversation stays primary, editing stays secondary. Visuals inherit `ui-theme` `--dsw-alias-*` tokens at 100%. The Monaco theme is derived from the same tokens and switches with light/dark in lockstep with the conversation pane.
 
----
-
-## 2. 色彩与表面架构
-
-文件编辑器不定义独立色板，四组角色映射至 dsh 静态色阶：主色为 DeepSeek 蓝（品牌与强调），辅色为通用蓝（链接与信息），第三色为绿（成功反馈），中性色为 bluish 灰阶（表面与文案）。明暗基调跟随 Harness 全局主题。
-
-### 色板（品牌板须可视化）
-
-| 角色 | 主色 HEX | 色阶（浅→深，附 HEX） |
-|------|---------|----------------------|
-| 主色（DeepSeek） | `#4176E6` | `#EDF3FE` · `#E4EDFD` · `#D3E2FF` · `#B7C8FE` · `#679EFE` · `#5686FE` · `#4176E6` · `#4868B2` · `#2F4C8F` · `#283142` |
-| 辅色（Blue） | `#3B82F6` | `#EFF6FF` · `#E5F0FF` · `#DBEAFE` · `#93C5FD` · `#60A5FA` · `#4D93F8` · `#3B82F6` · `#2563EB` · `#1E40AF` · `#0E3074` |
-| 第三色（Green） | `#22C55E` | `#E6FAED` · `#4ED17E` · `#22C55E` · `#233C2C` |
-| 中性色（Bluish） | `#0F1115` | `#FFFFFF` · `#F9FAFB` · `#F5F6F7` · `#F1F3F5` · `#EBEEF2` · `#E1E5EE` · `#CFD3D6` · `#ADB2B8` · `#979DA6` · `#61666B` · `#151517` · `#0F1115` |
-
-### 语义色（品牌板须可视化）
-
-语义色复用 dsh alias，light 模式 HEX 如下；dark 模式由 `body[data-ds-dark-theme]` 同名 alias 覆盖。
-
-| 角色 | Token | HEX | 来源 |
-|------|-------|-----|------|
-| 错误 | `semantic-error` → `--dsw-alias-state-error-primary` | `#EC1313` | 独立红系 |
-| 成功 | `semantic-success` → `--dsw-alias-state-success-primary` | `#22C55E` | 独立绿系 |
-| 警告 | `semantic-warning` → `--dsw-alias-state-warn-primary` | `#F59E0B` | 独立琥珀系 |
-| 信息 | `semantic-info` → `--dsw-alias-state-business-primary` | `#4176E6` | 主色 DeepSeek 衍生 |
-
-### 无描边分区规则
-
-**明确指令：** 文件树与 Monaco 编辑区之间、列表行之间禁止 1px 实线作为主分隔；改用 `--dsw-alias-bg-overlay` 与 `--dsw-alias-markdown-code-block` 的 surface 对比，或 `--dsw-alias-border-l2` 仅用于输入框默认态与树/编辑区之间的单条竖向 ghost 线（≤1px 等价透明度）。Tab 选中允许底边 2px `--dsw-alias-brand-primary` 强调。
-
-### 表面层级与嵌套
-
-| 层级 | Token | Light HEX | 用途 |
-|------|-------|-----------|------|
-| 底层 | `--dsw-alias-bg-base` | `#FFFFFF` | details 栏背景 |
-| 文件树区 | `--dsw-alias-bg-overlay` | `#E9ECF2` | 文件树列 surface |
-| 编辑区 | `--dsw-alias-markdown-code-block` | `#F9FAFB` | Monaco 容器 surface |
-| 提示/空状态卡片 | `--dsw-alias-bg-overlay` | `#E9ECF2` | 分组容器，圆角 8px |
-| 对话框/确认 | `--dsw-alias-bg-layer-3` | `#FFFFFF` | 复用 Harness 浮层（若有） |
-
-Dark 模式：`bg-base` `#151517`，`bg-overlay` `#61666B`，`markdown-code-block` `#1B1B1C`。
-
-### 玻璃与渐变规则
-
-不适用，跳过。文件编辑器不使用毛玻璃或签名渐变；深度由 surface 色阶与 ghost 交互态建立。
+The way out of template UI is surface steps and ghost interaction states, not card shadows or heavy borders. The file tree is as dense as an IDE; the editor surface matches conversation code-block surfaces so the user feels they are editing the same kind of code they already see in the session. Dual-layer tabs (details segmented control + file tab bar) carry state with a bottom edge and a warn dot inside a narrow column, without extra chrome.
 
 ---
 
-## 3. 字体：Harness 继承版式
+## 2. Color and surface architecture
 
-UI 文案使用 `--dsw-font-family`（含 PingFang SC 等系统栈）；Monaco 代码区使用 `--ds-font-family-code`（SF Mono / JetBrains Mono 栈）。配对理由：与对话区代码块一致，编辑器是「同一套代码字体在可编辑 surface 上的延伸」。
+The file editor does not define a separate palette. Four roles map onto the dsh static scale: primary is DeepSeek blue (brand and emphasis), secondary is generic blue (links and info), tertiary is green (success feedback), and neutral is the bluish gray scale (surfaces and copy). Light/dark follow the Harness global theme.
 
-### 字号阶梯（品牌板须可视化）
+### Palette (must be visualizable on a brand board)
 
-| 角色 | 字体族 | 用途 | 样例层级 |
-|------|--------|------|---------|
-| 标题 | `--dsw-font-family` | details 分段 Tab 标签、对话框标题 | 14px/20px semibold |
-| 正文 | `--dsw-font-family` | 文件树文件名、空状态说明 | 13px/18px regular |
-| 标签 | `--dsw-font-family` | Git 微徽章、过滤框 placeholder、caption | 10–12px/12–16px regular |
-| 代码 | `--ds-font-family-code` | Monaco 编辑区 | 13px/20px regular |
+| Role | Primary HEX | Steps (light → dark, with HEX) |
+|------|-------------|-------------------------------|
+| Primary (DeepSeek) | `#4176E6` | `#EDF3FE` · `#E4EDFD` · `#D3E2FF` · `#B7C8FE` · `#679EFE` · `#5686FE` · `#4176E6` · `#4868B2` · `#2F4C8F` · `#283142` |
+| Secondary (Blue) | `#3B82F6` | `#EFF6FF` · `#E5F0FF` · `#DBEAFE` · `#93C5FD` · `#60A5FA` · `#4D93F8` · `#3B82F6` · `#2563EB` · `#1E40AF` · `#0E3074` |
+| Tertiary (Green) | `#22C55E` | `#E6FAED` · `#4ED17E` · `#22C55E` · `#233C2C` |
+| Neutral (Bluish) | `#0F1115` | `#FFFFFF` · `#F9FAFB` · `#F5F6F7` · `#F1F3F5` · `#EBEEF2` · `#E1E5EE` · `#CFD3D6` · `#ADB2B8` · `#979DA6` · `#61666B` · `#151517` · `#0F1115` |
 
-### 信息层级
+Tertiary green inherits only the four published `--dsw-static-green-*` steps in `ui-theme` (100 / 400 / 500 / 900). This document does not invent extra steps to reach an 8–10 ramp.
 
-标题（Tab、对话框）用 `label-primary`；树节点与 Tab 标题用 13px `label-primary`；辅助说明与徽章用 `label-secondary` / `label-caption`。Monaco 行高 20px 保持紧凑 IDE 密度；文件树行高 22px，与 13px 正文形成 tight 对比而非拉大字号。
+### Semantic color (must be visualizable on a brand board)
 
-### 字体实现约束（受限运行时须填写）
+Semantic colors reuse dsh aliases. Light-mode HEX values follow; dark mode overrides the same alias names on `body[data-ds-dark-theme]`.
 
-不适用，跳过。纯 Web 嵌入 Harness；Monaco 通过 `fontFamily: var(--ds-font-family-code)` 注入，无自定义字体加载或稿面/实现分离。
+| Role | Token | HEX | Source |
+|------|-------|-----|--------|
+| Error | `semantic-error` → `--dsw-alias-state-error-primary` | `#EC1313` | Independent red |
+| Success | `semantic-success` → `--dsw-alias-state-success-primary` | `#22C55E` | Independent green |
+| Warning | `semantic-warning` → `--dsw-alias-state-warn-primary` | `#F59E0B` | Independent amber |
+| Info | `semantic-info` → `--dsw-alias-state-business-primary` | `#4176E6` | Derived from DeepSeek primary |
 
-| 触点 | 稿面字体 | 实现字体 / fallback 栈 | 加载策略 |
-|------|---------|----------------------|---------|
-| Web 文件编辑器 | 同实现 | `--ds-font-family-code` / `--dsw-font-family` | 系统栈，无额外加载 |
+### No-stroke partitioning rule
+
+**Explicit instruction:** Do not use a 1px solid line as the primary divider between the file tree and the Monaco pane, or between list rows. Use the surface contrast of `--dsw-alias-bg-overlay` versus `--dsw-alias-markdown-code-block`, or a single vertical ghost line of `--dsw-alias-border-l2` (≤1px equivalent opacity) between tree and editor. Selected tabs may use a 2px bottom edge of `--dsw-alias-brand-primary`.
+
+In light mode `--dsw-alias-brand-primary` is `--dsw-static-neutral-bluish-1000` (`#0F1115`), not DeepSeek blue. Tab-edge emphasis follows that alias. DeepSeek blue remains the brand-board primary HEX and `--dsw-alias-brand-primary-new-colorprimary-new-color`.
+
+### Surface layers and nesting
+
+| Layer | Token | Light HEX | Use |
+|-------|-------|-----------|-----|
+| Base | `--dsw-alias-bg-base` | `#FFFFFF` | details column background |
+| File-tree pane | `--dsw-alias-bg-overlay` | `#E9ECF2` | file-tree column surface |
+| Editor pane | `--dsw-alias-markdown-code-block` | `#F9FAFB` | Monaco container surface |
+| Hint / empty-state card | `--dsw-alias-bg-overlay` | `#E9ECF2` | grouping container, 8px radius |
+| Dialog / confirm | `--dsw-alias-bg-layer-3` | `#FFFFFF` | reuse the Harness overlay when present |
+
+Dark mode: `bg-base` `#151517`, `bg-overlay` `#61666B`, `markdown-code-block` `#1B1B1C`.
+
+### Glass and gradient rules
+
+Not applicable; skip. The file editor does not use frosted glass or a signature gradient. Depth comes from surface steps and ghost interaction states.
 
 ---
 
-## 4. 层级与深度
+## 3. Type: Harness-inherited type
 
-层级通过色调叠层而非线框或阴影建立；details 窄栏内避免浮动阴影卡片。
+UI copy uses `--dsw-font-family` (including PingFang SC and the system stack). The Monaco code pane uses `--ds-font-family-code` (SF Mono / JetBrains Mono stack). Pairing reason: it matches conversation code blocks, so the editor is the same code face on an editable surface.
 
-* **叠层原则：** 文件树（overlay）浅于 Monaco 容器（code-block）；选中/ hover 在行内用交互 tint 抬升，不用 z-index 阴影。
-* **环境阴影：** 文件编辑器 V1 不使用 box-shadow；浮起感仅由 surface 对比与 Tab 底边强调提供。
-* **幽灵描边兜底：** 输入框默认 `--dsw-alias-border-l2`（light `rgba(0,0,0,0.1)`）；聚焦改 `--dsw-alias-brand-primary`；树/编辑区分界可用 `border-l2` 单竖线。
+### Type scale (must be visualizable on a brand board)
 
-### 叠色对照表（品牌板须可视化）
+| Role | Family | Use | Sample size |
+|------|--------|-----|-------------|
+| Heading | `--dsw-font-family` | details segmented Tab labels, dialog titles | 14px/20px semibold |
+| Body | `--dsw-font-family` | file-tree names, empty-state body | 13px/18px regular |
+| Label | `--dsw-font-family` | micro badges, search placeholder, caption | 10–12px/12–16px regular |
+| Code | `--ds-font-family-code` | Monaco pane | 13px/20px regular |
 
-| Token | 基准色 | 不透明度 | 预计算 HEX（light） | 用途 |
-|-------|--------|---------|-------------------|------|
-| `editor-hover-tint` | `rgb(38, 49, 72)` | 6% | `#F2F3F4` | 文件树行 hover |
-| `editor-selected-tint` | `--dsw-static-neutral-bluish-75` | 100% | `#F1F3F5` | 文件树行 selected |
-| `editor-danger-hover-tint` | `--dsw-static-red-600` | 5% | `#FEF5F5` | 危险操作 hover（删除按钮） |
-| `editor-tab-active-line` | `--dsw-alias-brand-primary` | 100% | `#0F1115` | Tab 底边 2px 强调（light） |
-| `editor-dirty-dot` | `--dsw-alias-state-warn-primary` | 100% | `#F59E0B` | 未保存 Tab 圆点 |
+### Information hierarchy
 
-Dark 模式下 `editor-hover-tint` 为 `rgba(255,255,255,0.08)` 叠于 `#151517` ≈ `#2A2A2C`；`editor-selected-tint` 为 `#353638`。
+Titles (tabs, dialogs) use `label-primary`. Tree nodes and tab titles use 13px `label-primary`. Supporting copy and badges use `label-secondary` / `label-caption`. Monaco line-height 20px keeps IDE density; file-tree row height 22px against 13px body is a tight contrast, not a larger type size.
+
+### Font implementation constraints (required for constrained runtimes)
+
+Not applicable; skip. Pure Web embedded in Harness. Monaco is injected with `fontFamily: var(--ds-font-family-code)`. No custom font loading and no mockup/implementation font split.
+
+| Touchpoint | Mockup font | Implementation font / fallback | Loading |
+|------------|-------------|-------------------------------|---------|
+| Web file editor | Same as implementation | `--ds-font-family-code` / `--dsw-font-family` | System stack, no extra load |
 
 ---
 
-## 5. 组件
+## 4. Hierarchy and depth
 
-各组件均为通用 UI 原语，供 `ui-file-editor` 消费；颜色引用 alias token，复用叠色引用 §4 Token 名。
+Hierarchy is built with tonal stacking, not wireframes or shadows. Avoid floating shadowed cards inside the narrow details column.
 
-### 按钮与交互（品牌板须可视化）
+* **Stacking:** the file tree (overlay) sits lighter than the Monaco container (code-block). Selection and hover lift a row with an interaction tint, not a z-index shadow.
+* **Ambient shadow:** file editor V1 does not use box-shadow. Lift comes only from surface contrast and the tab bottom edge.
+* **Ghost stroke fallback:** inputs default to `--dsw-alias-border-l2` (light `rgba(0,0,0,0.1)`); focus switches to `--dsw-alias-brand-primary`. The tree/editor split may use a single `border-l2` vertical line.
 
-* **主按钮：** 背景 `--dsw-alias-button-primary-fill`，文字 `--dsw-alias-label-primary-foreground`（light 上为 `#FFFFFF` on dark fill）；圆角 6px；hover `--dsw-alias-button-primary-hover`；按下 `interactive-bg-active`。
-* **次按钮：** 背景 `--dsw-alias-button-elevated-fill`；文字 `--dsw-alias-label-primary`；圆角 6px；hover `--dsw-alias-button-floating-hover`。
-* **描边按钮：** 背景 transparent；边框 `--dsw-alias-border-l2`；文字 `--dsw-alias-label-primary`；hover 背景 `--dsw-alias-button-ghost-active-fill`。
-* **文字按钮：** 无背景；文字 `--dsw-alias-label-secondary`；hover 文字 `--dsw-alias-label-primary`。
-* **反色按钮：** 背景 `--dsw-alias-button-contrast-fill`（`#61666B` light）；文字 `--dsw-alias-label-primary-foreground`；hover 略浅 `--dsw-alias-button-primary-hover`；用于深色编辑区上的浅色 CTA（少用）。
+### Overlay table (must be visualizable on a brand board)
 
-### 输入与表单
+| Token | Base | Opacity | Precomputed HEX (light) | Use |
+|-------|------|---------|-------------------------|-----|
+| `editor-hover-tint` | `rgb(38, 49, 72)` | 6% | `#F2F3F4` | file-tree row hover |
+| `editor-selected-tint` | `--dsw-static-neutral-bluish-75` | 100% | `#F1F3F5` | file-tree row selected |
+| `editor-danger-hover-tint` | `--dsw-static-red-600` | 5% | `#FEF5F5` | danger-action hover (delete) |
+| `editor-tab-active-line` | `--dsw-alias-brand-primary` | 100% | `#0F1115` | 2px tab bottom edge (light) |
+| `editor-dirty-dot` | `--dsw-alias-state-warn-primary` | 100% | `#F59E0B` | unsaved-tab dot |
 
-* **默认态：** 背景 `--dsw-alias-bg-base`；边框 `--dsw-alias-border-l2`；文字 `--dsw-alias-label-primary`；圆角 6px；高 28px（过滤框）。
-* **聚焦态：** 边框 `--dsw-alias-brand-primary`；无外发光或 1px 等价 ghost。
-* **错误态：** 边框 `semantic-error`（`#EC1313`）；说明文案 `semantic-error`；用于重命名冲突等校验失败。
+In dark mode `editor-hover-tint` is `rgba(255,255,255,0.08)` over `#151517` ≈ `#2A2A2C`; `editor-selected-tint` is `#353638`.
 
-### 卡片容器
+---
 
-* 圆角 8px；内边距 12px；背景 `--dsw-alias-bg-overlay`；无阴影；无业务内容排列规格。
+## 5. Components
 
-### 列表行
+Every component is a generic UI primitive for the file-editor UI to consume. Colors reference alias tokens. Repeated overlays reference §4 token names.
 
-* 行高 22px；行间距 0；无行间分隔线；缩进每级 12px。
-* **hover：** 背景 `editor-hover-tint`。
-* **selected：** 背景 `editor-selected-tint`。
-* 图标 16px 位于行首；微徽章靠行尾。
+### Buttons and interaction (must be visualizable on a brand board)
 
-### 导航
+* **Primary:** background `--dsw-alias-button-primary-fill`; text `--dsw-alias-label-primary-foreground` (light: `#FFFFFF` on dark fill); radius 6px; hover `--dsw-alias-button-primary-hover`; pressed `--dsw-alias-interactive-bg-active`.
+* **Secondary:** background `--dsw-alias-button-elevated-fill`; text `--dsw-alias-label-primary`; radius 6px; hover `--dsw-alias-button-floating-hover`; pressed `--dsw-alias-interactive-bg-active`.
+* **Outline:** background transparent; border `--dsw-alias-border-l2`; text `--dsw-alias-label-primary`; radius 6px; hover background `--dsw-alias-button-ghost-active-fill`; pressed `--dsw-alias-interactive-bg-active`.
+* **Text:** no fill; text `--dsw-alias-label-secondary`; radius 6px; hover text `--dsw-alias-label-primary`; pressed background `--dsw-alias-interactive-bg-active`.
+* **Inverse:** background `--dsw-alias-button-contrast-fill` (`#61666B` light); text `--dsw-alias-label-primary-foreground`; radius 6px; hover slightly lighter `--dsw-alias-button-primary-hover`; pressed `--dsw-alias-interactive-bg-active`; for a light CTA on a dark editor pane (use sparingly).
 
-* **details 分段 Tab：** 水平 segmented；选中背景 `editor-selected-tint` + 底边 2px `editor-tab-active-line`；未选中文字 `label-secondary`。
-* **文件 Tab 栏：** 水平滚动；Tab 高 32px；选中底边 2px `editor-tab-active-line`；dirty 在标题前 6px 圆点 `editor-dirty-dot`；关闭图标 28×28 ghost 按钮。
+### Inputs and forms
 
-### 搜索框
+* **Default:** background `--dsw-alias-bg-base`; border `--dsw-alias-border-l2`; text `--dsw-alias-label-primary`; radius 6px; height 28px (default single line).
+* **Focus:** border `--dsw-alias-brand-primary`; no outer glow; 1px-equivalent ghost at most.
+* **Error:** border `semantic-error` (`#EC1313`); helper copy `semantic-error`; used for validation failures such as a name collision.
 
-* 贴文件树顶；高 28px；左 16px 搜索图标 `label-caption`；背景 `bg-base`；边框 `border-l2`；圆角 6px；聚焦 `brand-primary` 描边；有内容时右侧清除图标按钮（24×24 ghost）。
-* 无下拉结果 pattern（仅过滤树节点，非全局搜索）。
+### Card container
 
-### 状态徽章
+* Radius 8px; padding 12px; background `--dsw-alias-bg-overlay`; no shadow; no product content layout.
 
-* padding 0 4px；圆角 3px；字号 10px/12px 行高；letter-spacing 0.02em。
-* **通用样例：** 文字 `semantic-error`（`#EC1313`），无填充或背景 `editor-danger-hover-tint`；不写业务状态名映射。
+### List row
 
-### 图标按钮
+* Row height 22px; row gap 0; no row divider; indent 12px per level.
+* **hover:** background `editor-hover-tint`.
+* **selected:** background `editor-selected-tint`.
+* 16px icon at the start of the row; micro-badge at the end of the row.
 
-* **树工具栏：** 24×24；默认图标 `label-secondary`；hover 背景 `editor-hover-tint`；active 背景 `editor-selected-tint`、图标 `label-primary`。
-* **Tab 关闭 / 展开折叠：** 28×28；规则同上。
-* **选中态：** 与 active 相同，用于 Toggle 按下（如文件夹展开）。
+### Navigation
 
-### 空状态
+* **details segmented Tab:** horizontal segmented control; selected background `editor-selected-tint` + 2px bottom edge `editor-tab-active-line`; unselected text `label-secondary`.
+* **File tab bar:** horizontal scroll; tab height 32px; selected 2px bottom edge `editor-tab-active-line`; unsaved indicator is a 6px `editor-dirty-dot` before the title; close control is a 28×28 ghost icon button.
 
-* 图标 48px outline，`label-caption`；标题 14px `label-primary`；说明 12px `label-secondary`；可选 CTA 用主按钮；整体置于卡片容器内，垂直居中。
+### Search field
+
+* Flush to the top of the list; height 28px; 16px search icon on the left in `label-caption`; background `bg-base`; border `border-l2`; radius 6px; focus stroke `brand-primary`; when the field has content, a 24×24 ghost clear icon button on the right. Placeholder color is `label-caption`; this document does not specify product placeholder copy.
+* No dropdown-result pattern (no global search; skip).
+
+### Status badge
+
+* Padding 0 4px; radius 3px; type 10px / 12px line-height; letter-spacing 0.02em.
+* **Generic sample:** text `semantic-error` (`#EC1313`), no fill or background `editor-danger-hover-tint`. Do not map product status names here.
+
+### Icon button
+
+* Stroke width 0px (ghost; no outline). Toolbar size 24×24; close / collapse size 28×28.
+* Default icon `label-secondary`; hover background `editor-hover-tint`; active background `editor-selected-tint`, icon `label-primary`.
+* **Selected:** same as active, used for a pressed toggle (for example a folder expanded).
+
+### Empty state
+
+* 48px outline icon in `label-caption`; title 14px `label-primary`; body 12px `label-secondary`; optional CTA uses the primary button; the whole block sits in a card container, vertically centered.
 
 ### Loading
 
-* **目录展开：** 行内 16px spinner，颜色 `label-caption`。
-* **打开文件 / 保存：** 编辑区居中 24px spinner + 12px `label-secondary` 文案。
-* **Git 刷新：** 树顶 2px 高 indeterminate 条 `semantic-info`，不遮罩整树。
+* **In-row:** 16px spinner in `label-caption` on the right of that row.
+* **Centered in content:** 24px spinner plus 12px `label-secondary` copy.
+* **List-top bar:** 2px-tall indeterminate bar in `semantic-info`; do not mask the whole list.
 
 ---
 
-## 6. 宜忌
+## 6. Do and don't
 
-### 应当：
+### Do:
 
-* **应当** 所有颜色与字体通过 `--dsw-alias-*` / `--ds-font-family-*` 消费，不在组件里写 literal HEX。
-* **应当** Monaco 主题从 dsw token 派生，随 light/dark 与对话区同步切换。
-* **应当** 文件树用 ghost hover/selected 与紧凑 22px 行，Git 字母徽章靠右。
-* **应当** dirty Tab 用 `editor-dirty-dot`，保存前禁止静默丢缓冲。
-* **应当** 异步操作用分层 Loading，避免全屏 mask。
+* **Do** consume every color and font through `--dsw-alias-*` / `--ds-font-family-*`. Do not write literal HEX in components.
+* **Do** derive the Monaco theme from dsw tokens so it switches with light/dark and the conversation pane.
+* **Do** use ghost hover/selected on the file tree with compact 22px rows, and keep letter badges on the right.
+* **Do** mark an unsaved tab with `editor-dirty-dot`. Do not silently drop an edit buffer before save.
+* **Do** use layered Loading for async work. Do not use a full-screen mask.
 
-### 禁止：
+### Don't:
 
-* **禁止** 在文件编辑器内引入第二套主题色或 Tailwind/组件库。
-* **禁止** 用 1px 实线边框做主要分区（除输入框聚焦与 Tab 底边强调外）。
-* **禁止** 全屏遮罩 blocking 整个 dsh Web（保存/加载仅编辑区内反馈）。
-* **禁止** Monaco 区使用 UI sans-serif 字体。
-* **禁止** 在本设计系统文档中写 Session、Workspace、Agent 等领域术语作视觉标签。
+* **Don't** introduce a second theme palette or a Tailwind/component library inside the file editor.
+* **Don't** use a 1px solid border as the primary partition (except input focus and the tab bottom-edge emphasis).
+* **Don't** full-screen-mask the entire dsh Web (save/load feedback stays inside the editor pane).
+* **Don't** use UI sans-serif in the Monaco pane.
+* **Don't** use Session, Workspace, or Agent as visual labels in this design-system document.

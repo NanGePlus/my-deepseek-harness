@@ -4,8 +4,8 @@ name: Build single-exe
 # .agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md.
 # A full target run retains one SDK wheel and three runtime wheels; subset
 # dispatch retains the SDK wheel and selected runtime wheels. Bare executables
-# and source closures are test inputs. Run manually, label a PR `build-exe`
-# (remove and reapply to rerun), or call it from the Python release workflow.
+# and source closures are test inputs. Run manually, or call it from the Python
+# release workflow.
 # Checkout uses the triggering ref, so dispatch needs no separate ref input.
 on:
   workflow_call:
@@ -35,8 +35,6 @@ on:
         type: string
         required: false
         default: ''
-  pull_request:
-    types: [labeled]
 
 concurrency:
   # Keep the called workflow distinct from its caller's concurrency group;
