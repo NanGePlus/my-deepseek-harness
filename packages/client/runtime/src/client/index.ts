@@ -66,7 +66,7 @@ export type { WorkspaceListState } from './workspaces/service.ts'
 export type {
   DirectoryEntry, DirectoryListing, GitStatusEntry, GitStatusListing,
   WorkspaceEntry, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
-  FileReadKind, FileTextRead, FileBytesRead, FileReadResult, FileWriteResult,
+  FileReadKind, FileTextRead, FileBytesRead, FileReadResult, FileWriteResult, PathMutationResult,
 } from '@deepseek-ai/dsh-client-connection/client'
 // Runtime owns the snapshot store; web-react only binds it to React.
 export { createSnapshotStore, defineStore, shallowEqual } from './contract/store.ts'
