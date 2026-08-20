@@ -272,15 +272,15 @@ describe('AppFrame', () => {
     expect(tracks(frame)).toEqual([280, 360])
   })
 
-  it('drag handles disappear for collapsed columns', () => {
+  it('drag handles stay available for the details column while its width is zero', () => {
     const { frame, instance } = mountFrame()
-    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(1)
+    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(2)
     act(() => { instance.actions.openDetails() })
     expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(2)
     act(() => { instance.actions.closeDetails() })
-    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(1)
+    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(2)
     act(() => { instance.actions.toggleSidebar() })
-    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(0)
+    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(1)
   })
 })
 
@@ -291,7 +291,7 @@ describe('AppFrame — narrow-viewport auto-collapse', () => {
     expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 0])
     expect(frame.hasAttribute('data-sidebar-collapsed')).toBe(true)
     expect(slotCalls.filter(c => c.key === 'sidebar').at(-1)!.props).toEqual({ collapsed: true, width: SIDEBAR_COLLAPSED })
-    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(0)
+    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(1)
   })
 
   it('narrow toggle re-expands over the squeezed center and back', () => {
@@ -300,7 +300,7 @@ describe('AppFrame — narrow-viewport auto-collapse', () => {
     act(() => { instance.actions.toggleSidebar() })
     expect(tracks(frame)).toEqual([280, 0])
     expect(frame.hasAttribute('data-sidebar-collapsed')).toBe(false)
-    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(1)
+    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(2)
     act(() => { instance.actions.toggleSidebar() })
     expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 0])
   })

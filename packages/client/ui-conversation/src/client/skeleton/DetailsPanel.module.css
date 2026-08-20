@@ -1,6 +1,4 @@
-/* Details third column, minimal fill: header (name + close) over a
-   scrolling body of Input/Output code sections. Panel width/squeeze belongs
-   to layout; this fills whatever the column gives. */
+/* Details third column: segmented tab header over Tool / file-editor bodies. */
 
 .root {
   display: flex;
@@ -9,33 +7,59 @@
   min-width: 0;
   border-left: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-base);
+  --editor-selected-tint: var(--dsw-static-neutral-bluish-75);
+  --editor-tab-active-line: var(--dsw-alias-brand-primary);
 }
 
-/* figma RightSidebar header frame (I54:42735;43:36451): pad 14/12/12/12, gap 8. */
+:global(body[data-ds-dark-theme]) .root {
+  --editor-selected-tint: #353638;
+}
+
 .header {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
   gap: 8px;
-  padding: 14px 12px 12px;
+  padding: 12px 12px 0;
   border-bottom: 1px solid var(--dsw-alias-border-l2);
 }
 
-/* figma I54:42735;43:41479: 14/20 wt500. */
-.title {
-  overflow: hidden;
+.tabBar {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 0;
+}
+
+.tab {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px 10px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-family: var(--dsw-font-family);
   font-size: 14px;
   line-height: 20px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
   text-overflow: ellipsis;
   white-space: nowrap;
+  overflow: hidden;
+}
+
+.tabActive {
+  background: var(--editor-selected-tint);
+  border-bottom-color: var(--editor-tab-active-line);
+  color: var(--dsw-alias-label-primary);
 }
 
 .close {
   display: grid;
   flex: none;
   place-items: center;
+  align-self: center;
   width: 28px;
   height: 28px;
   border: none;
@@ -54,6 +78,17 @@
   min-height: 0;
   padding: 12px 16px;
   overflow-y: auto;
+}
+
+.toolTitle {
+  margin-bottom: 12px;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .empty {

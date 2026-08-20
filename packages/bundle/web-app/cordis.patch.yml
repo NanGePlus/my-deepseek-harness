@@ -198,6 +198,9 @@
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'
 
+    - id: ui-file-editor
+      name: '@deepseek-ai/dsh-client-ui-file-editor'
+
     # Tool call tree, generic fallback, and keyed business Tool views.
     - id: ui-tool
       name: '@deepseek-ai/dsh-client-ui-tool'

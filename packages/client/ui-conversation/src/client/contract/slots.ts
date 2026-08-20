@@ -123,6 +123,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'conversation.details.tool': { kind: 'single'; scope: 'session'; owner: DetailsToolOwnerProps }
     /**
+     * The file-editor surface rendered when the details segmented tab selects
+     * 「文件编辑器」. One occupant; ui-file-editor injects here.
+     */
+    'conversation.details.editor': { kind: 'single'; scope: 'session' }
+    /**
      * The composer takeover chain: entries are selector-routed replacements
      * of the default InputBar. Declared by this package's 'conversation'
      * entry; the owner dispatches the {@link ComposerChainProps} currency and
@@ -717,12 +722,14 @@ export type ChatViewSlotProps =
  * the shared chat store, but its close button is a layout orchestration call.
  */
 export interface DetailsInjected {
+  /** Open the details panel (layout geometry stays with ctx.layout). */
+  openDetails: () => void
   /** Close the details panel (layout geometry stays with ctx.layout). */
   closeDetails: () => void
 }
 
-/** Full details-slot props: selection store, Tool output seat, injected close callback, and locale. */
-export type DetailsSlotProps = PropsRuntime<'details'> & PropsRenderSlots<'conversation.details.tool'>
+/** Full details-slot props: selection store, Tool and editor seats, layout callbacks, and locale. */
+export type DetailsSlotProps = PropsRuntime<'details'> & PropsRenderSlots<'conversation.details.tool' | 'conversation.details.editor'>
   & PropsStore<ChatStore> & DetailsInjected & PropsLocale<'conversation'>
 
 /** Owner share common to the hero / New-Session Workspace pickers. */

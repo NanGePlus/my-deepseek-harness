@@ -12,7 +12,7 @@ beforeEach(() => {
 describe('createChatStore', () => {
   it('init shape: empty selection/draft/view', () => {
     const store = createChatStore().create()
-    expect(store.store.getSnapshot()).toEqual({ selection: null, draft: '', view: null, inspect: null })
+    expect(store.store.getSnapshot()).toEqual({ selection: null, draft: '', view: null, inspect: null, detailsTab: 'tool' })
   })
 
   it('actions cover the declared write set', () => {

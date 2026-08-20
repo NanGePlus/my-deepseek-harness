@@ -409,6 +409,7 @@ describe('DetailsPanel Output section (search)', () => {
         useStore={bindSnapshotSelector(chat)}
         actions={chat.actions}
         closeDetails={vi.fn()}
+        openDetails={vi.fn()}
         t={t}
       />,
     )

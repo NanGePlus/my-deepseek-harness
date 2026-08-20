@@ -179,6 +179,12 @@ export class FakeApiClient implements IApiClient {
     pickDirectory: (payload: unknown) => this.record('host.pickDirectory', payload, this.onPickDirectory(payload)),
     listDirectory: (payload: unknown) => this.record('host.listDirectory', payload, this.onListDirectory(payload)),
     createDirectory: (payload: unknown) => this.record('host.createDirectory', payload, this.onCreateDirectory(payload)),
+    listWorkspaceEntries: (payload: unknown) => this.record(
+      'host.listWorkspaceEntries',
+      payload,
+      Promise.resolve(ok({ path: '', entries: [], truncated: false })),
+    ),
+    gitStatus: (payload: unknown) => this.record('host.gitStatus', payload, Promise.resolve(ok({ entries: [] }))),
     openPath: (payload: unknown) => this.record('host.openPath', payload, this.onOpenPath(payload)),
   }
 

@@ -1,0 +1,2 @@
+- text: No file open Choose a file from the tree on the left, or create one
+- button "New file" [disabled]
