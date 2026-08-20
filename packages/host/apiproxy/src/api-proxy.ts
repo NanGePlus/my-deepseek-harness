@@ -109,6 +109,11 @@ import {
   inspectApiRemoteSession,
 } from '@deepseek-ai/dsh-api-remotes'
 import { canOpenNativePath, openNativePath, openNativeTextFile } from './native-path-opener.ts'
+import {
+  listWorkspaceEntriesLevel,
+  WorkspaceDirectoryUnreadableError,
+  WorkspacePathOutOfBoundsError,
+} from './list-workspace-entries.ts'
 
 /** Page size when history is called without maxMessages. */
 const DEFAULT_MAX_MESSAGES = 50
@@ -3002,6 +3007,40 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           return ok(request, { path: await capability.createDirectory(request.payload.path, request.payload.name) })
         } catch (error: unknown) {
           return err(request, directoryError(error))
+        }
+      },
+
+      async listWorkspaceEntries(request, signal) {
+        const { workspaceId, path } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await listWorkspaceEntriesLevel(workspace.path, path, signal))
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'workspace listing was aborted', details: {} })
+          }
+          if (error instanceof WorkspacePathOutOfBoundsError) {
+            return err(request, {
+              code: 'workspace-path-out-of-bounds',
+              message: error.message,
+              details: { workspaceId, path: error.path },
+            })
+          }
+          if (error instanceof WorkspaceDirectoryUnreadableError) {
+            return err(request, {
+              code: 'directory-unreadable',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
         }
       },
 

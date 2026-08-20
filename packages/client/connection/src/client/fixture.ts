@@ -2561,6 +2561,45 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         directoryTree.set(target, [])
         return ok(request, { path: target })
       },
+      listWorkspaceEntries: (request) => {
+        const { workspaceId, path: target } = request.payload
+        const workspace = workspaces.find(entry => entry.workspaceId === workspaceId)
+        if (workspace === undefined) {
+          return err(request, {
+            code: 'workspace-not-found',
+            message: `no workspace ${workspaceId}`,
+            details: { workspaceId },
+          })
+        }
+        if (target !== workspace.path && !target.startsWith(`${workspace.path}/`)) {
+          return err(request, {
+            code: 'workspace-path-out-of-bounds',
+            message: `path "${target}" is outside workspace root "${workspace.path}"`,
+            details: { workspaceId, path: target },
+          })
+        }
+        const children = childrenOf(target)
+        if (children === undefined) {
+          return err(request, {
+            code: 'directory-unreadable',
+            message: `cannot list ${target}: not in the fixture tree`,
+            details: { path: target },
+          })
+        }
+        return ok(request, {
+          path: target,
+          entries: [...children].sort((a, b) => a.localeCompare(b)).map((name) => {
+            const entryPath = target === '/' ? `/${name}` : `${target}/${name}`
+            return {
+              name,
+              path: entryPath,
+              isDirectory: childrenOf(entryPath) !== undefined,
+              hidden: name.startsWith('.'),
+            }
+          }),
+          truncated: false,
+        })
+      },
       openPath: request => ok(request, { opened: true as const }),
     },
     workspace: {
@@ -3097,6 +3136,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'host.pickDirectory': return this.api.host.pickDirectory(request, new AbortController().signal)
       case 'host.listDirectory': return this.api.host.listDirectory(request, new AbortController().signal)
       case 'host.createDirectory': return this.api.host.createDirectory(request)
+      case 'host.listWorkspaceEntries': return this.api.host.listWorkspaceEntries(request, signal)
       case 'host.openPath': return this.api.host.openPath(request, new AbortController().signal)
       case 'workspace.list': return this.api.workspace.list(request)
       case 'workspace.create': return this.api.workspace.create(request)

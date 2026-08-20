@@ -4,6 +4,7 @@
  */
 
 import type { RpcRequest, RpcResponse } from './rpc.ts'
+import type { WorkspaceId } from './workspace.ts'
 
 /** One directory row of a listing: a child entry or a breadcrumb ancestor. */
 export interface DirectoryEntry {
@@ -13,6 +14,28 @@ export interface DirectoryEntry {
   path: string
   /** Hidden by the host platform's convention (dot-prefixed on POSIX); the client owns whether to show it. */
   hidden: boolean
+}
+
+/** One row of host.listWorkspaceEntries: a direct child file or folder. */
+export interface WorkspaceEntry {
+  /** Base name within the listed directory. */
+  name: string
+  /** Absolute host path — the client never joins path segments itself. */
+  path: string
+  /** True for directories and for symlinks whose target is a directory. */
+  isDirectory: boolean
+  /** Hidden by the host platform's convention (dot-prefixed on POSIX). */
+  hidden: boolean
+}
+
+/** host.listWorkspaceEntries response value: one directory level inside a Workspace. */
+export interface WorkspaceEntriesListing {
+  /** Absolute path of the listed directory. */
+  path: string
+  /** Direct child entries, name-sorted; files and folders both included. */
+  entries: WorkspaceEntry[]
+  /** True when the backend cut `entries` at its complete-result bound. */
+  truncated: boolean
 }
 
 /** host.listDirectory response value: one directory level plus its ancestry. */
@@ -82,6 +105,19 @@ export interface HostApi {
   createDirectory(
     request: RpcRequest<{ path: string; name: string }>,
   ): Promise<RpcResponse<{ path: string }>>
+
+  /**
+   * List one directory level inside a registered Workspace; the path must
+   * lie within that Workspace's root (out-of-bounds paths fail with
+   * `workspace-path-out-of-bounds`). Returns files and folders with host-owned
+   * `hidden` flags; `truncated` marks a cut level the client must not treat as
+   * exhaustive. The carrier's request signal follows the caller, stopping the
+   * backend's scan on disconnect or timeout.
+   */
+  listWorkspaceEntries(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<WorkspaceEntriesListing>>
 
   /**
    * Open a filesystem path with the operating system's default application
