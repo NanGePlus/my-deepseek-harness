@@ -1,18 +1,25 @@
-/** Left-pane file tree: lazy listings, filename filter, type icons, Git badges. */
+/** Left-pane file tree: lazy listings, filename filter, type icons, Git badges, file ops. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import clsx from 'clsx'
 import {
-  IconCloseOutline16, IconFolderClose16, IconPlusOutline16, IconSearchOutline16, Input,
+  Button, IconCloseOutline16, IconEditOutline16, IconFolderClose16, IconPlusOutline16,
+  IconSearchOutline16, IconTrashOutline16, Input, Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
+import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
-  GitStatusListing, WorkspaceEntriesListing, WorkspaceEntry, WorkspaceId, WorkspaceView,
+  FileWriteResult, GitStatusListing, PathMutationResult, WorkspaceEntriesListing, WorkspaceEntry,
+  WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { FileTypeIcon } from './file-type-icon.tsx'
+import {
+  joinChildPath, parentDirectoryForCreate, siblingNameExists,
+} from './file-tree-parent.ts'
 import { flattenVisibleTree, paintVisibleRows } from './flatten-visible.ts'
 import css from './FileTreePane.module.css'
+import dialogCss from './FileTreeDialogs.module.css'
 
 /** Host listing and Git callbacks injected from WorkspaceRuntime. */
 export interface FileTreeHost {
@@ -35,8 +42,69 @@ export interface FileTreeHost {
   gitStatus: (workspaceId: WorkspaceId, signal?: AbortSignal) => Promise<GitStatusListing>
 }
 
+/** Host path mutation callbacks for toolbar file operations. */
+export interface FileTreeMutationHost {
+  /**
+   * Delete one file or directory inside the bound Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute path to delete.
+   * @param signal - aborts a superseded mutation.
+   */
+  deletePath: (
+    workspaceId: WorkspaceId,
+    path: string,
+    signal?: AbortSignal,
+  ) => Promise<PathMutationResult>
+  /**
+   * Rename one path within its parent directory.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute source path.
+   * @param newName - single-segment new base name.
+   * @param signal - aborts a superseded mutation.
+   */
+  renamePath: (
+    workspaceId: WorkspaceId,
+    path: string,
+    newName: string,
+    signal?: AbortSignal,
+  ) => Promise<PathMutationResult>
+  /**
+   * Create one child directory under an existing parent.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute parent directory.
+   * @param name - single-segment directory name.
+   * @param signal - aborts a superseded mutation.
+   */
+  createWorkspaceDirectory: (
+    workspaceId: WorkspaceId,
+    path: string,
+    name: string,
+    signal?: AbortSignal,
+  ) => Promise<PathMutationResult>
+  /**
+   * Write UTF-8 text, creating the file when absent.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param text - body to write.
+   * @param signal - aborts a superseded mutation.
+   */
+  writeFile: (
+    workspaceId: WorkspaceId,
+    path: string,
+    text: string,
+    signal?: AbortSignal,
+  ) => Promise<FileWriteResult>
+}
+
+type NameDialogKind = 'new-file' | 'new-folder' | 'rename'
+
+interface NameDialogState {
+  kind: NameDialogKind
+  entry?: WorkspaceEntry
+}
+
 /** Props for the editor-surface file-tree pane. */
-export interface FileTreePaneProps extends FileTreeHost {
+export interface FileTreePaneProps extends FileTreeHost, FileTreeMutationHost {
   /** Bound Workspace for the current Session; undefined when none is attached. */
   workspace: WorkspaceView | undefined
   /** Localized copy. */
@@ -46,9 +114,32 @@ export interface FileTreePaneProps extends FileTreeHost {
    * @param entry - the clicked tree entry.
    */
   onOpenFile: (entry: WorkspaceEntry) => void
+  /** Increment to open the new-file dialog from outside the toolbar. */
+  newFileTrigger?: number
+  /**
+   * Notify the editor pane that a path was deleted on disk.
+   * @param path - deleted absolute path.
+   */
+  onPathDeleted?: (path: string) => void
+  /**
+   * Notify the editor pane that a path was renamed on disk.
+   * @param oldPath - previous absolute path.
+   * @param newPath - new absolute path.
+   * @param newName - new base name.
+   */
+  onPathRenamed?: (oldPath: string, newPath: string, newName: string) => void
 }
 
 const ROW_HEIGHT_PX = 22
+
+/**
+ * Whether a Host failure indicates a sibling name collision.
+ * @param error - thrown Host error.
+ * @returns true for `directory-exists` business failures.
+ */
+function isNameConflict(error: unknown): boolean {
+  return error instanceof DirectoryBrowseError && error.rpcError.code === 'directory-exists'
+}
 
 /**
  * File-tree pane: root listing follows the bound Workspace; folders load
@@ -57,7 +148,9 @@ const ROW_HEIGHT_PX = 22
  * @returns the filter chrome, toolbar, and virtualized tree.
  */
 export function FileTreePane({
-  workspace, listWorkspaceEntries, gitStatus, t, onOpenFile,
+  workspace, listWorkspaceEntries, gitStatus, deletePath, renamePath,
+  createWorkspaceDirectory, writeFile, t, onOpenFile, newFileTrigger = 0,
+  onPathDeleted, onPathRenamed,
 }: FileTreePaneProps) {
   const [childrenByPath, setChildrenByPath] = useState<Map<string, readonly WorkspaceEntry[]>>(
     () => new Map(),
@@ -68,8 +161,61 @@ export function FileTreePane({
   const [gitLoading, setGitLoading] = useState(false)
   const [filter, setFilter] = useState('')
   const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined)
+  const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<WorkspaceEntry | null>(null)
+  const [nameDraft, setNameDraft] = useState('')
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [opError, setOpError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
   const listingAbort = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const composingRef = useRef(false)
+
+  const selectedEntry = useMemo(() => {
+    if (selectedPath === undefined || workspace === undefined) return undefined
+    for (const entries of childrenByPath.values()) {
+      const hit = entries.find(entry => entry.path === selectedPath)
+      if (hit !== undefined) return hit
+    }
+    return undefined
+  }, [selectedPath, childrenByPath, workspace])
+
+  const fetchDirectory = useCallback(async (dirPath: string): Promise<boolean> => {
+    if (workspace === undefined) return false
+    setLoadingPaths(current => new Set(current).add(dirPath))
+    try {
+      const listing = await listWorkspaceEntries(
+        workspace.workspaceId,
+        dirPath,
+        listingAbort.current?.signal,
+      )
+      if (listingAbort.current?.signal.aborted) return false
+      setChildrenByPath(current => new Map(current).set(dirPath, listing.entries))
+      return true
+    } catch (error: unknown) {
+      if (listingAbort.current?.signal.aborted) return false
+      void error
+      return false
+    } finally {
+      setLoadingPaths((current) => {
+        const next = new Set(current)
+        next.delete(dirPath)
+        return next
+      })
+    }
+  }, [workspace, listWorkspaceEntries])
+
+  const invalidateDirectory = useCallback(async (dirPath: string) => {
+    setChildrenByPath((current) => {
+      const next = new Map(current)
+      next.delete(dirPath)
+      return next
+    })
+    if (workspace === undefined) return
+    if (dirPath === workspace.path || expanded.has(dirPath)) {
+      await fetchDirectory(dirPath)
+    }
+  }, [workspace, expanded, fetchDirectory])
 
   useEffect(() => {
     const ac = new AbortController()
@@ -80,6 +226,12 @@ export function FileTreePane({
     setGitByPath(new Map())
     setSelectedPath(undefined)
     setFilter('')
+    setNameDialog(null)
+    setDeleteTarget(null)
+    setNameDraft('')
+    setNameError(null)
+    setOpError(null)
+    setSubmitting(false)
     if (workspace === undefined) {
       setGitLoading(false)
       return () => { ac.abort() }
@@ -91,8 +243,6 @@ export function FileTreePane({
         setChildrenByPath(new Map([[workspace.path, listing.entries]]))
       })
       .catch((error: unknown) => {
-        // A superseded listing or unmount aborts; other listing failures have
-        // no tree-error state in this slice, so the pane stays at the last cache.
         if (ac.signal.aborted) return
         void error
       })
@@ -102,8 +252,6 @@ export function FileTreePane({
         setGitByPath(new Map(listing.entries.map(entry => [entry.path, entry.letter])))
       })
       .catch((error: unknown) => {
-        // Host gitStatus returns [] for a non-repo; a thrown RPC still must
-        // not surface an error — the tree stays usable without badges.
         if (ac.signal.aborted) return
         setGitByPath(new Map())
         void error
@@ -115,6 +263,14 @@ export function FileTreePane({
       ac.abort()
     }
   }, [workspace, listWorkspaceEntries, gitStatus])
+
+  useEffect(() => {
+    if (newFileTrigger === 0 || workspace === undefined) return
+    setNameDialog({ kind: 'new-file' })
+    setNameDraft('')
+    setNameError(null)
+    setOpError(null)
+  }, [newFileTrigger, workspace])
 
   const toggleDirectory = useCallback(async (entry: WorkspaceEntry) => {
     if (!entry.isDirectory || workspace === undefined) return
@@ -128,32 +284,17 @@ export function FileTreePane({
     }
     setExpanded(current => new Set(current).add(entry.path))
     if (childrenByPath.has(entry.path)) return
-    setLoadingPaths(current => new Set(current).add(entry.path))
-    try {
-      const listing = await listWorkspaceEntries(
-        workspace.workspaceId,
-        entry.path,
-        listingAbort.current?.signal,
-      )
-      if (listingAbort.current?.signal.aborted) return
-      setChildrenByPath(current => new Map(current).set(entry.path, listing.entries))
-    } catch (error: unknown) {
-      if (listingAbort.current?.signal.aborted) return
+    const loaded = await fetchDirectory(entry.path)
+    if (!loaded) {
       setExpanded((current) => {
         const next = new Set(current)
         next.delete(entry.path)
         return next
       })
-      void error
-    } finally {
-      setLoadingPaths((current) => {
-        const next = new Set(current)
-        next.delete(entry.path)
-        return next
-      })
     }
-  }, [workspace, expanded, childrenByPath, listWorkspaceEntries])
+  }, [workspace, expanded, childrenByPath, fetchDirectory])
 
+  const workspaceBound = workspace !== undefined
   const rootEntries = workspace === undefined
     ? []
     : (childrenByPath.get(workspace.path) ?? [])
@@ -176,6 +317,134 @@ export function FileTreePane({
   const paintedRows = paintVisibleRows(rows, virtualItems, ROW_HEIGHT_PX)
 
   const clearFilter = (): void => { setFilter('') }
+
+  const openNameDialog = (kind: NameDialogKind, entry?: WorkspaceEntry): void => {
+    setNameDialog(entry === undefined ? { kind } : { kind, entry })
+    setNameDraft(entry?.name ?? '')
+    setNameError(null)
+    setOpError(null)
+  }
+
+  const closeNameDialog = (): void => {
+    if (submitting) return
+    setNameDialog(null)
+    setNameDraft('')
+    setNameError(null)
+    setOpError(null)
+  }
+
+  const closeDeleteDialog = (): void => {
+    if (submitting) return
+    setDeleteTarget(null)
+    setOpError(null)
+  }
+
+  const siblingsForCreate = useCallback((parentPath: string): readonly WorkspaceEntry[] => {
+    if (workspace === undefined) return []
+    return childrenByPath.get(parentPath) ?? []
+  }, [workspace, childrenByPath])
+
+  const submitNameDialog = async (): Promise<void> => {
+    if (workspace === undefined || nameDialog === null || submitting) return
+    const trimmed = nameDraft.trim()
+    if (trimmed === '') return
+    setSubmitting(true)
+    setNameError(null)
+    setOpError(null)
+    try {
+      if (nameDialog.kind === 'rename') {
+        const entry = nameDialog.entry
+        if (entry === undefined || trimmed === entry.name) {
+          closeNameDialog()
+          return
+        }
+        const parent = parentDirectoryForCreate(workspace.path, entry)
+        if (siblingNameExists(
+          siblingsForCreate(parent).filter(item => item.path !== entry.path),
+          trimmed,
+        )) {
+          setNameError(t('editor.error.renameConflict'))
+          return
+        }
+        const result = await renamePath(workspace.workspaceId, entry.path, trimmed)
+        const parentDir = parentDirectoryForCreate(workspace.path, entry)
+        await invalidateDirectory(parentDir)
+        onPathRenamed?.(entry.path, result.path, trimmed)
+        setSelectedPath(result.path)
+        setNameDialog(null)
+        setNameDraft('')
+        return
+      }
+      const parent = parentDirectoryForCreate(workspace.path, selectedEntry)
+      if (siblingNameExists(siblingsForCreate(parent), trimmed)) {
+        setNameError(t('editor.error.renameConflict'))
+        return
+      }
+      const childPath = joinChildPath(parent, trimmed)
+      if (nameDialog.kind === 'new-folder') {
+        const result = await createWorkspaceDirectory(workspace.workspaceId, parent, trimmed)
+        await invalidateDirectory(parent)
+        setExpanded(current => new Set(current).add(parent))
+        setSelectedPath(result.path)
+        setNameDialog(null)
+        setNameDraft('')
+        return
+      }
+      await writeFile(workspace.workspaceId, childPath, '')
+      await invalidateDirectory(parent)
+      const created: WorkspaceEntry = {
+        name: trimmed,
+        path: childPath,
+        isDirectory: false,
+        hidden: trimmed.startsWith('.'),
+      }
+      setSelectedPath(childPath)
+      onOpenFile(created)
+      setNameDialog(null)
+      setNameDraft('')
+    } catch (error: unknown) {
+      if (isNameConflict(error)) {
+        setNameError(t('editor.error.renameConflict'))
+        return
+      }
+      if (nameDialog.kind === 'rename') setOpError(t('editor.error.rename'))
+      else if (nameDialog.kind === 'new-folder') setOpError(t('editor.error.createFolder'))
+      else setOpError(t('editor.error.createFile'))
+      void error
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const confirmDelete = async (): Promise<void> => {
+    if (workspace === undefined || deleteTarget === null || submitting) return
+    setSubmitting(true)
+    setOpError(null)
+    try {
+      const parent = parentDirectoryForCreate(workspace.path, deleteTarget)
+      await deletePath(workspace.workspaceId, deleteTarget.path)
+      onPathDeleted?.(deleteTarget.path)
+      if (selectedPath === deleteTarget.path) setSelectedPath(undefined)
+      await invalidateDirectory(parent)
+      setDeleteTarget(null)
+    } catch (error: unknown) {
+      void error
+      setOpError(t('editor.error.delete'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const nameDialogTitle = nameDialog?.kind === 'new-file'
+    ? t('editor.dialog.newFile.title')
+    : nameDialog?.kind === 'new-folder'
+      ? t('editor.dialog.newFolder.title')
+      : t('editor.dialog.rename.title')
+  const nameDialogConfirm = nameDialog?.kind === 'rename'
+    ? t('editor.dialog.rename.confirm')
+    : t('editor.dialog.create')
+  const nameInputError = nameError !== null
+
   const treeLabel = workspace?.title ?? t('editor.tree.label')
 
   return (
@@ -203,19 +472,63 @@ export function FileTreePane({
           </button>
         )}
       </div>
-      <div className={css.toolbar}>
-        <button type="button" className={css.toolButton} disabled aria-label={t('editor.tree.newFile')}>
+      <div className={css.toolbar} data-file-tree-toolbar="true">
+        <button
+          type="button"
+          className={clsx(css.toolButton, workspaceBound && css.toolButtonActive)}
+          disabled={!workspaceBound}
+          aria-label={t('editor.tree.newFile')}
+          onClick={() => { openNameDialog('new-file') }}
+        >
           <IconPlusOutline16 size={16} />
         </button>
-        <button type="button" className={css.toolButton} disabled aria-label={t('editor.tree.newFolder')}>
+        <button
+          type="button"
+          className={clsx(css.toolButton, workspaceBound && css.toolButtonActive)}
+          disabled={!workspaceBound}
+          aria-label={t('editor.tree.newFolder')}
+          onClick={() => { openNameDialog('new-folder') }}
+        >
           <IconFolderClose16 size={16} />
+        </button>
+        <button
+          type="button"
+          className={clsx(css.toolButton, selectedEntry !== undefined && css.toolButtonActive)}
+          disabled={selectedEntry === undefined}
+          aria-label={t('editor.tree.rename')}
+          onClick={() => {
+            if (selectedEntry !== undefined) openNameDialog('rename', selectedEntry)
+          }}
+        >
+          <IconEditOutline16 size={16} />
+        </button>
+        <button
+          type="button"
+          className={clsx(css.toolButton, selectedEntry !== undefined && css.toolButtonActive)}
+          disabled={selectedEntry === undefined}
+          aria-label={t('editor.tree.delete')}
+          onClick={() => {
+            if (selectedEntry !== undefined) {
+              setDeleteTarget(selectedEntry)
+              setOpError(null)
+            }
+          }}
+        >
+          <IconTrashOutline16 size={16} />
         </button>
       </div>
       <div className={css.treeScroll} ref={scrollRef} data-tree-scroll="true">
         {emptyWorkspace && (
           <div className={css.empty}>
             <div className={css.emptyTitle}>{t('editor.tree.empty.title')}</div>
-            <button type="button" className={css.emptyCta} disabled>{t('editor.tree.empty.cta')}</button>
+            <button
+              type="button"
+              className={css.emptyCta}
+              disabled={!workspaceBound}
+              onClick={() => { openNameDialog('new-file') }}
+            >
+              {t('editor.tree.empty.cta')}
+            </button>
           </div>
         )}
         {filterNoMatch && (
@@ -286,6 +599,85 @@ export function FileTreePane({
           })}
         </div>
       </div>
+      <Modal
+        open={nameDialog !== null}
+        onClose={closeNameDialog}
+        closeLabel={t('editor.dialog.close')}
+        title={nameDialogTitle}
+        className={dialogCss.dialogSurface ?? ''}
+        footer={(
+          <>
+            <Button variant="outline" disabled={submitting} onClick={closeNameDialog}>
+              {t('editor.dialog.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              disabled={submitting || nameDraft.trim() === ''}
+              onClick={() => { void submitNameDialog() }}
+            >
+              {nameDialogConfirm}
+            </Button>
+          </>
+        )}
+      >
+        <input
+          className={clsx(dialogCss.nameInput, nameInputError && dialogCss.nameInputError)}
+          value={nameDraft}
+          aria-label={t('editor.dialog.name.label')}
+          aria-invalid={nameInputError || undefined}
+          autoFocus
+          disabled={submitting}
+          onFocus={(event) => { event.target.select() }}
+          onChange={(event) => {
+            setNameDraft(event.target.value)
+            setNameError(null)
+            setOpError(null)
+          }}
+          onCompositionStart={() => { composingRef.current = true }}
+          onCompositionEnd={() => { composingRef.current = false }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !composingRef.current) {
+              event.preventDefault()
+              void submitNameDialog()
+            }
+          }}
+        />
+        {nameError !== null && (
+          <div className={dialogCss.fieldError} role="alert">{nameError}</div>
+        )}
+        {opError !== null && (
+          <div className={dialogCss.fieldError} role="alert">{opError}</div>
+        )}
+      </Modal>
+      <Modal
+        open={deleteTarget !== null}
+        onClose={closeDeleteDialog}
+        closeLabel={t('editor.dialog.close')}
+        title={t('editor.dialog.delete.title')}
+        className={dialogCss.dialogSurface ?? ''}
+        {...deleteTarget === null
+          ? {}
+          : { description: t('editor.dialog.delete.desc', { path: deleteTarget.path }) }}
+        footer={(
+          <>
+            <Button variant="outline" disabled={submitting} onClick={closeDeleteDialog}>
+              {t('editor.dialog.cancel')}
+            </Button>
+            <Button
+              variant="outline"
+              className={dialogCss.deleteAction}
+              disabled={submitting}
+              onClick={() => { void confirmDelete() }}
+            >
+              {t('editor.dialog.delete.confirm')}
+            </Button>
+          </>
+        )}
+      >
+        {opError !== null && (
+          <div className={dialogCss.fieldError} role="alert">{opError}</div>
+        )}
+      </Modal>
     </div>
   )
 }

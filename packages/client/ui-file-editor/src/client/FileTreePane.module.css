@@ -89,6 +89,15 @@
   cursor: not-allowed;
 }
 
+.toolButtonActive:not(:disabled) {
+  cursor: pointer;
+}
+
+.toolButtonActive:not(:disabled):hover {
+  background: var(--editor-hover-tint);
+  color: var(--dsw-alias-label-primary);
+}
+
 .treeScroll {
   flex: 1;
   min-height: 0;
@@ -227,6 +236,10 @@
   line-height: 20px;
   font-weight: 500;
   color: var(--dsw-alias-label-primary-foreground);
+  cursor: pointer;
+}
+
+.emptyCta:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }

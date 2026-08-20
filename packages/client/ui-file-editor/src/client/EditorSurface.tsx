@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
-  FileReadKind, FileReadResult, FileWriteResult, WorkspaceId,
+  FileReadKind, FileReadResult, FileWriteResult, PathMutationResult, WorkspaceId,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { GitStatusListing, WorkspaceEntriesListing } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceEntry } from '@deepseek-ai/dsh-client-runtime/client'
@@ -58,6 +58,43 @@ export interface FileEditorInjected {
     text: string,
     signal?: AbortSignal,
   ) => Promise<FileWriteResult>
+  /**
+   * Delete one file or directory inside the bound Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute path to delete.
+   * @param signal - aborts a superseded mutation.
+   */
+  deletePath: (
+    workspaceId: WorkspaceId,
+    path: string,
+    signal?: AbortSignal,
+  ) => Promise<PathMutationResult>
+  /**
+   * Rename one path within its parent directory.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute source path.
+   * @param newName - single-segment new base name.
+   * @param signal - aborts a superseded mutation.
+   */
+  renamePath: (
+    workspaceId: WorkspaceId,
+    path: string,
+    newName: string,
+    signal?: AbortSignal,
+  ) => Promise<PathMutationResult>
+  /**
+   * Create one child directory under an existing parent.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute parent directory.
+   * @param name - single-segment directory name.
+   * @param signal - aborts a superseded mutation.
+   */
+  createWorkspaceDirectory: (
+    workspaceId: WorkspaceId,
+    path: string,
+    name: string,
+    signal?: AbortSignal,
+  ) => Promise<PathMutationResult>
 }
 
 export type EditorSurfaceProps =
@@ -76,6 +113,7 @@ const DARK_ATTRIBUTE = 'data-ds-dark-theme'
 export function EditorSurface({
   t, sessionId, useWorkspaces, useStore, actions,
   listWorkspaceEntries, gitStatus, readFile, writeFile,
+  deletePath, renamePath, createWorkspaceDirectory,
 }: EditorSurfaceProps) {
   const workspace = useWorkspaces(state =>
     state.items.find(item => item.sessionIds.includes(sessionId)),
@@ -84,6 +122,7 @@ export function EditorSurface({
   const activePath = useStore(state => state.activePath)
   const [status, setStatus] = useState<EditorPaneStatus>({ kind: 'idle' })
   const [dark, setDark] = useState(() => document.body.hasAttribute(DARK_ATTRIBUTE))
+  const [newFileTrigger, setNewFileTrigger] = useState(0)
   const ioAbort = useRef<AbortController | null>(null)
   const retryRef = useRef<(() => void) | null>(null)
 
@@ -187,13 +226,28 @@ export function EditorSurface({
     return () => { window.removeEventListener('keydown', onKey) }
   }, [saveActive])
 
+  const handlePathDeleted = useCallback((path: string) => {
+    if (tabs.some(tab => tab.path === path)) actions.closeTab(path)
+  }, [tabs, actions])
+
+  const handlePathRenamed = useCallback((oldPath: string, newPath: string, newName: string) => {
+    actions.renameTabPath(oldPath, newPath, newName)
+  }, [actions])
+
   return (
     <div className={css.editorRoot} data-surface="editor-surface">
       <FileTreePane
         workspace={workspace}
         listWorkspaceEntries={listWorkspaceEntries}
         gitStatus={gitStatus}
+        deletePath={deletePath}
+        renamePath={renamePath}
+        createWorkspaceDirectory={createWorkspaceDirectory}
+        writeFile={writeFile}
         t={t}
+        newFileTrigger={newFileTrigger}
+        onPathDeleted={handlePathDeleted}
+        onPathRenamed={handlePathRenamed}
         onOpenFile={(entry) => { void openEntry(entry) }}
       />
       <div className={css.split} />
@@ -208,6 +262,7 @@ export function EditorSurface({
         onBufferChange={actions.setBuffer}
         onSave={() => { void saveActive() }}
         onRetry={() => { retryRef.current?.() }}
+        onNewFile={() => { setNewFileTrigger(current => current + 1) }}
       />
     </div>
   )
