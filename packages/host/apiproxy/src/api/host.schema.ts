@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod'
-import type { DirectoryEntry, GitStatusEntry, WorkspaceEntry } from './host.ts'
+import type { DirectoryEntry, GitStatusEntry, WorkspaceEntry, FileTextRead, FileBytesRead } from './host.ts'
 import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
 import { workspaceIdSchema } from './sessions.schema.ts'
@@ -101,6 +101,46 @@ export const hostGitStatusRequestSchema = z.object({
 export const hostGitStatusValueSchema = z.object({
   entries: z.array(gitStatusEntrySchema),
 }) satisfies z.ZodType<Wire<ResponseValue<'host.gitStatus'>>>
+
+/** host.readFile request payload. */
+export const hostReadFileRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+  kind: z.enum(['text', 'bytes']),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.readFile'>>>
+
+/** host.readFile response value for text reads. */
+export const fileTextReadSchema = z.object({
+  kind: z.literal('text'),
+  path: z.string(),
+  text: z.string(),
+}) satisfies z.ZodType<Wire<FileTextRead>>
+
+/** host.readFile response value for byte reads. */
+export const fileBytesReadSchema = z.object({
+  kind: z.literal('bytes'),
+  path: z.string(),
+  data: z.string(),
+  mediaType: z.string(),
+}) satisfies z.ZodType<Wire<FileBytesRead>>
+
+/** host.readFile response value. */
+export const hostReadFileValueSchema = z.discriminatedUnion('kind', [
+  fileTextReadSchema,
+  fileBytesReadSchema,
+]) satisfies z.ZodType<Wire<ResponseValue<'host.readFile'>>>
+
+/** host.writeFile request payload. */
+export const hostWriteFileRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+  text: z.string(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.writeFile'>>>
+
+/** host.writeFile response value. */
+export const hostWriteFileValueSchema = z.object({
+  path: z.string(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.writeFile'>>>
 
 /** host.openPath request payload. */
 export const hostOpenPathRequestSchema = z.object({

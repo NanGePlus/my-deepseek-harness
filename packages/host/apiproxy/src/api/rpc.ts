@@ -42,6 +42,10 @@ export interface RpcErrorDetailsMap {
   'workspace-path-out-of-bounds': { workspaceId: string; path: string }
   'workspace-name-conflict': { name: string }
   'workspace-move-invalid': { workspaceId: string; sessionId: SessionId; beforeSessionId?: SessionId }
+  'file-not-found': { path: string }
+  'file-not-regular': { path: string }
+  'file-unreadable': { path: string }
+  'file-write-failed': { path: string }
   'directory-unreadable': { path: string }
   'directory-exists': { path: string }
   'directory-create-failed': { path: string }

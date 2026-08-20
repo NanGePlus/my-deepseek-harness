@@ -151,6 +151,8 @@ export class FakeApiClient implements IApiClient {
       Promise.resolve(ok({ path: '', entries: [], truncated: false })),
     ),
     gitStatus: payload => this.record('host.gitStatus', payload, Promise.resolve(ok({ entries: [] }))),
+    readFile: payload => this.record('host.readFile', payload, Promise.resolve(ok({ kind: 'text', path: '', text: '' }))),
+    writeFile: payload => this.record('host.writeFile', payload, Promise.resolve(ok({ path: '' }))),
     openPath: payload => this.record('host.openPath', payload, this.onOpenPath(payload)),
   }
 
