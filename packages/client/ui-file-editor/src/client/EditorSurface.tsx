@@ -1,6 +1,6 @@
 /** Editor-surface occupant of the details column file-editor tab. */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
@@ -12,6 +12,7 @@ import { FileTreePane } from './FileTreePane.tsx'
 import { EditorPane, type EditorPaneStatus } from './EditorPane.tsx'
 import { languageForPath, openKindForPath } from './open-kind.ts'
 import { createFileEditorStore, tabIsDirty } from './stores.ts'
+import { createDirtyGuard, type DirtyGuard, type SessionEditorBridge } from './dirty-guard.ts'
 import css from './EditorSurface.module.css'
 import dialogCss from './FileTreeDialogs.module.css'
 
@@ -120,11 +121,21 @@ export interface FileEditorInjected {
   ) => void
 }
 
+/** Dirty guard face injected from apply (session open interception + dialogs). */
+export interface FileEditorDirtyGuardInjected {
+  /** Shared dirty-tab / session-switch guard coordinator. */
+  dirtyGuard: DirtyGuard
+}
+
 export type EditorSurfaceProps =
   PropsRuntime<'conversation.details.editor'>
   & PropsLocale<'fileEditor'>
   & PropsStore<ReturnType<typeof createFileEditorStore>>
   & FileEditorInjected
+  & FileEditorDirtyGuardInjected
+
+/** Shared guard instance for apply wiring and component tests. */
+export const editorDirtyGuard = createDirtyGuard()
 
 /** Document attribute that ui-theme sets for the Harness dark palette. */
 const DARK_ATTRIBUTE = 'data-ds-dark-theme'
@@ -134,7 +145,7 @@ const DARK_ATTRIBUTE = 'data-ds-dark-theme'
  * @param props - session-scoped runtime share, locale, tab store, and Host callbacks.
  */
 export function EditorSurface({
-  t, sessionId, useWorkspaces, useStore, actions,
+  t, sessionId, useWorkspaces, useStore, actions, dirtyGuard,
   listWorkspaceEntries, gitStatus, readFile, writeFile,
   deletePath, renamePath, createWorkspaceDirectory, watchPath,
 }: EditorSurfaceProps) {
@@ -152,6 +163,38 @@ export function EditorSurface({
   const watchAbort = useRef<Map<string, AbortController>>(new Map())
   const tabsRef = useRef(tabs)
   tabsRef.current = tabs
+
+  const guardMode = useSyncExternalStore(dirtyGuard.subscribe, dirtyGuard.getSnapshot)
+  const activeGuard =
+    guardMode.mode.kind !== 'idle' && guardMode.mode.sessionId === sessionId
+      ? guardMode.mode
+      : null
+
+  const saveTab = useCallback(async (path: string): Promise<boolean> => {
+    const tab = tabsRef.current.find(item => item.path === path)
+    /* v8 ignore next -- guard only runs for open text tabs in a bound Workspace */
+    if (tab?.kind !== 'text' || workspace === undefined) return false
+    try {
+      await writeFile(workspace.workspaceId, path, tab.buffer)
+      actions.markSaved(path)
+      return true
+    } catch (error: unknown) {
+      void error
+      return false
+    }
+  }, [workspace, writeFile, actions])
+
+  useEffect(() => {
+    const bridge: SessionEditorBridge = {
+      dirtyTabs: () => tabsRef.current
+        .filter(tabIsDirty)
+        .map(tab => ({ path: tab.path, name: tab.name })),
+      saveTab,
+      discardTab: (path) => { actions.closeTab(path) },
+      closeAllTabs: () => { actions.closeAllTabs() },
+    }
+    return dirtyGuard.registerBridge(sessionId, bridge)
+  }, [sessionId, dirtyGuard, actions, saveTab])
 
   useEffect(() => {
     const sync = (): void => { setDark(document.body.hasAttribute(DARK_ATTRIBUTE)) }
@@ -315,6 +358,11 @@ export function EditorSurface({
     actions.renameTabPath(oldPath, newPath, newName)
   }, [actions])
 
+  const handleCloseTab = useCallback((path: string) => {
+    if (dirtyGuard.requestCloseTab(sessionId, path)) return
+    actions.closeTab(path)
+  }, [dirtyGuard, sessionId, actions])
+
   return (
     <div className={css.editorRoot} data-surface="editor-surface">
       <FileTreePane
@@ -339,7 +387,7 @@ export function EditorSurface({
         dark={dark}
         t={t}
         onFocus={actions.focusTab}
-        onClose={actions.closeTab}
+        onClose={handleCloseTab}
         onBufferChange={actions.setBuffer}
         onSave={() => { void saveActive() }}
         onRetry={() => { retryRef.current?.() }}
@@ -361,6 +409,34 @@ export function EditorSurface({
             </Button>
             <Button variant="primary" onClick={() => { void reloadExternalChange() }}>
               {t('editor.dialog.externalChange.reload')}
+            </Button>
+          </>
+        )}
+      />
+      <Modal
+        open={activeGuard !== null}
+        onClose={() => { dirtyGuard.cancel() }}
+        closeLabel={t('editor.dialog.close')}
+        title={t('editor.dialog.dirtyGuard.title')}
+        className={dialogCss.dialogSurface ?? ''}
+        {...activeGuard === null || activeGuard.queue[0] === undefined
+          ? {}
+          : { description: t('editor.dialog.dirtyGuard.desc', { name: activeGuard.queue[0].name }) }}
+        footer={(
+          <>
+            {activeGuard?.saveError !== undefined && (
+              <div className={dialogCss.fieldError} role="alert">
+                {t('editor.dialog.dirtyGuard.saveError')}
+              </div>
+            )}
+            <Button variant="outline" onClick={() => { dirtyGuard.cancel() }}>
+              {t('editor.dialog.dirtyGuard.cancel')}
+            </Button>
+            <Button variant="outline" onClick={() => { dirtyGuard.discardCurrent() }}>
+              {t('editor.dialog.dirtyGuard.discard')}
+            </Button>
+            <Button variant="primary" onClick={() => { void dirtyGuard.saveCurrent() }}>
+              {t('editor.dialog.dirtyGuard.save')}
             </Button>
           </>
         )}

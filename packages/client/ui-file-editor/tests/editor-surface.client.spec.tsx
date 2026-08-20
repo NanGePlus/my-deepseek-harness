@@ -9,12 +9,14 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceEntry, WorkspaceEntriesListing } from '@deepseek-ai/dsh-client-runtime/client'
 import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
-import { EditorSurface, type EditorSurfaceProps } from '../src/client/EditorSurface.tsx'
+import { EditorSurface, editorDirtyGuard, type EditorSurfaceProps } from '../src/client/EditorSurface.tsx'
+import { resetDirtyGuardForTest } from '../src/client/dirty-guard.ts'
 import { createFileEditorStore } from '../src/client/stores.ts'
 import { zh } from '../src/client/locales.ts'
 
 afterEach(cleanup)
 afterEach(() => { document.body.removeAttribute('data-ds-dark-theme') })
+afterEach(() => { resetDirtyGuardForTest(editorDirtyGuard) })
 
 class ResizeObserverStub {
   observe(): void {}
@@ -148,6 +150,7 @@ function mount(over: {
     renamePath,
     createWorkspaceDirectory,
     watchPath,
+    dirtyGuard: editorDirtyGuard,
   } as EditorSurfaceProps
   const view = render(<EditorSurface {...props} />)
   return {
@@ -1002,5 +1005,147 @@ describe('EditorSurface external change', () => {
     await act(async () => { watch.trigger(README) })
     expect(screen.queryByRole('dialog', { name: '文件已在磁盘上更改' })).toBeNull()
     expect(b.watchPath.mock.calls.every(call => call[1] !== ROOT)).toBe(true)
+  })
+})
+
+describe('EditorSurface dirty guard', () => {
+  const README = `${ROOT}/README.md`
+  const OTHER_SID = 's2' as SessionId
+
+  async function clickFile(name: string): Promise<void> {
+    const tree = await waitFor(() => screen.getByRole('tree', { name: 'alpha' }))
+    fireEvent.click(within(tree).getByText(name).closest('[role="treeitem"]')!)
+  }
+
+  async function dirtyReadme(): Promise<void> {
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy() })
+    fireEvent.change(
+      screen.getByRole('textbox', { name: /README\.md/ }),
+      { target: { value: 'local edits\n' } },
+    )
+    expect(screen.getByLabelText('未保存')).toBeTruthy()
+  }
+
+  it('session-switch-guard: dirty tabs show save, discard, and cancel; cancel keeps the session', async () => {
+    mount()
+    await dirtyReadme()
+    let switched = false
+    act(() => {
+      editorDirtyGuard.tryOpenSession(SID, OTHER_SID, () => { switched = true })
+    })
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '未保存的更改' }))
+    expect(within(dialog).getByText('README.md')).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: '保存' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: '丢弃' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: '取消' })).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
+    await waitFor(() => { expect(screen.queryByRole('dialog', { name: '未保存的更改' })).toBeNull() })
+    expect(switched).toBe(false)
+    expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy()
+  })
+
+  it('save-fail-stay: a failed save keeps the guard open and does not switch sessions', async () => {
+    const writeFile = vi.fn(async () => { throw new Error('denied') })
+    mount({ write: writeFile })
+    await dirtyReadme()
+    let switched = false
+    act(() => {
+      editorDirtyGuard.tryOpenSession(SID, OTHER_SID, () => { switched = true })
+    })
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '未保存的更改' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: '保存' }))
+    await waitFor(() => { expect(screen.getByText('无法保存此文件')).toBeTruthy() })
+    expect(switched).toBe(false)
+    expect(screen.getByRole('dialog', { name: '未保存的更改' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy()
+  })
+
+  it('switch-success: after discard the tree follows the new Workspace and tabs close', async () => {
+    const other = workspace({
+      workspaceId: 'ws2' as WorkspaceId,
+      path: '/w/beta',
+      title: 'beta',
+      sessionIds: [OTHER_SID],
+    })
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === '/w/beta') {
+        return {
+          path,
+          entries: [{ name: 'only-beta.ts', path: '/w/beta/only-beta.ts', isDirectory: false, hidden: false }],
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    const b = mount({ items: [workspace(), other], list: listWorkspaceEntries })
+    await dirtyReadme()
+    act(() => {
+      editorDirtyGuard.tryOpenSession(SID, OTHER_SID, () => {
+        b.view.rerender(
+          <EditorSurface
+            {...b.props}
+            sessionId={OTHER_SID}
+            useWorkspaces={((select: (s: WorkspaceListState) => unknown) => select(workspacesState([workspace(), other]))) as EditorSurfaceProps['useWorkspaces']}
+          />,
+        )
+      })
+    })
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '未保存的更改' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: '丢弃' }))
+    await waitFor(() => { expect(screen.queryByRole('dialog', { name: '未保存的更改' })).toBeNull() })
+    await waitFor(() => { expect(screen.getByText('only-beta.ts')).toBeTruthy() })
+    expect(screen.queryByText('README.md')).toBeNull()
+    expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull()
+    expect(screen.getByText('未打开文件')).toBeTruthy()
+    expect(listWorkspaceEntries).toHaveBeenCalledWith('ws2', '/w/beta', expect.any(AbortSignal))
+  })
+
+  it('session-switch-save: saving the dirty tab completes the switch', async () => {
+    const writeFile = vi.fn(async (_id: WorkspaceId, path: string, text: string) => ({ path, text }))
+    const b = mount({ write: writeFile })
+    await dirtyReadme()
+    act(() => {
+      editorDirtyGuard.tryOpenSession(SID, OTHER_SID, () => {
+        b.view.rerender(<EditorSurface {...b.props} sessionId={OTHER_SID} />)
+      })
+    })
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '未保存的更改' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: '保存' }))
+    await waitFor(() => { expect(screen.queryByRole('dialog', { name: '未保存的更改' })).toBeNull() })
+    expect(writeFile).toHaveBeenCalledWith(WID, README, 'local edits\n')
+    expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull()
+  })
+
+  it('close-dirty-tab: closing one dirty tab uses the same three buttons without changing session', async () => {
+    mount()
+    await dirtyReadme()
+    fireEvent.click(screen.getByRole('button', { name: '关闭 README.md' }))
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '未保存的更改' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
+    await waitFor(() => { expect(screen.queryByRole('dialog', { name: '未保存的更改' })).toBeNull() })
+    expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '关闭 README.md' }))
+    const again = await waitFor(() => screen.getByRole('dialog', { name: '未保存的更改' }))
+    fireEvent.click(within(again).getByRole('button', { name: '丢弃' }))
+    await waitFor(() => { expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull() })
+    expect(screen.getByText('未打开文件')).toBeTruthy()
+  })
+
+  it('does not show a guard dialog owned by another session', async () => {
+    const b = mount()
+    await dirtyReadme()
+    act(() => { editorDirtyGuard.tryOpenSession(SID, OTHER_SID, () => {}) })
+    b.view.rerender(<EditorSurface {...b.props} sessionId={OTHER_SID} />)
+    expect(screen.queryByRole('dialog', { name: '未保存的更改' })).toBeNull()
+  })
+
+  it('close-dirty-tab-save: saving from the guard closes the tab', async () => {
+    mount()
+    await dirtyReadme()
+    fireEvent.click(screen.getByRole('button', { name: '关闭 README.md' }))
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '未保存的更改' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: '保存' }))
+    await waitFor(() => { expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull() })
   })
 })

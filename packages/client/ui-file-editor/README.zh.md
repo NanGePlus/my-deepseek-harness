@@ -8,7 +8,7 @@ Web details 栏 **文件编辑器** Tab 的编辑界面：注入 `conversation.d
 
 打开模式在单击时按路径判定：图片扩展名（`.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.svg`）调用 `readFile(..., 'bytes')` 并预览；已知二进制扩展名（如 `.wasm`）显示「不支持打开此文件类型」且不得读取；其余调用 `readFile(..., 'text')`，语言 id 由扩展名决定。编辑缓冲与 dirty 活在独占 Client store，不进入 session 日志。
 
-`apply` 从 `ctx.workspaces` 注入 `listWorkspaceEntries`、`gitStatus`、`readFile`、`writeFile`、路径变更与 `watchPath` 闭包，而不是整个 WorkspaceRuntime。Host 列表或 Git 失败时保留上次缓存的树并省略徽章，不在栏内抛出错误。打开与保存失败留在编辑区（「无法打开此文件」／「无法保存此文件」加 **重试**）。每个打开的文本 Tab 注册 `watchPath`；磁盘内容与编辑缓冲不一致时弹出对话框，提供 **重新加载** 或 **保留本地编辑**；关闭 Tab 会 abort 对应 watch。
+`apply` 从 `ctx.workspaces` 注入 `listWorkspaceEntries`、`gitStatus`、`readFile`、`writeFile`、路径变更与 `watchPath` 闭包，而不是整个 WorkspaceRuntime。Host 列表或 Git 失败时保留上次缓存的树并省略徽章，不在栏内抛出错误。打开与保存失败留在编辑区（「无法打开此文件」／「无法保存此文件」加 **重试**）。每个打开的文本 Tab 注册 `watchPath`；磁盘内容与编辑缓冲不一致时弹出对话框，提供 **重新加载** 或 **保留本地编辑**；关闭 Tab 会 abort 对应 watch。dirty Tab 在切换 Session 或关闭 Tab 前须经 **保存** / **丢弃** / **取消** 守卫；保存失败时守卫保持打开。
 
 ## 模型体验
 
@@ -20,5 +20,4 @@ Web details 栏 **文件编辑器** Tab 的编辑界面：注入 `conversation.d
 
 ## 已知限制与暂缓事项
 
-- **无 dirty 关闭或 Session 切换守卫** — 关闭 dirty Tab 会丢弃缓冲；对话框由 US-27／US-26 拥有。
 - **栏内无列表错误态** — `listWorkspaceEntries` 被拒绝时保留上次缓存行；树没有重试 chrome。

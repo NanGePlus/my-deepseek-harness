@@ -56,4 +56,16 @@ describe('file editor store', () => {
     }
     expect(tabIsDirty(tab!)).toBe(false)
   })
+
+  it('closeAllTabs clears every tab and the active path', () => {
+    const instance = createFileEditorStore().create()
+    instance.actions.openTab({
+      kind: 'text', path: '/a', name: 'a.ts', language: 'typescript', buffer: 'x', saved: 'x',
+    })
+    instance.actions.openTab({
+      kind: 'text', path: '/b', name: 'b.ts', language: 'typescript', buffer: 'y', saved: 'y',
+    })
+    instance.actions.closeAllTabs()
+    expect(instance.getSnapshot()).toEqual({ tabs: [], activePath: undefined })
+  })
 })

@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { WorkspaceId, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply as applyNode } from '../src/index.ts'
 import { apply, inject } from '../src/client/index.ts'
@@ -23,11 +23,17 @@ async function bench() {
     watchPath: vi.fn(),
   }
   ctx.provide('workspaces', workspaces)
+  const underlyingOpen = vi.fn()
+  const sessions = {
+    list: { getSnapshot: () => ({ current: undefined as SessionId | undefined }) },
+    open: underlyingOpen,
+  }
+  ctx.provide('sessions', sessions)
   slots.register({
     name: 'root',
     children: { details: { kind: 'single', scope: 'session' } },
   } as never, () => null)
-  return { ctx, slots, workspaces }
+  return { ctx, slots, workspaces, underlyingOpen }
 }
 
 describe('ui-file-editor apply', () => {
@@ -67,5 +73,17 @@ describe('ui-file-editor apply', () => {
     expect(b.workspaces.createWorkspaceDirectory).toHaveBeenCalledWith('ws', '/w', 'src', undefined)
     face.watchPath('ws' as WorkspaceId, '/w/a.ts', () => {}, undefined)
     expect(b.workspaces.watchPath).toHaveBeenCalledWith('ws', '/w/a.ts', expect.any(Function), undefined)
+    expect(face.dirtyGuard).toBeDefined()
+  })
+
+  it('wraps sessions.open through the dirty guard', async () => {
+    const b = await bench()
+    b.slots.register({
+      name: 'details',
+      children: { 'conversation.details.editor': { kind: 'single', scope: 'session' } },
+    } as never, () => null)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    b.ctx.get('sessions')!.open('s2' as SessionId)
+    expect(b.underlyingOpen).toHaveBeenCalledWith('s2')
   })
 })

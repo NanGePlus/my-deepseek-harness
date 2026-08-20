@@ -60,6 +60,7 @@ type FileEditorActions = {
   markSaved: (draft: FileEditorState, path: string) => void
   reloadTextTab: (draft: FileEditorState, path: string, text: string) => void
   renameTabPath: (draft: FileEditorState, oldPath: string, newPath: string, newName: string) => void
+  closeAllTabs: (draft: FileEditorState) => void
 }
 
 /**
@@ -104,6 +105,10 @@ export function createFileEditorStore(): EngineStoreHandle<FileEditorState, File
           }
         }
         if (draft.activePath === oldPath) draft.activePath = newPath
+      },
+      closeAllTabs: (draft) => {
+        draft.tabs = []
+        draft.activePath = undefined
       },
     },
   })
