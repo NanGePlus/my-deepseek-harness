@@ -425,7 +425,10 @@ describe('WorkspaceRuntime', () => {
     const ac = new AbortController()
     api.host.watchPath = vi.fn(async function* (_payload, signal) {
       signal.addEventListener('abort', () => { aborted = true }, { once: true })
-      yield { rpcId: 'watch-1' as never, payload: { type: 'host/path-changed', path: '/w/alpha/a.ts' } }
+      yield {
+        rpcId: 'watch-1' as never,
+        payload: { type: 'host/path-changed' as const, path: '/w/alpha/a.ts' },
+      }
       await new Promise<void>(() => {})
     })
     workspaces.watchPath(wid('alpha'), '/w/alpha/a.ts', () => { changed.push('hit') }, ac.signal)
