@@ -20,6 +20,7 @@ export const zh = {
   'editor.tree.label': '文件树',
 } as const
 
+/** English dictionary, checked complete against the zh key set. */
 export const en = {
   'editor.empty.title': 'No file open',
   'editor.empty.body': 'Choose a file from the tree on the left, or create one',
@@ -41,4 +42,5 @@ export const en = {
   'editor.tree.label': 'File tree',
 } as const
 
+/** The fileEditor namespace key union. */
 export type FileEditorKey = keyof typeof zh
