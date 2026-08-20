@@ -168,6 +168,18 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async writeFile(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { path: request.payload.path } } }
       },
+      async deletePath(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { path: request.payload.path } } }
+      },
+      async renamePath(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { path: request.payload.path } } }
+      },
+      async createWorkspaceDirectory(request) {
+        return {
+          rpcId: request.rpcId,
+          result: { ok: true, value: { path: `${request.payload.path}/${request.payload.name}` } },
+        }
+      },
       async openPath(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { opened: true as const } } }
       },

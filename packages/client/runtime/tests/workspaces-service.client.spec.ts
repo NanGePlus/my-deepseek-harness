@@ -416,6 +416,48 @@ describe('WorkspaceRuntime', () => {
     await expect(writeFailure).rejects.toMatchObject({ rpcError: { code: 'file-write-failed' } })
   })
 
+  it('passes workspace path mutations through the host wire', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const workspaces = new WorkspaceRuntime(ctx, api, new SessionRuntime(ctx, api, fakeRemote()))
+
+    api.onDeletePath = () => Promise.resolve(ok({ path: '/w/alpha/old.txt' }))
+    await expect(workspaces.deletePath(wid('alpha'), '/w/alpha/old.txt')).resolves.toEqual({
+      path: '/w/alpha/old.txt',
+    })
+    expect(api.callsOf('host.deletePath')).toEqual([
+      { workspaceId: 'alpha', path: '/w/alpha/old.txt' },
+    ])
+
+    api.onRenamePath = () => Promise.resolve(ok({ path: '/w/alpha/new.txt' }))
+    await expect(workspaces.renamePath(wid('alpha'), '/w/alpha/old.txt', 'new.txt')).resolves.toEqual({
+      path: '/w/alpha/new.txt',
+    })
+    expect(api.callsOf('host.renamePath')).toEqual([
+      { workspaceId: 'alpha', path: '/w/alpha/old.txt', newName: 'new.txt' },
+    ])
+    api.onRenamePath = () => Promise.resolve(err({
+      code: 'directory-exists', message: 'exists', details: { path: '/w/alpha/new.txt' },
+    }))
+    const renameFailure = workspaces.renamePath(wid('alpha'), '/w/alpha/old.txt', 'new.txt')
+    await expect(renameFailure).rejects.toBeInstanceOf(DirectoryBrowseError)
+    await expect(renameFailure).rejects.toMatchObject({ rpcError: { code: 'directory-exists' } })
+
+    api.onCreateWorkspaceDirectory = () => Promise.resolve(ok({ path: '/w/alpha/src' }))
+    await expect(workspaces.createWorkspaceDirectory(wid('alpha'), '/w/alpha', 'src')).resolves.toEqual({
+      path: '/w/alpha/src',
+    })
+    expect(api.callsOf('host.createWorkspaceDirectory')).toEqual([
+      { workspaceId: 'alpha', path: '/w/alpha', name: 'src' },
+    ])
+    api.onCreateWorkspaceDirectory = () => Promise.resolve(err({
+      code: 'directory-exists', message: 'exists', details: { path: '/w/alpha/src' },
+    }))
+    const createFailure = workspaces.createWorkspaceDirectory(wid('alpha'), '/w/alpha', 'src')
+    await expect(createFailure).rejects.toBeInstanceOf(DirectoryBrowseError)
+    await expect(createFailure).rejects.toMatchObject({ rpcError: { code: 'directory-exists' } })
+  })
+
   it('opens a filesystem path through the host without local state', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()

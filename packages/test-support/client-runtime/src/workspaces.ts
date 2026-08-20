@@ -3,7 +3,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   DirectoryListing, GitStatusListing, IWorkspaces, SessionId, SnapshotStore,
   WorkspaceEntriesListing, WorkspaceId, WorkspaceListState, WorkspaceView,
-  FileReadKind, FileReadResult, FileWriteResult,
+  FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { workspaceListState } from './fixtures.ts'
 import type { Stabilizer } from './fixtures.ts'
@@ -212,6 +212,66 @@ export class TestWorkspaces implements IWorkspaces {
     const stub = this.stubs.get('writeFile')
     if (stub !== undefined) return await (stub(workspaceId, path, text, signal) as Promise<FileWriteResult>)
     return { path }
+  }
+
+  /**
+   * Delete a Workspace path (recorded). The default echoes the path.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file or directory path.
+   * @param signal - optional abort signal.
+   * @returns the deleted absolute path.
+   */
+  async deletePath(
+    workspaceId: WorkspaceId,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<PathMutationResult> {
+    this.calls.push({ method: 'deletePath', args: [workspaceId, path, signal] })
+    const stub = this.stubs.get('deletePath')
+    if (stub !== undefined) return await (stub(workspaceId, path, signal) as Promise<PathMutationResult>)
+    return { path }
+  }
+
+  /**
+   * Rename a Workspace path (recorded). The default joins the parent with the new name.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute source path.
+   * @param newName - single-segment new base name.
+   * @param signal - optional abort signal.
+   * @returns the renamed absolute path.
+   */
+  async renamePath(
+    workspaceId: WorkspaceId,
+    path: string,
+    newName: string,
+    signal?: AbortSignal,
+  ): Promise<PathMutationResult> {
+    this.calls.push({ method: 'renamePath', args: [workspaceId, path, newName, signal] })
+    const stub = this.stubs.get('renamePath')
+    if (stub !== undefined) return await (stub(workspaceId, path, newName, signal) as Promise<PathMutationResult>)
+    const slash = path.lastIndexOf('/')
+    const parent = slash >= 0 ? path.slice(0, slash) : ''
+    return { path: parent === '' ? newName : `${parent}/${newName}` }
+  }
+
+  /**
+   * Create a child directory inside a Workspace (recorded). The default joins parent and name.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute existing parent directory.
+   * @param name - single path segment.
+   * @param signal - optional abort signal.
+   * @returns the created directory's absolute path.
+   */
+  async createWorkspaceDirectory(
+    workspaceId: WorkspaceId,
+    path: string,
+    name: string,
+    signal?: AbortSignal,
+  ): Promise<PathMutationResult> {
+    this.calls.push({ method: 'createWorkspaceDirectory', args: [workspaceId, path, name, signal] })
+    const stub = this.stubs.get('createWorkspaceDirectory')
+    if (stub !== undefined) return await (stub(workspaceId, path, name, signal) as Promise<PathMutationResult>)
+    return { path: `${path}/${name}` }
   }
 
   /**

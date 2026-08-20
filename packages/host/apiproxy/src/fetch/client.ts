@@ -20,6 +20,9 @@ import {
   hostOpenPathValueSchema, hostPickDirectoryValueSchema,
   hostReadFileValueSchema,
   hostWriteFileValueSchema,
+  hostDeletePathValueSchema,
+  hostRenamePathValueSchema,
+  hostCreateWorkspaceDirectoryValueSchema,
 } from '../api/host.schema.ts'
 import {
   sessionCancelValueSchema,
@@ -118,6 +121,9 @@ export interface IApiClient {
     gitStatus(payload: RequestPayload<'host.gitStatus'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitStatus'>>>
     readFile(payload: RequestPayload<'host.readFile'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.readFile'>>>
     writeFile(payload: RequestPayload<'host.writeFile'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.writeFile'>>>
+    deletePath(payload: RequestPayload<'host.deletePath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.deletePath'>>>
+    renamePath(payload: RequestPayload<'host.renamePath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.renamePath'>>>
+    createWorkspaceDirectory(payload: RequestPayload<'host.createWorkspaceDirectory'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.createWorkspaceDirectory'>>>
     openPath(payload: RequestPayload<'host.openPath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.openPath'>>>
   }
   workspace: {
@@ -202,6 +208,9 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'host.gitStatus': hostGitStatusValueSchema,
   'host.readFile': hostReadFileValueSchema,
   'host.writeFile': hostWriteFileValueSchema,
+  'host.deletePath': hostDeletePathValueSchema,
+  'host.renamePath': hostRenamePathValueSchema,
+  'host.createWorkspaceDirectory': hostCreateWorkspaceDirectoryValueSchema,
   'host.openPath': hostOpenPathValueSchema,
   'workspace.list': workspaceListValueSchema,
   'workspace.create': workspaceCreateValueSchema,
@@ -456,6 +465,9 @@ export abstract class AbstractApiClient implements IApiClient {
     gitStatus: (payload, signal) => this.callUnary('host.gitStatus', payload, signal),
     readFile: (payload, signal) => this.callUnary('host.readFile', payload, signal),
     writeFile: (payload, signal) => this.callUnary('host.writeFile', payload, signal),
+    deletePath: (payload, signal) => this.callUnary('host.deletePath', payload, signal),
+    renamePath: (payload, signal) => this.callUnary('host.renamePath', payload, signal),
+    createWorkspaceDirectory: (payload, signal) => this.callUnary('host.createWorkspaceDirectory', payload, signal),
     openPath: (payload, signal) => this.callUnary('host.openPath', payload, signal),
   }
 

@@ -123,6 +123,16 @@ import {
   WorkspaceFileUnreadableError,
   WorkspaceFileWriteFailedError,
 } from './read-write-file.ts'
+import {
+  createWorkspaceDirectory,
+  deleteWorkspacePath,
+  renameWorkspacePath,
+  WorkspaceDirectoryCreateFailedError,
+  WorkspaceDirectoryExistsError,
+  WorkspacePathDeleteFailedError,
+  WorkspacePathNotFoundError,
+  WorkspacePathRenameFailedError,
+} from './workspace-path-mutations.ts'
 
 /** Page size when history is called without maxMessages. */
 const DEFAULT_MAX_MESSAGES = 50
@@ -3143,6 +3153,136 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           if (error instanceof WorkspaceFileWriteFailedError) {
             return err(request, {
               code: 'file-write-failed',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async deletePath(request, signal) {
+        const { workspaceId, path } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await deleteWorkspacePath(workspace.path, path, signal))
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'path delete was aborted', details: {} })
+          }
+          if (error instanceof WorkspacePathOutOfBoundsError) {
+            return err(request, {
+              code: 'workspace-path-out-of-bounds',
+              message: error.message,
+              details: { workspaceId, path: error.path },
+            })
+          }
+          if (error instanceof WorkspacePathNotFoundError) {
+            return err(request, {
+              code: 'path-not-found',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          if (error instanceof WorkspacePathDeleteFailedError) {
+            return err(request, {
+              code: 'path-delete-failed',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async renamePath(request, signal) {
+        const { workspaceId, path, newName } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await renameWorkspacePath(workspace.path, path, newName, signal))
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'path rename was aborted', details: {} })
+          }
+          if (error instanceof WorkspacePathOutOfBoundsError) {
+            return err(request, {
+              code: 'workspace-path-out-of-bounds',
+              message: error.message,
+              details: { workspaceId, path: error.path },
+            })
+          }
+          if (error instanceof WorkspacePathNotFoundError) {
+            return err(request, {
+              code: 'path-not-found',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          if (error instanceof WorkspaceDirectoryExistsError) {
+            return err(request, {
+              code: 'directory-exists',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          if (error instanceof WorkspacePathRenameFailedError) {
+            return err(request, {
+              code: 'path-rename-failed',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async createWorkspaceDirectory(request, signal) {
+        const { workspaceId, path, name } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await createWorkspaceDirectory(workspace.path, path, name, signal))
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'directory create was aborted', details: {} })
+          }
+          if (error instanceof WorkspacePathOutOfBoundsError) {
+            return err(request, {
+              code: 'workspace-path-out-of-bounds',
+              message: error.message,
+              details: { workspaceId, path: error.path },
+            })
+          }
+          if (error instanceof WorkspaceDirectoryExistsError) {
+            return err(request, {
+              code: 'directory-exists',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          if (error instanceof WorkspaceDirectoryCreateFailedError) {
+            return err(request, {
+              code: 'directory-create-failed',
               message: error.message,
               details: { path: error.path },
             })
