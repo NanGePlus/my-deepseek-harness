@@ -139,9 +139,10 @@ describe('dirty guard', () => {
     })
     guard.requestCloseTab(S1, TAB.path)
     await guard.saveCurrent()
-    expect(guard.getSnapshot().mode.kind).toBe('close-tab')
-    if (guard.getSnapshot().mode.kind === 'close-tab') {
-      expect(guard.getSnapshot().mode.saveError).toBe('save-failed')
+    const mode = guard.getSnapshot().mode
+    expect(mode.kind).toBe('close-tab')
+    if (mode.kind === 'close-tab') {
+      expect(mode.saveError).toBe('save-failed')
     }
   })
 

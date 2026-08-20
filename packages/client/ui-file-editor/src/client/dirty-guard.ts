@@ -105,7 +105,19 @@ export function createDirtyGuard(): DirtyGuard {
   const finishQueue = (mode: Exclude<DirtyGuardMode, { kind: 'idle' }>): void => {
     const rest = mode.queue.slice(1)
     if (rest.length > 0) {
-      publish({ mode: { ...mode, queue: rest, saveError: undefined } })
+      if (mode.kind === 'close-tab') {
+        publish({ mode: { kind: 'close-tab', sessionId: mode.sessionId, queue: rest } })
+      } else {
+        publish({
+          mode: {
+            kind: 'session-switch',
+            sessionId: mode.sessionId,
+            targetSessionId: mode.targetSessionId,
+            queue: rest,
+            commit: mode.commit,
+          },
+        })
+      }
       return
     }
     if (mode.kind === 'close-tab') {
