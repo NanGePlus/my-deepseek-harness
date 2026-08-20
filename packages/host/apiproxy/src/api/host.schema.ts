@@ -142,6 +142,49 @@ export const hostWriteFileValueSchema = z.object({
   path: z.string(),
 }) satisfies z.ZodType<Wire<ResponseValue<'host.writeFile'>>>
 
+/** host.deletePath request payload. */
+export const hostDeletePathRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.deletePath'>>>
+
+/** host.deletePath response value. */
+export const hostDeletePathValueSchema = z.object({
+  path: z.string(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.deletePath'>>>
+
+/** host.renamePath request payload: newName must be one plain path segment. */
+export const hostRenamePathRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+  newName: z.string(),
+}).refine(
+  payload => payload.newName.trim() !== '' && payload.newName !== '.' && payload.newName !== '..'
+    && !/[/\\]/.test(payload.newName),
+  { message: 'host.renamePath requires a single non-blank path segment newName' },
+) satisfies z.ZodType<Wire<RequestPayload<'host.renamePath'>>>
+
+/** host.renamePath response value. */
+export const hostRenamePathValueSchema = z.object({
+  path: z.string(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.renamePath'>>>
+
+/** host.createWorkspaceDirectory request payload: name must be one plain path segment. */
+export const hostCreateWorkspaceDirectoryRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+  name: z.string(),
+}).refine(
+  payload => payload.name.trim() !== '' && payload.name !== '.' && payload.name !== '..'
+    && !/[/\\]/.test(payload.name),
+  { message: 'host.createWorkspaceDirectory requires a single non-blank path segment name' },
+) satisfies z.ZodType<Wire<RequestPayload<'host.createWorkspaceDirectory'>>>
+
+/** host.createWorkspaceDirectory response value. */
+export const hostCreateWorkspaceDirectoryValueSchema = z.object({
+  path: z.string(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.createWorkspaceDirectory'>>>
+
 /** host.openPath request payload. */
 export const hostOpenPathRequestSchema = z.object({
   path: z.string().min(1),

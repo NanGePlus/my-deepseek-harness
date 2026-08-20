@@ -46,6 +46,9 @@ export interface RpcErrorDetailsMap {
   'file-not-regular': { path: string }
   'file-unreadable': { path: string }
   'file-write-failed': { path: string }
+  'path-not-found': { path: string }
+  'path-delete-failed': { path: string }
+  'path-rename-failed': { path: string }
   'directory-unreadable': { path: string }
   'directory-exists': { path: string }
   'directory-create-failed': { path: string }

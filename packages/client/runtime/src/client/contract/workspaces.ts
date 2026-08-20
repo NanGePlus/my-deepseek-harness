@@ -8,7 +8,7 @@
  */
 import type {
   DirectoryListing, GitStatusListing, SessionId, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
-  FileReadKind, FileReadResult, FileWriteResult,
+  FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceListState } from '../workspaces/service.ts'
 import type { ObservableSnapshot } from './store.ts'
@@ -92,6 +92,46 @@ export interface IWorkspaces {
     text: string,
     signal?: AbortSignal,
   ): Promise<FileWriteResult>
+  /**
+   * Delete one file or directory tree inside a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file or directory path.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the deleted absolute path.
+   */
+  deletePath(
+    workspaceId: WorkspaceId,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<PathMutationResult>
+  /**
+   * Rename one file or directory within the same parent directory inside a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute source path.
+   * @param newName - single-segment new base name.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the renamed absolute path.
+   */
+  renamePath(
+    workspaceId: WorkspaceId,
+    path: string,
+    newName: string,
+    signal?: AbortSignal,
+  ): Promise<PathMutationResult>
+  /**
+   * Create one child directory under an existing parent inside a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute existing parent directory.
+   * @param name - single non-blank path segment.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the created directory's absolute path.
+   */
+  createWorkspaceDirectory(
+    workspaceId: WorkspaceId,
+    path: string,
+    name: string,
+    signal?: AbortSignal,
+  ): Promise<PathMutationResult>
   /**
    * Create one child directory through the Host's `browse` capability.
    * @param path - absolute existing parent directory.

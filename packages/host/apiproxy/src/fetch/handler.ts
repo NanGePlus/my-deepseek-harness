@@ -37,6 +37,9 @@ import {
   hostPickDirectoryRequestSchema,
   hostReadFileRequestSchema,
   hostWriteFileRequestSchema,
+  hostDeletePathRequestSchema,
+  hostRenamePathRequestSchema,
+  hostCreateWorkspaceDirectoryRequestSchema,
 } from '../api/host.schema.ts'
 import {
   workspaceArchiveSessionRequestSchema,
@@ -116,6 +119,9 @@ const UNARY_ROUTES: UnaryRoutes = {
   'host.gitStatus': { schema: hostGitStatusRequestSchema, invoke: (api, r, signal) => api.host.gitStatus(r, signal) },
   'host.readFile': { schema: hostReadFileRequestSchema, invoke: (api, r, signal) => api.host.readFile(r, signal) },
   'host.writeFile': { schema: hostWriteFileRequestSchema, invoke: (api, r, signal) => api.host.writeFile(r, signal) },
+  'host.deletePath': { schema: hostDeletePathRequestSchema, invoke: (api, r, signal) => api.host.deletePath(r, signal) },
+  'host.renamePath': { schema: hostRenamePathRequestSchema, invoke: (api, r, signal) => api.host.renamePath(r, signal) },
+  'host.createWorkspaceDirectory': { schema: hostCreateWorkspaceDirectoryRequestSchema, invoke: (api, r, signal) => api.host.createWorkspaceDirectory(r, signal) },
   'host.openPath': { schema: hostOpenPathRequestSchema, invoke: (api, r, signal) => api.host.openPath(r, signal) },
   'workspace.list': { schema: workspaceListRequestSchema, invoke: (api, r) => api.workspace.list(r) },
   'workspace.create': { schema: workspaceCreateRequestSchema, invoke: (api, r) => api.workspace.create(r) },

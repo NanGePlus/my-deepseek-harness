@@ -2603,6 +2603,11 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       gitStatus: request => ok(request, { entries: [] }),
       readFile: request => ok(request, { kind: 'text', path: request.payload.path, text: '' }),
       writeFile: request => ok(request, { path: request.payload.path }),
+      deletePath: request => ok(request, { path: request.payload.path }),
+      renamePath: request => ok(request, { path: request.payload.path }),
+      createWorkspaceDirectory: request => ok(request, {
+        path: `${request.payload.path}/${request.payload.name}`,
+      }),
       openPath: request => ok(request, { opened: true as const }),
     },
     workspace: {
@@ -3143,6 +3148,9 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'host.gitStatus': return this.api.host.gitStatus(request, signal)
       case 'host.readFile': return this.api.host.readFile(request, signal)
       case 'host.writeFile': return this.api.host.writeFile(request, signal)
+      case 'host.deletePath': return this.api.host.deletePath(request, signal)
+      case 'host.renamePath': return this.api.host.renamePath(request, signal)
+      case 'host.createWorkspaceDirectory': return this.api.host.createWorkspaceDirectory(request, signal)
       case 'host.openPath': return this.api.host.openPath(request, new AbortController().signal)
       case 'workspace.list': return this.api.workspace.list(request)
       case 'workspace.create': return this.api.workspace.create(request)

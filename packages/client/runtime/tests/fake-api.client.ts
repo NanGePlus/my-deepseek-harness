@@ -155,6 +155,23 @@ export class FakeApiClient implements IApiClient {
   onWriteFile: (payload: unknown) => Promise<RpcResponse<{ path: string }>> = payload =>
     Promise.resolve(ok({ path: (payload as { path: string }).path }))
 
+  onDeletePath: (payload: unknown) => Promise<RpcResponse<{ path: string }>> = payload =>
+    Promise.resolve(ok({ path: (payload as { path: string }).path }))
+
+  onRenamePath: (payload: unknown) => Promise<RpcResponse<{ path: string }>> = (payload) => {
+    const request = payload as { path: string; newName: string }
+    const slash = request.path.lastIndexOf('/')
+    const parent = slash >= 0 ? request.path.slice(0, slash) : ''
+    const renamed = parent === '' ? request.newName : `${parent}/${request.newName}`
+    return Promise.resolve(ok({ path: renamed }))
+  }
+
+  onCreateWorkspaceDirectory: (payload: unknown) => Promise<RpcResponse<{ path: string }>> = (payload) => {
+    const request = payload as { path: string; name: string }
+    const created = request.path.endsWith('/') ? `${request.path}${request.name}` : `${request.path}/${request.name}`
+    return Promise.resolve(ok({ path: created }))
+  }
+
   private readonly muxConns: StreamConn<MuxFrame>[] = []
   private readonly hostConns: StreamConn<HostFrame>[] = []
   lastSearchSignal: AbortSignal | undefined
@@ -212,6 +229,13 @@ export class FakeApiClient implements IApiClient {
     gitStatus: (payload: unknown) => this.record('host.gitStatus', payload, this.onGitStatus(payload)),
     readFile: (payload: unknown) => this.record('host.readFile', payload, this.onReadFile(payload)),
     writeFile: (payload: unknown) => this.record('host.writeFile', payload, this.onWriteFile(payload)),
+    deletePath: (payload: unknown) => this.record('host.deletePath', payload, this.onDeletePath(payload)),
+    renamePath: (payload: unknown) => this.record('host.renamePath', payload, this.onRenamePath(payload)),
+    createWorkspaceDirectory: (payload: unknown) => this.record(
+      'host.createWorkspaceDirectory',
+      payload,
+      this.onCreateWorkspaceDirectory(payload),
+    ),
     openPath: (payload: unknown) => this.record('host.openPath', payload, this.onOpenPath(payload)),
   }
 

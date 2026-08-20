@@ -29,7 +29,8 @@ Implementation lives in `read-write-file.ts`; wire types and zod schemas extend 
 ## Consequences
 
 - `ui-file-editor` open/save calls these RPCs through `WorkspaceRuntime` ([open / tabs / save](2026-08-20-editor-surface-open-tabs-save.md)).
-- `deletePath`, `renamePath`, and `watchPath` remain separate issues.
+- Delete, rename, and workspace-scoped folder creation are documented in [host delete/rename/path mutations](2026-08-21-host-delete-rename-path.md).
+- `watchPath` remains a separate issue.
 - No file-size cap in V1; giant reads follow Node's memory behavior.
 
 ## Testing

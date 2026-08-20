@@ -4,7 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {
   DirectoryListing, GitStatusListing, IApiClient, RpcError,
   SessionId, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
-  FileReadKind, FileReadResult, FileWriteResult,
+  FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '../contract/store.ts'
 import { createSnapshotStore } from '../contract/store.ts'
@@ -291,6 +291,61 @@ export class WorkspaceRuntime implements IWorkspaces {
     signal?: AbortSignal,
   ): Promise<FileWriteResult> {
     const response = await this.api.host.writeFile({ workspaceId, path, text }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Delete one file or directory tree inside a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file or directory path.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the deleted absolute path.
+   */
+  async deletePath(
+    workspaceId: WorkspaceId,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<PathMutationResult> {
+    const response = await this.api.host.deletePath({ workspaceId, path }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Rename one file or directory within the same parent directory inside a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute source path.
+   * @param newName - single-segment new base name.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the renamed absolute path.
+   */
+  async renamePath(
+    workspaceId: WorkspaceId,
+    path: string,
+    newName: string,
+    signal?: AbortSignal,
+  ): Promise<PathMutationResult> {
+    const response = await this.api.host.renamePath({ workspaceId, path, newName }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Create one child directory under an existing parent inside a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute existing parent directory.
+   * @param name - single non-blank path segment.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the created directory's absolute path.
+   */
+  async createWorkspaceDirectory(
+    workspaceId: WorkspaceId,
+    path: string,
+    name: string,
+    signal?: AbortSignal,
+  ): Promise<PathMutationResult> {
+    const response = await this.api.host.createWorkspaceDirectory({ workspaceId, path, name }, signal)
     if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
     return response.result.value
   }

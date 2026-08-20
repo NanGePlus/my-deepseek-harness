@@ -84,6 +84,12 @@ export interface FileWriteResult {
   path: string
 }
 
+/** host.deletePath / host.renamePath / host.createWorkspaceDirectory response value. */
+export interface PathMutationResult {
+  /** Absolute host path affected by the mutation. */
+  path: string
+}
+
 /** host.listDirectory response value: one directory level plus its ancestry. */
 export interface DirectoryListing {
   /** Absolute path of the listed directory. */
@@ -194,6 +200,35 @@ export interface HostApi {
     request: RpcRequest<{ workspaceId: WorkspaceId; path: string; text: string }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<FileWriteResult>>
+
+  /**
+   * Delete one file or directory tree inside a registered Workspace; the path
+   * must lie within that Workspace's root (`workspace-path-out-of-bounds`
+   * otherwise).
+   */
+  deletePath(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<PathMutationResult>>
+
+  /**
+   * Rename one file or directory within the same parent directory inside a
+   * registered Workspace; an existing target fails with `directory-exists`.
+   */
+  renamePath(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string; newName: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<PathMutationResult>>
+
+  /**
+   * Create one child directory under an existing parent inside a registered
+   * Workspace; an existing child fails with `directory-exists` (same semantics
+   * as the browse directory picker). Does not replace `host.createDirectory`.
+   */
+  createWorkspaceDirectory(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string; name: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<PathMutationResult>>
 
   /**
    * Open a filesystem path with the operating system's default application
