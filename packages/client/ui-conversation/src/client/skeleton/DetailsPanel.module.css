@@ -80,6 +80,11 @@
   overflow-y: auto;
 }
 
+.bodyFlush {
+  padding: 0;
+  overflow: hidden;
+}
+
 .toolTitle {
   margin-bottom: 12px;
   overflow: hidden;

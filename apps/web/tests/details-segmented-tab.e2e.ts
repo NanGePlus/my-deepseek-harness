@@ -1,4 +1,7 @@
-// Keyless browser regression for the details segmented tab chrome and editor-surface empty state.
+// Keyless browser regression for the details segmented tab chrome and editor-surface
+// (file tree + unopened-file empty state). The workspace fixture is not a Git
+// repository: an empty `.git` directory would make `git status` mis-detect one.
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
@@ -31,6 +34,17 @@ async function openDetailsViaEditorTab(page: Page): Promise<void> {
   await expect.poll(() => detailsTrack(page), { timeout: 10_000 }).toBeGreaterThan(0)
 }
 
+/** Seed a stable, non-Git workspace tree for the editor-surface snapshot. */
+function seedEditorWorkspace(root: string): void {
+  const ws = join(root, 'workspace')
+  mkdirSync(join(ws, 'src'), { recursive: true })
+  mkdirSync(join(ws, 'node_modules'), { recursive: true })
+  writeFileSync(join(ws, 'README.md'), '# fixture\n')
+  writeFileSync(join(ws, '.gitignore'), 'node_modules\n')
+  writeFileSync(join(ws, 'src', 'index.ts'), 'export {}\n')
+  writeFileSync(join(ws, 'node_modules', 'pkg.js'), 'module.exports = {}\n')
+}
+
 describe.skipIf(MODE === 'record')('web e2e: details segmented tab chrome', () => {
   let scaffold: WebScaffold
   let browser: Browser
@@ -47,6 +61,7 @@ describe.skipIf(MODE === 'record')('web e2e: details segmented tab chrome', () =
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
     await page.locator('[style*="grid-template-columns"]').first().waitFor({ timeout: 30_000 })
+    seedEditorWorkspace(scaffold.workspaceCwd)
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, 120_000)
 
@@ -55,7 +70,7 @@ describe.skipIf(MODE === 'record')('web e2e: details segmented tab chrome', () =
     await scaffold?.close()
   })
 
-  it('shows segmented tab labels and the editor-surface empty state', async () => {
+  it('shows segmented tab labels, the file tree, and the unopened-file empty state', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-details-segmented-tab'))
     const settled = scaffold.whenTurnSettled()
     const input = page.locator('textarea').first()
@@ -71,6 +86,10 @@ describe.skipIf(MODE === 'record')('web e2e: details segmented tab chrome', () =
 
     await page.getByRole('tab', { name: 'File editor' }).click()
     await page.getByText('No file open', { exact: true }).waitFor({ timeout: 5_000 })
+    await page.getByRole('treeitem', { name: /README\.md/ }).waitFor({ timeout: 10_000 })
+    await expect.poll(
+      () => page.getByRole('progressbar', { name: 'Loading Git status' }).count(),
+    ).toBe(0)
 
     const editorSnapshot = await captureStableAria(page, '[data-surface="editor-surface"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(EDITOR_EXPECTED, editorSnapshot, MODE)

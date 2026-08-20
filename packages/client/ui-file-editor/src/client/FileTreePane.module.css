@@ -1,0 +1,248 @@
+.pane {
+  display: flex;
+  flex-direction: column;
+  width: 36%;
+  min-width: 180px;
+  min-height: 0;
+  background: var(--dsw-alias-bg-overlay);
+}
+
+.gitBar {
+  flex: none;
+  height: 2px;
+  background: var(--dsw-alias-state-business-primary);
+  transform-origin: left center;
+  animation: gitBar 1.2s ease-in-out infinite;
+}
+
+.gitBarSlot {
+  flex: none;
+  height: 2px;
+}
+
+@keyframes gitBar {
+  0% { transform: scaleX(0.15); }
+  50% { transform: scaleX(1); }
+  100% { transform: scaleX(0.15); }
+}
+
+.filterRow {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: 4px 8px 0;
+}
+
+.filterInput {
+  display: flex;
+  width: 100%;
+  height: 28px;
+  padding-right: 28px;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-base);
+}
+
+.filterInput :global(input) {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.filterInput :global(input::placeholder) {
+  color: var(--dsw-alias-label-caption);
+}
+
+.filterIconClear {
+  position: absolute;
+  right: 12px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.filterIconClear:hover {
+  background: var(--editor-hover-tint);
+}
+
+.toolbar {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  padding: 4px 8px;
+}
+
+.toolButton {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: not-allowed;
+}
+
+.treeScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.tree {
+  position: relative;
+  width: 100%;
+}
+
+.row {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  height: 22px;
+  align-items: center;
+  gap: 4px;
+  padding-right: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--editor-hover-tint);
+}
+
+.rowSelected {
+  background: var(--editor-selected-tint);
+}
+
+.disclosure,
+.disclosureSpacer {
+  display: grid;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.chevron {
+  display: block;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--dsw-font-family);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-family: var(--dsw-font-family);
+  font-size: 10px;
+  line-height: 12px;
+  letter-spacing: 0.02em;
+}
+
+.badgeModified {
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.badgeUntracked {
+  color: var(--dsw-alias-label-caption);
+}
+
+.badgeDeleted {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.spinner {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--dsw-alias-label-caption);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 120px;
+  padding: 16px;
+  text-align: center;
+}
+
+.emptyTitle {
+  font-family: var(--dsw-font-family);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.emptyCta {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--dsw-alias-button-primary-fill);
+  font-family: var(--dsw-font-family);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary-foreground);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.textClear {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-family: var(--dsw-font-family);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.textClear:hover {
+  color: var(--dsw-alias-label-primary);
+}

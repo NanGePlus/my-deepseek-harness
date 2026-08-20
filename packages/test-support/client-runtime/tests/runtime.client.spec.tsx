@@ -400,6 +400,16 @@ describe('workspaces', () => {
     // The stub receives the signal too, like the production face gives the wire.
     expect(listStub).toHaveBeenLastCalledWith('/x', scan.signal)
     await expect(runtime.workspaces.createDirectory('/x', 'made')).resolves.toBe('/x/made')
+    const treeStub = vi.fn(() => Promise.resolve({
+      path: '/w', entries: [{ name: 'a.ts', path: '/w/a.ts', isDirectory: false, hidden: false }], truncated: false,
+    }))
+    runtime.workspaces.stub('listWorkspaceEntries', treeStub)
+    runtime.workspaces.stub('gitStatus', vi.fn(() => Promise.resolve({ entries: [{ path: '/w/a.ts', letter: 'M' }] })))
+    await expect(runtime.workspaces.listWorkspaceEntries('w1' as WorkspaceId, '/w', scan.signal))
+      .resolves.toMatchObject({ path: '/w' })
+    expect(treeStub).toHaveBeenLastCalledWith('w1', '/w', scan.signal)
+    await expect(runtime.workspaces.gitStatus('w1' as WorkspaceId, scan.signal))
+      .resolves.toEqual({ entries: [{ path: '/w/a.ts', letter: 'M' }] })
     await runtime.dispose()
   })
 })
@@ -585,8 +595,16 @@ describe('workspaces action face', () => {
     // state's archive set (features render against the same snapshot).
     await ws.archiveSession('s1' as SessionId)
     expect(ws.list.getSnapshot().archivedSessionIds).toEqual(['s1'])
+    await expect(ws.listWorkspaceEntries('w1' as WorkspaceId, '/w/alpha')).resolves.toEqual({
+      path: '/w/alpha', entries: [], truncated: false,
+    })
+    await expect(ws.gitStatus('w1' as WorkspaceId)).resolves.toEqual({ entries: [] })
     expect(ws.calls.map(c => c.method)).toEqual(
-      ['create', 'create', 'pickDirectory', 'rename', 'delete', 'openPath', 'insertBefore', 'insertSessionBefore', 'archiveSession'])
+      [
+        'create', 'create', 'pickDirectory', 'rename', 'delete', 'openPath',
+        'insertBefore', 'insertSessionBefore', 'archiveSession',
+        'listWorkspaceEntries', 'gitStatus',
+      ])
 
     ws.stub('create', () => Promise.resolve({ workspaceId: 'ws-x', title: 'X', path: '/x', sessionIds: [] } as never))
     ws.stub('pickDirectory', () => Promise.resolve('/picked'))

@@ -349,6 +349,40 @@ describe('WorkspaceRuntime', () => {
     await expect(workspaces.createDirectory('/home/u', 'fresh')).rejects.toMatchObject({ rpcError: { code: 'directory-exists' } })
   })
 
+  it('passes workspace file listings and git badges through the host wire', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const workspaces = new WorkspaceRuntime(ctx, api, new SessionRuntime(ctx, api, fakeRemote()))
+    const listing = {
+      path: '/w/alpha',
+      entries: [{ name: 'src', path: '/w/alpha/src', isDirectory: true, hidden: false }],
+      truncated: false,
+    }
+    api.onListWorkspaceEntries = () => Promise.resolve(ok(listing))
+    await expect(workspaces.listWorkspaceEntries(wid('alpha'), '/w/alpha')).resolves.toEqual(listing)
+    expect(api.callsOf('host.listWorkspaceEntries')).toEqual([{ workspaceId: 'alpha', path: '/w/alpha' }])
+    api.onListWorkspaceEntries = () => Promise.resolve(err({
+      code: 'workspace-path-out-of-bounds',
+      message: 'outside',
+      details: { workspaceId: 'alpha', path: '/tmp' },
+    }))
+    const listFailure = workspaces.listWorkspaceEntries(wid('alpha'), '/tmp')
+    await expect(listFailure).rejects.toBeInstanceOf(DirectoryBrowseError)
+    await expect(listFailure).rejects.toMatchObject({ rpcError: { code: 'workspace-path-out-of-bounds' } })
+
+    api.onGitStatus = () => Promise.resolve(ok({ entries: [{ path: '/w/alpha/a.ts', letter: 'M' }] }))
+    await expect(workspaces.gitStatus(wid('alpha'))).resolves.toEqual({
+      entries: [{ path: '/w/alpha/a.ts', letter: 'M' }],
+    })
+    expect(api.callsOf('host.gitStatus')).toEqual([{ workspaceId: 'alpha' }])
+    api.onGitStatus = () => Promise.resolve(err({
+      code: 'workspace-not-found', message: 'gone', details: { workspaceId: 'missing' },
+    }))
+    const gitFailure = workspaces.gitStatus(wid('missing'))
+    await expect(gitFailure).rejects.toBeInstanceOf(DirectoryBrowseError)
+    await expect(gitFailure).rejects.toMatchObject({ rpcError: { code: 'workspace-not-found' } })
+  })
+
   it('opens a filesystem path through the host without local state', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()

@@ -1,23 +1,34 @@
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
+import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import { apply as applyNode } from '../src/index.ts'
 import { apply, inject } from '../src/client/index.ts'
-import { EditorSurface } from '../src/client/EditorSurface.tsx'
+import { EditorSurface, type FileEditorInjected } from '../src/client/EditorSurface.tsx'
 
 async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   const slots = ctx.get('slots') as SlotRegistry
   ctx.provide('locale', new LocaleRuntime(ctx))
+  const workspaces = {
+    listWorkspaceEntries: vi.fn(() => Promise.resolve({ path: '/w', entries: [], truncated: false })),
+    gitStatus: vi.fn(() => Promise.resolve({ entries: [{ path: '/w/a.ts', letter: 'M' }] })),
+  }
+  ctx.provide('workspaces', workspaces)
   slots.register({
     name: 'root',
     children: { details: { kind: 'single', scope: 'session' } },
   } as never, () => null)
-  return { ctx, slots }
+  return { ctx, slots, workspaces }
 }
 
 describe('ui-file-editor apply', () => {
+  it('host half has no behavior', () => {
+    expect(applyNode()).toBeUndefined()
+  })
+
   it('registers the editor surface into the declared details child slot', async () => {
     const b = await bench()
     b.slots.register({
@@ -25,6 +36,16 @@ describe('ui-file-editor apply', () => {
       children: { 'conversation.details.editor': { kind: 'single', scope: 'session' } },
     } as never, () => null)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    expect(b.slots.entries('conversation.details.editor')[0]?.component).toBe(EditorSurface)
+    const entry = b.slots.entries('conversation.details.editor')[0]
+    expect(entry?.component).toBe(EditorSurface)
+    const face = entry?.inject?.() as unknown as FileEditorInjected
+    await expect(face.listWorkspaceEntries('ws' as WorkspaceId, '/w')).resolves.toEqual({
+      path: '/w', entries: [], truncated: false,
+    })
+    await expect(face.gitStatus('ws' as WorkspaceId)).resolves.toEqual({
+      entries: [{ path: '/w/a.ts', letter: 'M' }],
+    })
+    expect(b.workspaces.listWorkspaceEntries).toHaveBeenCalledWith('ws', '/w', undefined)
+    expect(b.workspaces.gitStatus).toHaveBeenCalledWith('ws', undefined)
   })
 })

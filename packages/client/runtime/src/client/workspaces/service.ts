@@ -2,8 +2,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  DirectoryListing, IApiClient, RpcError,
-  SessionId, WorkspaceId, WorkspaceView,
+  DirectoryListing, GitStatusListing, IApiClient, RpcError,
+  SessionId, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '../contract/store.ts'
 import { createSnapshotStore } from '../contract/store.ts'
@@ -222,6 +222,36 @@ export class WorkspaceRuntime implements IWorkspaces {
    */
   async listDirectory(path?: string, signal?: AbortSignal): Promise<DirectoryListing> {
     const response = await this.api.host.listDirectory(path === undefined ? {} : { path }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * List one directory level of files and folders inside a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute directory inside that Workspace.
+   * @param signal - aborts the wire request (and the Host's scan) when the caller supersedes it.
+   * @returns the level's listing; `truncated` means the client must not treat it as exhaustive.
+   */
+  async listWorkspaceEntries(
+    workspaceId: WorkspaceId,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceEntriesListing> {
+    const response = await this.api.host.listWorkspaceEntries({ workspaceId, path }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Read Git working-tree badge letters for a registered Workspace.
+   * Non-repositories and hosts without git return an empty list without throwing.
+   * @param workspaceId - Workspace whose root is the `git status` directory.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns badge rows; empty when Git is absent or the root is not a repository.
+   */
+  async gitStatus(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitStatusListing> {
+    const response = await this.api.host.gitStatus({ workspaceId }, signal)
     if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
     return response.result.value
   }
