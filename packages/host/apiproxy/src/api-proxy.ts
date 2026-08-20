@@ -115,6 +115,8 @@ import {
   WorkspacePathOutOfBoundsError,
 } from './list-workspace-entries.ts'
 import { readGitStatus } from './git-status.ts'
+import { watchWorkspacePath } from './watch-path.ts'
+import type { WatchPathFrame } from './api/host.ts'
 import {
   readWorkspaceFile,
   writeWorkspaceFile,
@@ -3297,6 +3299,43 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async openPath(request, signal) {
         return openPath(request, request.payload.path, signal)
+      },
+
+      watchPath(request, signal) {
+        const { workspaceId, path } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return (async function* () {
+            yield frame<WatchPathFrame>({
+              type: 'stream/error',
+              error: {
+                code: 'workspace-not-found',
+                message: `workspace not found: ${workspaceId}`,
+                details: { workspaceId },
+              },
+            })
+          })()
+        }
+        return (async function* () {
+          try {
+            for await (const payload of watchWorkspacePath(workspace.path, path, signal)) {
+              yield frame(payload)
+            }
+          } catch (error: unknown) {
+            if (error instanceof WorkspacePathOutOfBoundsError) {
+              yield frame<WatchPathFrame>({
+                type: 'stream/error',
+                error: {
+                  code: 'workspace-path-out-of-bounds',
+                  message: error.message,
+                  details: { workspaceId, path: error.path },
+                },
+              })
+              return
+            }
+            throw error
+          }
+        })()
       },
     },
 

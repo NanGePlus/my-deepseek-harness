@@ -85,6 +85,7 @@ function scriptedApi(overrides: {
       createWorkspaceDirectory: r => ok(r, { path: `${r.payload.path}/${r.payload.name}` }),
       createDirectory: r => ok(r, { path: '/t/new' }),
       openPath: r => ok(r, { opened: true as const }),
+      watchPath: () => (async function* () {})(),
       ...overrides.host,
     },
     workspace: {

@@ -6,7 +6,7 @@
  */
 
 import type { z } from 'zod'
-import type { ApiProxy, HostFrame, MuxFrame } from '../api/index.ts'
+import type { ApiProxy, HostFrame, MuxFrame, WatchPathFrame } from '../api/index.ts'
 import type { RequestPayload, ResponseValue, RpcMethodMap } from '../api/rpc-map.ts'
 import type { ClientRequest, ClientResponse, RpcMessage, RpcReceipt, RpcRequest, RpcResponse, ServerRequest } from '../api/rpc.ts'
 import { RpcId } from '../api/rpc.ts'
@@ -23,6 +23,7 @@ import {
   hostDeletePathValueSchema,
   hostRenamePathValueSchema,
   hostCreateWorkspaceDirectoryValueSchema,
+  watchPathFrameSchema,
 } from '../api/host.schema.ts'
 import {
   sessionCancelValueSchema,
@@ -125,6 +126,11 @@ export interface IApiClient {
     renamePath(payload: RequestPayload<'host.renamePath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.renamePath'>>>
     createWorkspaceDirectory(payload: RequestPayload<'host.createWorkspaceDirectory'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.createWorkspaceDirectory'>>>
     openPath(payload: RequestPayload<'host.openPath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.openPath'>>>
+    watchPath(
+      payload: { workspaceId: RequestPayload<'host.readFile'>['workspaceId']; path: string },
+      signal: AbortSignal,
+      onOpen?: () => void,
+    ): AsyncIterable<RpcRequest<WatchPathFrame>>
   }
   workspace: {
     list(payload: RequestPayload<'workspace.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.list'>>>
@@ -380,6 +386,16 @@ export abstract class AbstractApiClient implements IApiClient {
     return this.readSse('/api/events.host', signal, hostFrameSchema, onOpen)
   }
 
+  /** host.watchPath stream opener; virtual. */
+  protected openWatchPath(
+    payload: { workspaceId: RequestPayload<'host.readFile'>['workspaceId']; path: string },
+    signal: AbortSignal,
+    onOpen?: () => void,
+  ): AsyncIterable<RpcRequest<WatchPathFrame>> {
+    const query = new URLSearchParams({ workspaceId: payload.workspaceId, path: payload.path })
+    return this.readSse(`/api/host.watchPath?${query}`, signal, watchPathFrameSchema, onOpen)
+  }
+
   /**
    * SSE protocol path: streaming fetch (not EventSource), '\n\n' framing, ServerRequest envelope +
    * frame-schema parse, tap, narrow yield. onOpen fires once the response headers are in and the
@@ -387,7 +403,7 @@ export abstract class AbstractApiClient implements IApiClient {
    * either parse level is reported and skipped (one corrupt frame must not kill the stream; the
    * client's gap detection covers whatever the frame carried).
    */
-  protected async *readSse<F extends MuxFrame | HostFrame>(
+  protected async *readSse<F extends MuxFrame | HostFrame | WatchPathFrame>(
     path: string,
     signal: AbortSignal,
     frameSchema: z.ZodType<F>,
@@ -469,6 +485,7 @@ export abstract class AbstractApiClient implements IApiClient {
     renamePath: (payload, signal) => this.callUnary('host.renamePath', payload, signal),
     createWorkspaceDirectory: (payload, signal) => this.callUnary('host.createWorkspaceDirectory', payload, signal),
     openPath: (payload, signal) => this.callUnary('host.openPath', payload, signal),
+    watchPath: (payload, signal, onOpen) => this.openWatchPath(payload, signal, onOpen),
   }
 
   readonly workspace: IApiClient['workspace'] = {

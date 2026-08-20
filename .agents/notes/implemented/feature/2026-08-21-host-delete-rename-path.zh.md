@@ -29,7 +29,7 @@ Web 文件编辑器需要在 Session 绑定 Workspace 内经 Host 删除、同�
 ## 后果
 
 - 下游 `ui-file-editor` 文件操作工具栏可经 `WorkspaceRuntime` 调用这些 RPC。
-- `watchPath` 仍为独立 Issue。
+- 外部变更检测见 [host watchPath](2026-08-21-host-watch-path.md)。
 - 递归删除遵循 Node `fs.rm` 对目录树的语义。
 
 ## 测试
