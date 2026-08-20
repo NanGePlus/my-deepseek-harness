@@ -147,3 +147,21 @@ Docs accompany every code change: update affected README and JSDoc contracts tog
 ## Vendoring policy
 
 `vendor/` packages are pinned source copies (manifest with upstream SHAs in [vendor/README.md](vendor/README.md)). Update via the sync procedure there; re-apply or retire the logged local modifications; rerun `pnpm run test && pnpm run build`.
+
+## Agent skills
+
+### Issue 跟踪器
+
+GitHub Issues（`gh` CLI）。见 `docs/agents/issue-tracker.md`。
+
+### Triage 标签
+
+默认五角色标签（`needs-triage` 等）。见 `docs/agents/triage-labels.md`。
+
+### Domain 领域文档
+
+根目录 `CONTEXT.md` + `docs/adr/`。见 `docs/agents/domain.md`。
+
+### Repo Wiki（人类阅读）
+
+`docs/repo-wiki/` 供人查阅；workflow skills 不读。见 `docs/agents/wiki.md`。
