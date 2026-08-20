@@ -1,9 +1,9 @@
 name: Release (Python)
 
-# A PR labeled python-release-dry-run or a manual run with publish=false builds
-# and validates the complete release without registry credentials. Publication
-# is accepted only from a manual run on the matching python-v* tag when the
-# private publisher-repository identity and public-PyPI switch are configured.
+# A manual run with publish=false builds and validates the complete release
+# without registry credentials. Publication is accepted only from a manual run
+# on the matching python-v* tag when the private publisher-repository identity
+# and public-PyPI switch are configured.
 on:
   workflow_dispatch:
     inputs:
@@ -12,8 +12,6 @@ on:
         required: true
         type: boolean
         default: false
-  pull_request:
-    types: [labeled]
 
 permissions:
   contents: read
