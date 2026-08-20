@@ -36,6 +36,7 @@
     "tests/trajectory-virtualization.e2e.ts",
     "tests/lifecycle-chrome.e2e.ts",
     "tests/details-session-lifecycle.e2e.ts",
+    "tests/details-segmented-tab.e2e.ts",
     "tests/plugin-config.e2e.ts",
     "tests/settings-chrome.e2e.ts",
     "tests/models-settings.e2e.ts",

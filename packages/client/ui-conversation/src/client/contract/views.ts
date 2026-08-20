@@ -6,6 +6,9 @@ export type CallId = string
 /** Selection target for the details linkage channel (toolcall is the step special case). */
 export interface SelectionTarget { turnSeq: number; stepSeq?: number; callId?: CallId; toolName?: string }
 
+/** Active segment of the details column tab bar. */
+export type DetailsTab = 'tool' | 'editor'
+
 /**
  * One conversation view tab, projected from a 'conversation.view' slot
  * entry's registration options (label falls back to the entry id).
@@ -29,4 +32,6 @@ export interface ChatStoreState {
    * persisted snapshots from before this field rehydrate without it.
    */
   inspect: { callId: CallId } | null
+  /** Details column segmented tab selection (persists until Session guards reset it). */
+  detailsTab: DetailsTab
 }

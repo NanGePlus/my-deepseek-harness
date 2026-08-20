@@ -20,7 +20,7 @@ export type { IConversation } from './service.ts'
 export type { DraftAttachmentId } from './input/contract.ts'
 
 export type {
-  CallId, ChatStoreState, SelectionTarget, ViewTab,
+  CallId, ChatStoreState, DetailsTab, SelectionTarget, ViewTab,
 } from './contract/views.ts'
 export type { ConversationKey } from './locales.ts'
 export type {
