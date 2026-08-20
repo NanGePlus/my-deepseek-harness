@@ -37,6 +37,12 @@ export function apply(ctx: ClientContext): void {
       ctx.workspaces.readFile(workspaceId, path, kind, signal),
     writeFile: (workspaceId, path, text, signal) =>
       ctx.workspaces.writeFile(workspaceId, path, text, signal),
+    deletePath: (workspaceId, path, signal) =>
+      ctx.workspaces.deletePath(workspaceId, path, signal),
+    renamePath: (workspaceId, path, newName, signal) =>
+      ctx.workspaces.renamePath(workspaceId, path, newName, signal),
+    createWorkspaceDirectory: (workspaceId, path, name, signal) =>
+      ctx.workspaces.createWorkspaceDirectory(workspaceId, path, name, signal),
   })
 
   ctx.slots.inject('conversation.details.editor', () => ctx.slots.register({

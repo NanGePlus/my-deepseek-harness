@@ -19,4 +19,21 @@ describe('file editor store', () => {
     expect(preview?.kind).toBe('preview')
     expect(tabIsDirty(preview!)).toBe(false)
   })
+
+  it('renames an open tab path and keeps focus on the new path', () => {
+    const instance = createFileEditorStore().create()
+    instance.actions.openTab({
+      kind: 'text',
+      path: '/w/README.md',
+      name: 'README.md',
+      language: 'markdown',
+      buffer: 'a',
+      saved: 'a',
+    })
+    instance.actions.renameTabPath('/w/README.md', '/w/GUIDE.md', 'GUIDE.md')
+    const tab = instance.getSnapshot().tabs[0]
+    expect(tab?.path).toBe('/w/GUIDE.md')
+    expect(tab?.name).toBe('GUIDE.md')
+    expect(instance.getSnapshot().activePath).toBe('/w/GUIDE.md')
+  })
 })

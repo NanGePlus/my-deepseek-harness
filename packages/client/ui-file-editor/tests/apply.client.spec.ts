@@ -17,6 +17,9 @@ async function bench() {
     gitStatus: vi.fn(() => Promise.resolve({ entries: [{ path: '/w/a.ts', letter: 'M' }] })),
     readFile: vi.fn(() => Promise.resolve({ kind: 'text' as const, path: '/w/a.ts', text: '' })),
     writeFile: vi.fn(() => Promise.resolve({ path: '/w/a.ts' })),
+    deletePath: vi.fn(() => Promise.resolve({ path: '/w/a.ts' })),
+    renamePath: vi.fn(() => Promise.resolve({ path: '/w/b.ts' })),
+    createWorkspaceDirectory: vi.fn(() => Promise.resolve({ path: '/w/src' })),
   }
   ctx.provide('workspaces', workspaces)
   slots.register({
@@ -55,5 +58,11 @@ describe('ui-file-editor apply', () => {
     await expect(face.writeFile('ws' as WorkspaceId, '/w/a.ts', 'x')).resolves.toEqual({ path: '/w/a.ts' })
     expect(b.workspaces.readFile).toHaveBeenCalledWith('ws', '/w/a.ts', 'text', undefined)
     expect(b.workspaces.writeFile).toHaveBeenCalledWith('ws', '/w/a.ts', 'x', undefined)
+    await expect(face.deletePath('ws' as WorkspaceId, '/w/a.ts')).resolves.toEqual({ path: '/w/a.ts' })
+    await expect(face.renamePath('ws' as WorkspaceId, '/w/a.ts', 'b.ts')).resolves.toEqual({ path: '/w/b.ts' })
+    await expect(face.createWorkspaceDirectory('ws' as WorkspaceId, '/w', 'src')).resolves.toEqual({ path: '/w/src' })
+    expect(b.workspaces.deletePath).toHaveBeenCalledWith('ws', '/w/a.ts', undefined)
+    expect(b.workspaces.renamePath).toHaveBeenCalledWith('ws', '/w/a.ts', 'b.ts', undefined)
+    expect(b.workspaces.createWorkspaceDirectory).toHaveBeenCalledWith('ws', '/w', 'src', undefined)
   })
 })

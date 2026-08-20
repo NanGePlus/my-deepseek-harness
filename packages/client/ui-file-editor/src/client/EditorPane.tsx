@@ -46,6 +46,8 @@ export interface EditorPaneProps {
   onSave: () => void
   /** Retry the failed open or save. */
   onRetry: () => void
+  /** Open the new-file dialog in the tree toolbar. */
+  onNewFile: () => void
 }
 
 /**
@@ -53,7 +55,7 @@ export interface EditorPaneProps {
  * @param props - tabs, status, theme, and callbacks.
  */
 export function EditorPane({
-  tabs, activePath, status, dark, t, onFocus, onClose, onBufferChange, onSave, onRetry,
+  tabs, activePath, status, dark, t, onFocus, onClose, onBufferChange, onSave, onRetry, onNewFile,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.path === activePath)
   const canSave = active !== undefined && tabIsDirty(active)
@@ -136,7 +138,9 @@ export function EditorPane({
             </span>
             <div className={css.emptyTitle}>{t('editor.empty.title')}</div>
             <div className={css.emptyBody}>{t('editor.empty.body')}</div>
-            <button type="button" className={css.emptyCta} disabled>{t('editor.empty.cta')}</button>
+            <button type="button" className={css.emptyCta} onClick={() => { onNewFile() }}>
+              {t('editor.empty.cta')}
+            </button>
           </div>
         )}
         {status.kind === 'idle' && active?.kind === 'text' && (
