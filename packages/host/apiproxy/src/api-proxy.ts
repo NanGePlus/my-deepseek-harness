@@ -114,6 +114,7 @@ import {
   WorkspaceDirectoryUnreadableError,
   WorkspacePathOutOfBoundsError,
 } from './list-workspace-entries.ts'
+import { readGitStatus } from './git-status.ts'
 
 /** Page size when history is called without maxMessages. */
 const DEFAULT_MAX_MESSAGES = 50
@@ -3035,6 +3036,26 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               message: error.message,
               details: { path: error.path },
             })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async gitStatus(request, signal) {
+        const { workspaceId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await readGitStatus(workspace.path, signal))
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'git status was aborted', details: {} })
           }
           return err(request, {
             code: 'internal',

@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod'
-import type { DirectoryEntry, WorkspaceEntry } from './host.ts'
+import type { DirectoryEntry, GitStatusEntry, WorkspaceEntry } from './host.ts'
 import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
 import { workspaceIdSchema } from './sessions.schema.ts'
@@ -85,6 +85,22 @@ export const hostListWorkspaceEntriesValueSchema = z.object({
   entries: z.array(workspaceEntrySchema),
   truncated: z.boolean(),
 }) satisfies z.ZodType<Wire<ResponseValue<'host.listWorkspaceEntries'>>>
+
+/** One Git badge row of host.gitStatus. */
+export const gitStatusEntrySchema = z.object({
+  path: z.string(),
+  letter: z.string().min(1),
+}) satisfies z.ZodType<Wire<GitStatusEntry>>
+
+/** host.gitStatus request payload. */
+export const hostGitStatusRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'host.gitStatus'>>>
+
+/** host.gitStatus response value. */
+export const hostGitStatusValueSchema = z.object({
+  entries: z.array(gitStatusEntrySchema),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.gitStatus'>>>
 
 /** host.openPath request payload. */
 export const hostOpenPathRequestSchema = z.object({
