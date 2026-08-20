@@ -10,6 +10,7 @@ export type {
   ApprovalResponsePayload, QuestionResponsePayload, HistoryEntry, ToolEventView,
   DirectoryEntry, DirectoryListing, GitStatusEntry, GitStatusListing,
   WorkspaceEntry, WorkspaceEntriesListing,
+  FileReadKind, FileTextRead, FileBytesRead, FileReadResult, FileWriteResult,
   ResponseValue, WorkspaceApi, WorkspaceId, WorkspaceView,
   SkillsApi, SkillEntry,
   ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,

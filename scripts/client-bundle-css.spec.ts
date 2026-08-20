@@ -49,4 +49,25 @@ describe('client bundle CSS Modules', () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  it('inlines a plain stylesheet without CSS Modules hashing', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-client-css-plain-'))
+    try {
+      const stylesheet = join(root, 'monaco-tokens.css')
+      const importer = join(root, 'index.ts')
+      await writeFile(stylesheet, '.monaco-editor { color: red; }\n')
+      const plugin = cssPlugin()
+      const virtualId = plugin.resolveId?.('./monaco-tokens.css', importer)
+      if (typeof virtualId !== 'string' || plugin.load === undefined) {
+        throw new Error('CSS plugin hooks are incomplete')
+      }
+      const watched: string[] = []
+      const output = await plugin.load.call({ addWatchFile: id => watched.push(id) }, virtualId)
+      expect(watched).toEqual([stylesheet])
+      expect(output).toContain('.monaco-editor')
+      expect(output).toContain('export default {}')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })

@@ -1,0 +1,29 @@
+.wrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.host {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  font-family: var(--ds-font-family-code);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+  resize: none;
+  outline: none;
+}

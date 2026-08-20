@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-Web 文件编辑器需要在 Session 绑定 Workspace 内经 Host 读取可编辑文本与图片预览字节，并支持显式保存。浏览器不得直接访问磁盘（[ADR-0001](../../../docs/adr/0001-file-editor-host-rpc.md)）。
+Web 文件编辑器需要在 Session 绑定 Workspace 内经 Host 读取可编辑文本与图片预览字节，并支持显式保存。浏览器不得直接访问磁盘（[ADR-0001](../../../../docs/adr/0001-file-editor-host-rpc.md)）。
 
 ## 决策
 
@@ -28,10 +28,12 @@ Web 文件编辑器需要在 Session 绑定 Workspace 内经 Host 读取可编�
 
 ## 后果
 
-- `ui-file-editor` 打开/保存（Issue #21）可在后续经 `WorkspaceRuntime` 转发调用这些 RPC。
+- `ui-file-editor` 的打开／保存经 `WorkspaceRuntime` 调用这些 RPC（[打开／Tab／保存](2026-08-20-editor-surface-open-tabs-save.md)）。
 - `deletePath`、`renamePath`、`watchPath` 仍为独立 Issue。
 - V1 不设文件大小上限；超大读跟随 Node 内存行为。
 
 ## 测试
 
 `packages/host/apiproxy/tests/api-proxy-read-write-file.spec.ts` 经 `createApiProxy` 覆盖文本读、PNG 字节读、写入落盘与越界读/写拒绝。
+
+`packages/client/runtime/tests/workspaces-service.client.spec.ts` 覆盖 Client 对 `readFile`／`writeFile` 的转发与 `DirectoryBrowseError`。

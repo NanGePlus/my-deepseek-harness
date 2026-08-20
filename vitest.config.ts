@@ -12,6 +12,12 @@ import { COVERAGE_EXEMPT_ENV, coverageExemptHeavySuites } from './scripts/covera
 // require()s custom reporters (which is also why the reporter is CJS).
 const uncoveredLocationsReporter = fileURLToPath(new URL('./scripts/coverage-uncovered-locations.cjs', import.meta.url))
 
+/** jsdom cannot load monaco-editor's AMD/CSS graph; the widget's textarea fallback is the test runtime. */
+const monacoEditorStub = fileURLToPath(
+  new URL('./packages/client/ui-file-editor/tests/monaco-editor.stub.ts', import.meta.url),
+)
+const monacoEditorAlias = { 'monaco-editor': monacoEditorStub } as const
+
 // Resolution facade shared by every plugin instance below: tsconfig.base.json
 // has no include, which vite-tsconfig-paths treats as match-all, so its paths
 // map applies to every test file. paths must win over package exports so built
@@ -116,6 +122,7 @@ const processBoundTests = [
 
 export default defineConfig({
   plugins: [pathsPlugin(), standardDecoratorPlugin()],
+  resolve: { alias: monacoEditorAlias },
   test: {
     setupFiles: ['./scripts/test-invariants.ts'],
     // .tsx: client component specs (jsdom via per-file @vitest-environment pragma).
@@ -126,6 +133,7 @@ export default defineConfig({
     projects: [
       {
         plugins: [pathsPlugin(), standardDecoratorPlugin()],
+        resolve: { alias: monacoEditorAlias },
         test: {
           name: 'thread-safe',
           execArgv: vitestExecArgv,

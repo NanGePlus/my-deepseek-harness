@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-20-host-read-write-file.md
-2026-08-20-host-read-write-file.md: 7ccdce8b612babbd37c8598e3ed6887e1a72bcc9
-2026-08-20-host-read-write-file.zh.md: dc738413a20978b1d428803adffd4f102289a4a8
+2026-08-20-host-read-write-file.md: ba2105c95a71b27619283fb5a5e6006c463b6601
+2026-08-20-host-read-write-file.zh.md: 71ac684b1d2868b4ecc886975aa5e76469a8f5c6

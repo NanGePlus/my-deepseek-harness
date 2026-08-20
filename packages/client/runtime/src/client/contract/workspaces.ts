@@ -8,6 +8,7 @@
  */
 import type {
   DirectoryListing, GitStatusListing, SessionId, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
+  FileReadKind, FileReadResult, FileWriteResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceListState } from '../workspaces/service.ts'
 import type { ObservableSnapshot } from './store.ts'
@@ -63,6 +64,34 @@ export interface IWorkspaces {
    * @returns badge rows; empty when Git is absent or the root is not a repository.
    */
   gitStatus(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitStatusListing>
+  /**
+   * Read one file inside a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param kind - `text` for editable sources; `bytes` for image preview.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the text or byte payload.
+   */
+  readFile(
+    workspaceId: WorkspaceId,
+    path: string,
+    kind: FileReadKind,
+    signal?: AbortSignal,
+  ): Promise<FileReadResult>
+  /**
+   * Write UTF-8 text to one path inside a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param text - UTF-8 body to write (creates the file when absent).
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the written absolute path.
+   */
+  writeFile(
+    workspaceId: WorkspaceId,
+    path: string,
+    text: string,
+    signal?: AbortSignal,
+  ): Promise<FileWriteResult>
   /**
    * Create one child directory through the Host's `browse` capability.
    * @param path - absolute existing parent directory.

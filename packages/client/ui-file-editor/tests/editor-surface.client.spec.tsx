@@ -1,14 +1,19 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useSyncExternalStore } from 'react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import type { SessionId, WorkspaceId, WorkspaceListState, WorkspaceView } from '@deepseek-ai/dsh-client-runtime/client'
+import type {
+  FileReadKind, FileReadResult, FileWriteResult, SessionId, WorkspaceId, WorkspaceListState, WorkspaceView,
+} from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceEntry, WorkspaceEntriesListing } from '@deepseek-ai/dsh-client-runtime/client'
 import { EditorSurface, type EditorSurfaceProps } from '../src/client/EditorSurface.tsx'
+import { createFileEditorStore } from '../src/client/stores.ts'
 import { zh } from '../src/client/locales.ts'
 
 afterEach(cleanup)
+afterEach(() => { document.body.removeAttribute('data-ds-dark-theme') })
 
 class ResizeObserverStub {
   observe(): void {}
@@ -46,12 +51,29 @@ function entry(
 const DEFAULT_ROOT: WorkspaceEntry[] = [
   entry('.git', true),
   entry('.gitignore', false),
+  entry('app.wasm', false),
+  entry('logo.png', false),
   entry('node_modules', true),
   entry('README.md', false),
   entry('gone.ts', false),
   entry('src', true),
   entry('untracked.ts', false),
 ]
+
+const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+
+function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapshot: () => T }) {
+  return function useSelector<S>(sel: (s: T) => S): S {
+    return sel(useSyncExternalStore(inst.subscribe, inst.getSnapshot))
+  }
+}
+
+function defaultReadFile(_id: WorkspaceId, path: string, kind: FileReadKind): Promise<FileReadResult> {
+  if (kind === 'bytes') {
+    return Promise.resolve({ kind: 'bytes', path, data: PNG_BASE64, mediaType: 'image/png' })
+  }
+  return Promise.resolve({ kind: 'text', path, text: `contents of ${path}\n` })
+}
 
 const SRC_CHILDREN: WorkspaceEntry[] = [
   { name: 'app.ts', path: `${ROOT}/src/app.ts`, isDirectory: false, hidden: false },
@@ -83,6 +105,8 @@ function mount(over: {
   sessionId?: SessionId
   list?: EditorSurfaceProps['listWorkspaceEntries']
   git?: EditorSurfaceProps['gitStatus']
+  read?: EditorSurfaceProps['readFile']
+  write?: EditorSurfaceProps['writeFile']
 } = {}) {
   const listWorkspaceEntries = vi.fn(over.list ?? (async (_id: WorkspaceId, path: string) => listingFor(path)))
   const gitStatus = vi.fn(over.git ?? (async () => ({
@@ -92,17 +116,24 @@ function mount(over: {
       { path: `${ROOT}/gone.ts`, letter: 'D' },
     ],
   })))
+  const readFile = vi.fn(over.read ?? defaultReadFile)
+  const writeFile = vi.fn(over.write ?? (async (_id: WorkspaceId, path: string, _text: string): Promise<FileWriteResult> => ({ path })))
   const items = over.items ?? [workspace()]
   const state = workspacesState(items)
+  const instance = createFileEditorStore().create()
   const props = {
     t: makeTranslate(zh),
     sessionId: over.sessionId ?? SID,
     useWorkspaces: ((select: (s: WorkspaceListState) => unknown) => select(state)) as EditorSurfaceProps['useWorkspaces'],
+    useStore: hookOf(instance),
+    actions: instance.actions,
     listWorkspaceEntries,
     gitStatus,
+    readFile,
+    writeFile,
   } as EditorSurfaceProps
   const view = render(<EditorSurface {...props} />)
-  return { view, props, listWorkspaceEntries, gitStatus, state }
+  return { view, props, listWorkspaceEntries, gitStatus, readFile, writeFile, state }
 }
 
 describe('EditorSurface file tree', () => {
@@ -360,5 +391,285 @@ describe('EditorSurface file tree', () => {
       failList(new Error('list'))
       failGit(new Error('git'))
     })
+  })
+})
+
+describe('EditorSurface open / save', () => {
+  async function clickFile(name: string): Promise<void> {
+    const tree = await waitFor(() => screen.getByRole('tree', { name: 'alpha' }))
+    fireEvent.click(within(tree).getByText(name).closest('[role="treeitem"]')!)
+  }
+
+  it('default-editable: opening text shows a tab, language highlighting, and a disabled save', async () => {
+    const b = mount()
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
+    expect(screen.queryByText('未打开文件')).toBeNull()
+    expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy()
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md.*Markdown/ }).value)
+      .toBe('contents of /w/alpha/README.md\n')
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    expect(b.readFile).toHaveBeenCalledWith(WID, `${ROOT}/README.md`, 'text', expect.any(AbortSignal))
+  })
+
+  it('default-preview: opening an image shows a read-only preview and a disabled save', async () => {
+    const b = mount()
+    await clickFile('logo.png')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /logo\.png/ })).toBeTruthy() })
+    const preview = screen.getByRole<HTMLImageElement>('img', { name: 'logo.png' })
+    expect(preview.src).toContain(`data:image/png;base64,${PNG_BASE64}`)
+    expect(screen.queryByRole('textbox', { name: /logo\.png/ })).toBeNull()
+    expect(screen.queryByLabelText('未保存')).toBeNull()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    expect(b.readFile).toHaveBeenCalledWith(WID, `${ROOT}/logo.png`, 'bytes', expect.any(AbortSignal))
+    expect(b.writeFile).not.toHaveBeenCalled()
+  })
+
+  it('non-openable: a known binary shows the hint and does not read the file', async () => {
+    const b = mount()
+    await clickFile('app.wasm')
+    await waitFor(() => { expect(screen.getByText('不支持打开此文件类型')).toBeTruthy() })
+    expect(screen.getByRole('tab', { name: /app\.wasm/ })).toBeTruthy()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    expect(b.readFile).not.toHaveBeenCalled()
+  })
+
+  it('empty-no-tabs: the unopened-file empty state remains until a file is opened', async () => {
+    mount()
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    expect(screen.getByText('未打开文件')).toBeTruthy()
+    expect(screen.getByText('从左侧文件树选择文件，或新建文件')).toBeTruthy()
+    expect(screen.queryByRole('tablist', { name: '编辑器标签页' })).toBeNull()
+    fireEvent.keyDown(window, { key: 's', metaKey: true })
+  })
+
+  it('dirty-unsaved: editing shows a dirty mark; Save and ⌘S write and clear it', async () => {
+    const b = mount()
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy() })
+    const box = screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md.*Markdown/ })
+    fireEvent.change(box, { target: { value: 'edited readme\n' } })
+    await waitFor(() => { expect(screen.getByLabelText('未保存')).toBeTruthy() })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => { expect(screen.queryByLabelText('未保存')).toBeNull() })
+    expect(b.writeFile).toHaveBeenCalledWith(WID, `${ROOT}/README.md`, 'edited readme\n', expect.any(AbortSignal))
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    const again = screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md.*Markdown/ })
+    fireEvent.change(again, { target: { value: 'again\n' } })
+    await waitFor(() => { expect(screen.getByLabelText('未保存')).toBeTruthy() })
+    fireEvent.keyDown(window, { key: 's', metaKey: true })
+    await waitFor(() => { expect(screen.queryByLabelText('未保存')).toBeNull() })
+    expect(b.writeFile).toHaveBeenCalledWith(WID, `${ROOT}/README.md`, 'again\n', expect.any(AbortSignal))
+  })
+
+  it('save-disabled: a clean text tab, preview tab, and non-openable tab cannot save', async () => {
+    const b = mount()
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('button', { name: '保存' })).toBeTruthy() })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 's' })
+    expect(b.writeFile).not.toHaveBeenCalled()
+    await clickFile('logo.png')
+    await waitFor(() => { expect(screen.getByRole('img', { name: 'logo.png' })).toBeTruthy() })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    await clickFile('app.wasm')
+    await waitFor(() => { expect(screen.getByText('不支持打开此文件类型')).toBeTruthy() })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    expect(b.writeFile).not.toHaveBeenCalled()
+  })
+
+  it('switches among multiple tabs without re-reading an already open file', async () => {
+    const b = mount()
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
+    await clickFile('untracked.ts')
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /untracked\.ts.*TypeScript/ })).toBeTruthy() })
+    expect(b.readFile).toHaveBeenCalledTimes(2)
+    fireEvent.click(screen.getByRole('tab', { name: /README\.md/ }))
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy() })
+    await clickFile('README.md')
+    expect(b.readFile).toHaveBeenCalledTimes(2)
+    fireEvent.click(screen.getByRole('button', { name: '关闭 README.md' }))
+    await waitFor(() => { expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull() })
+    expect(screen.getByRole('textbox', { name: /untracked\.ts.*TypeScript/ })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '关闭 untracked.ts' }))
+    await waitFor(() => { expect(screen.getByText('未打开文件')).toBeTruthy() })
+  })
+
+  it('does not open a folder row as a tab', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    fireEvent.click(screen.getByText('src').closest('[role="treeitem"]')!)
+    expect(b.readFile).not.toHaveBeenCalled()
+    expect(screen.getByText('未打开文件')).toBeTruthy()
+  })
+
+  it('closes a background tab without changing the active buffer', async () => {
+    mount()
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
+    await clickFile('untracked.ts')
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /untracked\.ts/ })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '关闭 README.md' }))
+    expect(screen.getByRole('textbox', { name: /untracked\.ts/ })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull()
+  })
+
+  it('does not save when the Session no longer has a Workspace', async () => {
+    const b = mount()
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy() })
+    fireEvent.change(screen.getByRole('textbox', { name: /README\.md/ }), { target: { value: 'x\n' } })
+    const empty = workspacesState([])
+    b.view.rerender(
+      <EditorSurface
+        {...b.props}
+        useWorkspaces={((select: (s: WorkspaceListState) => unknown) => select(empty)) as EditorSurfaceProps['useWorkspaces']}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(b.writeFile).not.toHaveBeenCalled()
+  })
+
+  it('ignores a preview open that settles after unmount', async () => {
+    let release!: (result: FileReadResult) => void
+    const b = mount({
+      read: () => new Promise<FileReadResult>((resolve) => { release = resolve }),
+    })
+    await clickFile('logo.png')
+    b.view.unmount()
+    await act(async () => {
+      release({ kind: 'bytes', path: `${ROOT}/logo.png`, data: PNG_BASE64, mediaType: 'image/png' })
+    })
+  })
+
+  it('ignores a save that settles after unmount', async () => {
+    let release!: (result: FileWriteResult) => void
+    const b = mount({
+      write: () => new Promise<FileWriteResult>((resolve) => { release = resolve }),
+    })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README.md/ })).toBeTruthy() })
+    fireEvent.change(screen.getByRole('textbox', { name: /README.md/ }), { target: { value: 'x\n' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    b.view.unmount()
+    await act(async () => { release({ path: `${ROOT}/README.md` }) })
+  })
+
+  it('ignores a save that rejects after unmount', async () => {
+    let fail!: (error: unknown) => void
+    const b = mount({
+      write: () => new Promise<FileWriteResult>((_resolve, reject) => { fail = reject }),
+    })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README.md/ })).toBeTruthy() })
+    fireEvent.change(screen.getByRole('textbox', { name: /README.md/ }), { target: { value: 'x\n' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    b.view.unmount()
+    await act(async () => { fail(new Error('gone')) })
+  })
+
+  it('loading-open-save: open and save show in-pane status without hiding the tree', async () => {
+    let releaseRead!: (result: FileReadResult) => void
+    let releaseWrite!: (result: FileWriteResult) => void
+    const b = mount({
+      read: () => new Promise<FileReadResult>((resolve) => { releaseRead = resolve }),
+      write: () => new Promise<FileWriteResult>((resolve) => { releaseWrite = resolve }),
+    })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByText('加载中…')).toBeTruthy() })
+    expect(screen.getByPlaceholderText('按文件名过滤')).toBeTruthy()
+    expect(screen.queryByText('未打开文件')).toBeNull()
+    await act(async () => {
+      releaseRead({ kind: 'text', path: `${ROOT}/README.md`, text: 'loaded\n' })
+    })
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy() })
+    fireEvent.change(screen.getByRole('textbox', { name: /README\.md.*Markdown/ }), { target: { value: 'dirty\n' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => { expect(screen.getByText('保存中…')).toBeTruthy() })
+    expect(screen.getByPlaceholderText('按文件名过滤')).toBeTruthy()
+    await act(async () => { releaseWrite({ path: `${ROOT}/README.md` }) })
+    await waitFor(() => { expect(screen.queryByText('保存中…')).toBeNull() })
+    expect(b.writeFile).toHaveBeenCalled()
+  })
+
+  it('error-open-save: failed open and save show copy plus Retry', async () => {
+    let openFail = true
+    let writeFail = true
+    const b = mount({
+      read: async (_id, path, kind) => {
+        if (openFail) throw new Error('denied')
+        return defaultReadFile(_id, path, kind)
+      },
+      write: async (_id, path, _text) => {
+        if (writeFail) throw new Error('denied')
+        return { path }
+      },
+    })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByText('无法打开此文件')).toBeTruthy() })
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
+    openFail = false
+    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy() })
+    fireEvent.change(screen.getByRole('textbox', { name: /README\.md.*Markdown/ }), { target: { value: 'x\n' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => { expect(screen.getByText('无法保存此文件')).toBeTruthy() })
+    writeFail = false
+    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    await waitFor(() => { expect(screen.queryByText('无法保存此文件')).toBeNull() })
+    expect(b.writeFile).toHaveBeenCalled()
+    expect(screen.queryByLabelText('未保存')).toBeNull()
+  })
+
+  it('theme-follow: the buffer accessible name tracks body[data-ds-dark-theme]', async () => {
+    document.body.removeAttribute('data-ds-dark-theme')
+    mount()
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /浅色/ })).toBeTruthy() })
+    await act(async () => { document.body.setAttribute('data-ds-dark-theme', '') })
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /深色/ })).toBeTruthy() })
+    await act(async () => { document.body.removeAttribute('data-ds-dark-theme') })
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /浅色/ })).toBeTruthy() })
+  })
+
+  it('ignores an open that settles after unmount', async () => {
+    let release!: (result: FileReadResult) => void
+    const b = mount({
+      read: () => new Promise<FileReadResult>((resolve) => { release = resolve }),
+    })
+    await clickFile('README.md')
+    b.view.unmount()
+    await act(async () => {
+      release({ kind: 'text', path: `${ROOT}/README.md`, text: 'late\n' })
+    })
+  })
+
+  it('ignores an open that rejects after unmount', async () => {
+    let fail!: (error: unknown) => void
+    const b = mount({
+      read: () => new Promise<FileReadResult>((_resolve, reject) => { fail = reject }),
+    })
+    await clickFile('README.md')
+    b.view.unmount()
+    await act(async () => { fail(new Error('gone')) })
+  })
+
+  it('shows open error when a text read returns bytes', async () => {
+    mount({
+      read: async (_id, path) => ({ kind: 'bytes', path, data: PNG_BASE64, mediaType: 'image/png' }),
+    })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByText('无法打开此文件')).toBeTruthy() })
+  })
+
+  it('shows open error when a preview read returns text', async () => {
+    mount({
+      read: async (_id, path) => ({ kind: 'text', path, text: 'not an image' }),
+    })
+    await clickFile('logo.png')
+    await waitFor(() => { expect(screen.getByText('无法打开此文件')).toBeTruthy() })
   })
 })

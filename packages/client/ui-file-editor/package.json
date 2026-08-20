@@ -46,7 +46,8 @@
   "license": "MIT",
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.9",
-    "clsx": "^2.0.0"
+    "clsx": "^2.0.0",
+    "monaco-editor": "^0.52.2"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-client-locale": "workspace:^",

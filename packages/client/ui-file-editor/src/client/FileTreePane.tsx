@@ -41,6 +41,11 @@ export interface FileTreePaneProps extends FileTreeHost {
   workspace: WorkspaceView | undefined
   /** Localized copy. */
   t: TranslateNS<'fileEditor'>
+  /**
+   * Open a file row in the editor pane. Directories are not opened.
+   * @param entry - the clicked tree entry.
+   */
+  onOpenFile: (entry: WorkspaceEntry) => void
 }
 
 const ROW_HEIGHT_PX = 22
@@ -48,11 +53,11 @@ const ROW_HEIGHT_PX = 22
 /**
  * File-tree pane: root listing follows the bound Workspace; folders load
  * children only when expanded; Git badges are read-only.
- * @param props - bound Workspace, Host callbacks, and copy.
+ * @param props - bound Workspace, Host callbacks, copy, and file-open callback.
  * @returns the filter chrome, toolbar, and virtualized tree.
  */
 export function FileTreePane({
-  workspace, listWorkspaceEntries, gitStatus, t,
+  workspace, listWorkspaceEntries, gitStatus, t, onOpenFile,
 }: FileTreePaneProps) {
   const [childrenByPath, setChildrenByPath] = useState<Map<string, readonly WorkspaceEntry[]>>(
     () => new Map(),
@@ -77,7 +82,7 @@ export function FileTreePane({
     setFilter('')
     if (workspace === undefined) {
       setGitLoading(false)
-      return () => ac.abort()
+      return () => { ac.abort() }
     }
     setGitLoading(true)
     void listWorkspaceEntries(workspace.workspaceId, workspace.path, ac.signal)
@@ -243,7 +248,10 @@ export function FileTreePane({
                   transform: `translateY(${start}px)`,
                   paddingLeft: `${row.depth * 12}px`,
                 }}
-                onClick={() => { setSelectedPath(row.entry.path) }}
+                onClick={() => {
+                  setSelectedPath(row.entry.path)
+                  if (!row.entry.isDirectory) onOpenFile(row.entry)
+                }}
                 onDoubleClick={() => { void toggleDirectory(row.entry) }}
               >
                 {row.entry.isDirectory
