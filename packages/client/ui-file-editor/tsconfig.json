@@ -24,6 +24,9 @@
       "path": "../ui-conversation"
     },
     {
+      "path": "../ui-primitives"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     }
   ]

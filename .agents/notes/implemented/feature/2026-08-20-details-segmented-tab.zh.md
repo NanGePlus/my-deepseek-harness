@@ -12,7 +12,7 @@ Status: implemented
 
 `ui-conversation` 拥有 details **壳层**：在 `DetailsPanel` 中增加 segmented Tab（`Tool 详情` | `文件编辑器`），Tool 正文抽到 `ToolDetailsBody`，Tab 选择写入共享 per-session chat store（`detailsTab: 'tool' | 'editor'`）。选中 **文件编辑器** 时调用 `layout.openDetails()`，在栏已收起时也能展开，且不新增第四栏或 overlay。
 
-`ui-file-editor` 向新子槽 `conversation.details.editor` 注入 `EditorSurface`。Issue #19 仅交付 PRD 空态占位；文件树、Monaco 与 Host RPC 消费由后续 issue 完成。
+`ui-file-editor` 向新子槽 `conversation.details.editor` 注入 `EditorSurface`。[文件树 issue](2026-08-20-editor-surface-file-tree.md) 拥有 Workspace 绑定、列表、过滤、图标与 Git 徽章；Monaco 与文件缓冲区仍属后续 issue。
 
 `ui-layout` 在有非 blank Session 占用 details 时（`detailsSession` 已定义）始终挂载 details 拖动手柄，即使渲染宽度为 0，以便用户在自动收起后拖开右栏。
 
@@ -32,6 +32,6 @@ Status: implemented
 
 `packages/client/ui-conversation/tests/details-panel-tabs.client.spec.tsx` 覆盖默认文案、选中编辑器 Tab（展开 details + 渲染 editor 席位）、切回 Tool 详情。
 
-`packages/client/ui-file-editor/tests/*` 覆盖空态文案与槽位注入。
+`packages/client/ui-file-editor/tests/*` 覆盖槽位注入，以及[文件树笔记](2026-08-20-editor-surface-file-tree.md) 拥有的文件树各态。
 
-`apps/web/tests/details-segmented-tab.e2e.ts` 回放 segmented Tab 的 aria 与编辑器空态快照。
+`apps/web/tests/details-segmented-tab.e2e.ts` 回放 segmented Tab 的 aria 与编辑界面快照（文件树 + 未打开文件空态）。

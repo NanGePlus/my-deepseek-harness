@@ -130,6 +130,18 @@ export class FakeApiClient implements IApiClient {
   onCreateDirectory: (payload: unknown) => Promise<RpcResponse<{ path: string }>> =
     () => Promise.resolve(ok({ path: '/home/fake/new' }))
 
+  onListWorkspaceEntries: (payload: unknown) => Promise<RpcResponse<{
+    path: string
+    entries: { name: string; path: string; isDirectory: boolean; hidden: boolean }[]
+    truncated: boolean
+  }>> =
+    () => Promise.resolve(ok({ path: '', entries: [], truncated: false }))
+
+  onGitStatus: (payload: unknown) => Promise<RpcResponse<{
+    entries: { path: string; letter: string }[]
+  }>> =
+    () => Promise.resolve(ok({ entries: [] }))
+
   private readonly muxConns: StreamConn<MuxFrame>[] = []
   private readonly hostConns: StreamConn<HostFrame>[] = []
   lastSearchSignal: AbortSignal | undefined
@@ -182,9 +194,9 @@ export class FakeApiClient implements IApiClient {
     listWorkspaceEntries: (payload: unknown) => this.record(
       'host.listWorkspaceEntries',
       payload,
-      Promise.resolve(ok({ path: '', entries: [], truncated: false })),
+      this.onListWorkspaceEntries(payload),
     ),
-    gitStatus: (payload: unknown) => this.record('host.gitStatus', payload, Promise.resolve(ok({ entries: [] }))),
+    gitStatus: (payload: unknown) => this.record('host.gitStatus', payload, this.onGitStatus(payload)),
     openPath: (payload: unknown) => this.record('host.openPath', payload, this.onOpenPath(payload)),
   }
 

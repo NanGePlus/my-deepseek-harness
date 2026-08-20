@@ -50,7 +50,7 @@ export function DetailsPanel({
           </svg>
         </button>
       </div>
-      <div className={css.body} role="tabpanel">
+      <div className={clsx(css.body, detailsTab === 'editor' && css.bodyFlush)} role="tabpanel">
         {detailsTab === 'editor'
           ? renderSlot('conversation.details.editor', {})
           : (

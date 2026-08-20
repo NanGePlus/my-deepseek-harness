@@ -1,7 +1,8 @@
 /** Test-owned workspaces face: the renderer standard-kit observable plus recorded actions. */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
-  DirectoryListing, IWorkspaces, SessionId, SnapshotStore, WorkspaceId, WorkspaceListState, WorkspaceView,
+  DirectoryListing, GitStatusListing, IWorkspaces, SessionId, SnapshotStore,
+  WorkspaceEntriesListing, WorkspaceId, WorkspaceListState, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { workspaceListState } from './fixtures.ts'
 import type { Stabilizer } from './fixtures.ts'
@@ -135,6 +136,40 @@ export class TestWorkspaces implements IWorkspaces {
       entries: [],
       truncated: false,
     }
+  }
+
+  /**
+   * Workspace file-tree listing (recorded). The default serves an empty
+   * level at the asked path; stub to shape a tree.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute directory inside that Workspace.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns the level's listing.
+   */
+  async listWorkspaceEntries(
+    workspaceId: WorkspaceId,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceEntriesListing> {
+    this.calls.push({ method: 'listWorkspaceEntries', args: [workspaceId, path, signal] })
+    const stub = this.stubs.get('listWorkspaceEntries')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, path, signal) as Promise<WorkspaceEntriesListing>)
+    }
+    return { path, entries: [], truncated: false }
+  }
+
+  /**
+   * Git working-tree badges (recorded). The default is an empty list (non-repo).
+   * @param workspaceId - Workspace whose root is the `git status` directory.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns badge rows.
+   */
+  async gitStatus(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitStatusListing> {
+    this.calls.push({ method: 'gitStatus', args: [workspaceId, signal] })
+    const stub = this.stubs.get('gitStatus')
+    if (stub !== undefined) return await (stub(workspaceId, signal) as Promise<GitStatusListing>)
+    return { entries: [] }
   }
 
   /**

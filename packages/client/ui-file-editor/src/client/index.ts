@@ -5,7 +5,7 @@
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import { EditorSurface } from './EditorSurface.tsx'
+import { EditorSurface, type FileEditorInjected } from './EditorSurface.tsx'
 import { en, zh, type FileEditorKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -18,8 +18,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Dictionary namespace owned by this plugin. */
 const NS = 'fileEditor'
 
-/** Required services for slot injection and locale registration. */
-export const inject = ['slots', 'locale']
+/** Required services for slot injection, Workspace Host RPC, and locale registration. */
+export const inject = ['slots', 'workspaces', 'locale']
 
 /**
  * Register the editor-surface occupant once the details child slot is declared.
@@ -28,8 +28,15 @@ export const inject = ['slots', 'locale']
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-file-editor: dictionaries')
 
+  const injected = (): FileEditorInjected => ({
+    listWorkspaceEntries: (workspaceId, path, signal) =>
+      ctx.workspaces.listWorkspaceEntries(workspaceId, path, signal),
+    gitStatus: (workspaceId, signal) => ctx.workspaces.gitStatus(workspaceId, signal),
+  })
+
   ctx.slots.inject('conversation.details.editor', () => ctx.slots.register({
     name: 'conversation.details.editor',
     locale: NS,
+    inject: injected,
   }, EditorSurface))
 }
