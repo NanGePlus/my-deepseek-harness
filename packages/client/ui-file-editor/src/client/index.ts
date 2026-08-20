@@ -5,7 +5,7 @@
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import { EditorSurface, type FileEditorInjected } from './EditorSurface.tsx'
+import { EditorSurface, editorDirtyGuard, type FileEditorInjected } from './EditorSurface.tsx'
 import { createFileEditorStore } from './stores.ts'
 import { en, zh, type FileEditorKey } from './locales.ts'
 
@@ -19,8 +19,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Dictionary namespace owned by this plugin. */
 const NS = 'fileEditor'
 
-/** Required services for slot injection, Workspace Host RPC, and locale registration. */
-export const inject = ['slots', 'workspaces', 'locale']
+/** Required services for slot injection, Workspace Host RPC, locale, and session guard. */
+export const inject = ['slots', 'workspaces', 'locale', 'sessions']
 
 /**
  * Register the editor-surface occupant once the details child slot is declared.
@@ -29,7 +29,13 @@ export const inject = ['slots', 'workspaces', 'locale']
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-file-editor: dictionaries')
 
-  const injected = (): FileEditorInjected => ({
+  const commitOpen = ctx.sessions.open.bind(ctx.sessions)
+  ctx.sessions.open = (sessionId) => {
+    const current = ctx.sessions.list.getSnapshot().current
+    editorDirtyGuard.tryOpenSession(current, sessionId, () => { commitOpen(sessionId) })
+  }
+
+  const injected = (): FileEditorInjected & { dirtyGuard: typeof editorDirtyGuard } => ({
     listWorkspaceEntries: (workspaceId, path, signal) =>
       ctx.workspaces.listWorkspaceEntries(workspaceId, path, signal),
     gitStatus: (workspaceId, signal) => ctx.workspaces.gitStatus(workspaceId, signal),
@@ -45,6 +51,7 @@ export function apply(ctx: ClientContext): void {
       ctx.workspaces.createWorkspaceDirectory(workspaceId, path, name, signal),
     watchPath: (workspaceId, path, onChanged, signal) =>
       ctx.workspaces.watchPath(workspaceId, path, onChanged, signal),
+    dirtyGuard: editorDirtyGuard,
   })
 
   ctx.slots.inject('conversation.details.editor', () => ctx.slots.register({

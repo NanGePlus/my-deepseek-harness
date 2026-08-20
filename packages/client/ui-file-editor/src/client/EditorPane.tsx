@@ -32,7 +32,7 @@ export interface EditorPaneProps {
    */
   onFocus: (path: string) => void
   /**
-   * Close a tab without a dirty guard (US-27 owns that dialog).
+   * Close a tab; dirty text tabs open the save / discard / cancel guard first.
    * @param path - tab path.
    */
   onClose: (path: string) => void
