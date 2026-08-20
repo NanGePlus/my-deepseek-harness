@@ -111,6 +111,7 @@ function mount(over: {
   deletePath?: EditorSurfaceProps['deletePath']
   renamePath?: EditorSurfaceProps['renamePath']
   createWorkspaceDirectory?: EditorSurfaceProps['createWorkspaceDirectory']
+  watchPath?: EditorSurfaceProps['watchPath']
 } = {}) {
   const listWorkspaceEntries = vi.fn(over.list ?? (async (_id: WorkspaceId, path: string) => listingFor(path)))
   const gitStatus = vi.fn(over.git ?? (async () => ({
@@ -129,6 +130,7 @@ function mount(over: {
   const createWorkspaceDirectory = vi.fn(over.createWorkspaceDirectory ?? (async (_id: WorkspaceId, parent: string, name: string) => ({
     path: `${parent}/${name}`,
   })))
+  const watchPath = vi.fn(over.watchPath ?? (() => {}))
   const items = over.items ?? [workspace()]
   const state = workspacesState(items)
   const instance = createFileEditorStore().create()
@@ -145,11 +147,12 @@ function mount(over: {
     deletePath,
     renamePath,
     createWorkspaceDirectory,
+    watchPath,
   } as EditorSurfaceProps
   const view = render(<EditorSurface {...props} />)
   return {
     view, props, listWorkspaceEntries, gitStatus, readFile, writeFile, deletePath, renamePath,
-    createWorkspaceDirectory, state,
+    createWorkspaceDirectory, watchPath, state,
   }
 }
 
@@ -868,5 +871,136 @@ describe('EditorSurface file operations', () => {
     fireEvent.click(within(deleteDialog).getByRole('button', { name: '删除' }))
     await waitFor(() => { expect(screen.getByText('无法删除此路径')).toBeTruthy() })
     expect(within(screen.getByRole('tree', { name: 'alpha' })).getByText('untracked.ts')).toBeTruthy()
+  })
+})
+
+describe('EditorSurface external change', () => {
+  const README = `${ROOT}/README.md`
+
+  function createWatchHarness() {
+    const handlers = new Map<string, () => void>()
+    const watchPath = vi.fn((
+      _id: WorkspaceId,
+      path: string,
+      onChanged: () => void,
+      signal?: AbortSignal,
+    ) => {
+      handlers.set(path, onChanged)
+      signal?.addEventListener('abort', () => { handlers.delete(path) })
+    })
+    return {
+      watchPath,
+      trigger(path: string): void {
+        handlers.get(path)?.()
+      },
+      isWatching(path: string): boolean {
+        return handlers.has(path)
+      },
+    }
+  }
+
+  async function clickFile(name: string): Promise<void> {
+    const tree = await waitFor(() => screen.getByRole('tree', { name: 'alpha' }))
+    fireEvent.click(within(tree).getByText(name).closest('[role="treeitem"]')!)
+  }
+
+  it('external-change: a fake watch event shows the external-change dialog', async () => {
+    const watch = createWatchHarness()
+    const readCounts = new Map<string, number>()
+    mount({
+      watchPath: watch.watchPath,
+      read: async (_id, path, kind) => {
+        if (kind !== 'text') return defaultReadFile(_id, path, kind)
+        const count = (readCounts.get(path) ?? 0) + 1
+        readCounts.set(path, count)
+        return {
+          kind: 'text' as const,
+          path,
+          text: count === 1 ? 'initial\n' : 'external\n',
+        }
+      },
+    })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy() })
+    expect(watch.watchPath).toHaveBeenCalledWith(WID, README, expect.any(Function), expect.any(AbortSignal))
+    await act(async () => { watch.trigger(README) })
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '文件已在磁盘上更改' }))
+    expect(within(dialog).getByText('README.md')).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: '重新加载' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: '保留本地编辑' })).toBeTruthy()
+  })
+
+  it('reload-discard: choosing reload replaces the edit buffer with disk content', async () => {
+    const watch = createWatchHarness()
+    const readCounts = new Map<string, number>()
+    mount({
+      watchPath: watch.watchPath,
+      read: async (_id, path, kind) => {
+        if (kind !== 'text') return defaultReadFile(_id, path, kind)
+        const count = (readCounts.get(path) ?? 0) + 1
+        readCounts.set(path, count)
+        return {
+          kind: 'text' as const,
+          path,
+          text: count === 1 ? 'initial\n' : 'external\n',
+        }
+      },
+    })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy() })
+    fireEvent.change(
+      screen.getByRole('textbox', { name: /README\.md/ }),
+      { target: { value: 'local edits\n' } },
+    )
+    await act(async () => { watch.trigger(README) })
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '文件已在磁盘上更改' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: '重新加载' }))
+    await waitFor(() => { expect(screen.queryByRole('dialog', { name: '文件已在磁盘上更改' })).toBeNull() })
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md/ }).value).toBe('external\n')
+    expect(screen.queryByLabelText('未保存')).toBeNull()
+  })
+
+  it('keep-local: choosing keep local leaves the edit buffer unchanged', async () => {
+    const watch = createWatchHarness()
+    const readCounts = new Map<string, number>()
+    mount({
+      watchPath: watch.watchPath,
+      read: async (_id, path, kind) => {
+        if (kind !== 'text') return defaultReadFile(_id, path, kind)
+        const count = (readCounts.get(path) ?? 0) + 1
+        readCounts.set(path, count)
+        return {
+          kind: 'text' as const,
+          path,
+          text: count === 1 ? 'initial\n' : 'external\n',
+        }
+      },
+    })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy() })
+    fireEvent.change(
+      screen.getByRole('textbox', { name: /README\.md/ }),
+      { target: { value: 'local edits\n' } },
+    )
+    await act(async () => { watch.trigger(README) })
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '文件已在磁盘上更改' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: '保留本地编辑' }))
+    await waitFor(() => { expect(screen.queryByRole('dialog', { name: '文件已在磁盘上更改' })).toBeNull() })
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md/ }).value).toBe('local edits\n')
+    expect(screen.getByLabelText('未保存')).toBeTruthy()
+  })
+
+  it('watch-released: closing a tab stops delivering watch events for that path', async () => {
+    const watch = createWatchHarness()
+    const b = mount({ watchPath: watch.watchPath })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
+    expect(watch.isWatching(README)).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: '关闭 README.md' }))
+    await waitFor(() => { expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull() })
+    expect(watch.isWatching(README)).toBe(false)
+    await act(async () => { watch.trigger(README) })
+    expect(screen.queryByRole('dialog', { name: '文件已在磁盘上更改' })).toBeNull()
+    expect(b.watchPath.mock.calls.every(call => call[1] !== ROOT)).toBe(true)
   })
 })

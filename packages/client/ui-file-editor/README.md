@@ -8,7 +8,7 @@ The tree binds to the Workspace whose `sessionIds` include the current Session. 
 
 Open mode is decided from the path at click time: image extensions (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`) call `readFile(..., 'bytes')` and preview; known binary extensions (for example `.wasm`) show 「不支持打开此文件类型」 and must not read; everything else calls `readFile(..., 'text')` with a language id from the extension. Edit buffers and dirty live in the exclusive Client store and never enter the session log.
 
-`apply` injects `listWorkspaceEntries`, `gitStatus`, `readFile`, and `writeFile` closures from `ctx.workspaces`, not the whole WorkspaceRuntime. Host listing and Git failures leave the last cached tree and omit badges; they do not raise an in-pane error. Open and save failures stay in the editor pane (`无法打开此文件` / `无法保存此文件` plus **重试**). Toolbar New file / New folder actions and the empty-folder CTA stay disabled until a later file-operation issue.
+`apply` injects `listWorkspaceEntries`, `gitStatus`, `readFile`, `writeFile`, path mutations, and `watchPath` closures from `ctx.workspaces`, not the whole WorkspaceRuntime. Host listing and Git failures leave the last cached tree and omit badges; they do not raise an in-pane error. Open and save failures stay in the editor pane (`无法打开此文件` / `无法保存此文件` plus **重试**). Each open text tab registers `watchPath`; when disk content diverges from the edit buffer, a dialog offers **重新加载** or **保留本地编辑**; closing the tab aborts that watch.
 
 ## Model Experience
 
@@ -20,7 +20,5 @@ None; this package neither assembles nor sends a provider request.
 
 ## Known Limitations and Deferred Work
 
-- **Create / rename / delete stay disabled** — tree toolbar and empty-folder CTA wait for the file-operation issue.
 - **No dirty-close or Session-switch guard** — closing a dirty tab discards the buffer; US-27 / US-26 own the dialogs.
-- **No `watchPath`** — external disk changes are not prompted in this slice.
 - **No in-pane listing error** — a refused `listWorkspaceEntries` keeps the last cached rows; there is no retry chrome for the tree.

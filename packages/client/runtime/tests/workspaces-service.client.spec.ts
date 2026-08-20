@@ -416,6 +416,28 @@ describe('WorkspaceRuntime', () => {
     await expect(writeFailure).rejects.toMatchObject({ rpcError: { code: 'file-write-failed' } })
   })
 
+  it('forwards watchPath change frames to onChanged until the signal aborts', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const workspaces = new WorkspaceRuntime(ctx, api, new SessionRuntime(ctx, api, fakeRemote()))
+    const changed: string[] = []
+    let aborted = false
+    const ac = new AbortController()
+    api.host.watchPath = vi.fn(async function* (_payload, signal) {
+      signal.addEventListener('abort', () => { aborted = true }, { once: true })
+      yield { rpcId: 'watch-1' as never, payload: { type: 'host/path-changed', path: '/w/alpha/a.ts' } }
+      await new Promise<void>(() => {})
+    })
+    workspaces.watchPath(wid('alpha'), '/w/alpha/a.ts', () => { changed.push('hit') }, ac.signal)
+    await vi.waitFor(() => { expect(changed).toEqual(['hit']) })
+    expect(api.host.watchPath).toHaveBeenCalledWith(
+      { workspaceId: 'alpha', path: '/w/alpha/a.ts' },
+      ac.signal,
+    )
+    ac.abort()
+    await vi.waitFor(() => { expect(aborted).toBe(true) })
+  })
+
   it('passes workspace path mutations through the host wire', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()

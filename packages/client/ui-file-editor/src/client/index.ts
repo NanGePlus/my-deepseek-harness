@@ -43,6 +43,8 @@ export function apply(ctx: ClientContext): void {
       ctx.workspaces.renamePath(workspaceId, path, newName, signal),
     createWorkspaceDirectory: (workspaceId, path, name, signal) =>
       ctx.workspaces.createWorkspaceDirectory(workspaceId, path, name, signal),
+    watchPath: (workspaceId, path, onChanged, signal) =>
+      ctx.workspaces.watchPath(workspaceId, path, onChanged, signal),
   })
 
   ctx.slots.inject('conversation.details.editor', () => ctx.slots.register({

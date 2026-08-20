@@ -20,6 +20,7 @@ async function bench() {
     deletePath: vi.fn(() => Promise.resolve({ path: '/w/a.ts' })),
     renamePath: vi.fn(() => Promise.resolve({ path: '/w/b.ts' })),
     createWorkspaceDirectory: vi.fn(() => Promise.resolve({ path: '/w/src' })),
+    watchPath: vi.fn(),
   }
   ctx.provide('workspaces', workspaces)
   slots.register({
@@ -64,5 +65,7 @@ describe('ui-file-editor apply', () => {
     expect(b.workspaces.deletePath).toHaveBeenCalledWith('ws', '/w/a.ts', undefined)
     expect(b.workspaces.renamePath).toHaveBeenCalledWith('ws', '/w/a.ts', 'b.ts', undefined)
     expect(b.workspaces.createWorkspaceDirectory).toHaveBeenCalledWith('ws', '/w', 'src', undefined)
+    face.watchPath('ws' as WorkspaceId, '/w/a.ts', () => {}, undefined)
+    expect(b.workspaces.watchPath).toHaveBeenCalledWith('ws', '/w/a.ts', expect.any(Function), undefined)
   })
 })
