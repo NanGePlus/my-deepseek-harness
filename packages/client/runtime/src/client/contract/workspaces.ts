@@ -133,6 +133,19 @@ export interface IWorkspaces {
     signal?: AbortSignal,
   ): Promise<PathMutationResult>
   /**
+   * Subscribe to external disk changes for one opened path until `signal` aborts.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path to watch.
+   * @param onChanged - invoked once per Host path-changed frame.
+   * @param signal - aborts the stream and closes the subscription.
+   */
+  watchPath(
+    workspaceId: WorkspaceId,
+    path: string,
+    onChanged: () => void,
+    signal?: AbortSignal,
+  ): void
+  /**
    * Create one child directory through the Host's `browse` capability.
    * @param path - absolute existing parent directory.
    * @param name - single non-blank path segment.

@@ -58,6 +58,7 @@ type FileEditorActions = {
   closeTab: (draft: FileEditorState, path: string) => void
   setBuffer: (draft: FileEditorState, path: string, buffer: string) => void
   markSaved: (draft: FileEditorState, path: string) => void
+  reloadTextTab: (draft: FileEditorState, path: string, text: string) => void
   renameTabPath: (draft: FileEditorState, oldPath: string, newPath: string, newName: string) => void
 }
 
@@ -87,6 +88,13 @@ export function createFileEditorStore(): EngineStoreHandle<FileEditorState, File
       markSaved: (draft, path: string) => {
         const tab = draft.tabs.find(item => item.path === path)
         if (tab?.kind === 'text') tab.saved = tab.buffer
+      },
+      reloadTextTab: (draft, path: string, text: string) => {
+        const tab = draft.tabs.find(item => item.path === path)
+        if (tab?.kind === 'text') {
+          tab.buffer = text
+          tab.saved = text
+        }
       },
       renameTabPath: (draft, oldPath: string, newPath: string, newName: string) => {
         for (const tab of draft.tabs) {

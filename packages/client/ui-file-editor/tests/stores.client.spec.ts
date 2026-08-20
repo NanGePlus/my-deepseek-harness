@@ -36,4 +36,24 @@ describe('file editor store', () => {
     expect(tab?.name).toBe('GUIDE.md')
     expect(instance.getSnapshot().activePath).toBe('/w/GUIDE.md')
   })
+
+  it('reloadTextTab replaces buffer and saved text for a text tab', () => {
+    const instance = createFileEditorStore().create()
+    instance.actions.openTab({
+      kind: 'text',
+      path: '/w/README.md',
+      name: 'README.md',
+      language: 'markdown',
+      buffer: 'local',
+      saved: 'initial',
+    })
+    instance.actions.reloadTextTab('/w/README.md', 'external\n')
+    const tab = instance.getSnapshot().tabs[0]
+    expect(tab?.kind).toBe('text')
+    if (tab?.kind === 'text') {
+      expect(tab.buffer).toBe('external\n')
+      expect(tab.saved).toBe('external\n')
+    }
+    expect(tabIsDirty(tab!)).toBe(false)
+  })
 })

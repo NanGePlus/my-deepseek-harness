@@ -1,6 +1,7 @@
 /** Editor-surface occupant of the details column file-editor tab. */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult, WorkspaceId,
@@ -12,6 +13,15 @@ import { EditorPane, type EditorPaneStatus } from './EditorPane.tsx'
 import { languageForPath, openKindForPath } from './open-kind.ts'
 import { createFileEditorStore, tabIsDirty } from './stores.ts'
 import css from './EditorSurface.module.css'
+import dialogCss from './FileTreeDialogs.module.css'
+
+/** Pending external-change dialog for one text tab. */
+interface ExternalChangeDialog {
+  /** Host-absolute path. */
+  path: string
+  /** File name shown in the dialog body. */
+  name: string
+}
 
 /** Host file-tree and file I/O callbacks closed over `ctx.workspaces` in apply. */
 export interface FileEditorInjected {
@@ -95,6 +105,19 @@ export interface FileEditorInjected {
     name: string,
     signal?: AbortSignal,
   ) => Promise<PathMutationResult>
+  /**
+   * Subscribe to external disk changes for one opened path until `signal` aborts.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path to watch.
+   * @param onChanged - invoked once per Host path-changed frame.
+   * @param signal - aborts the stream and closes the subscription.
+   */
+  watchPath: (
+    workspaceId: WorkspaceId,
+    path: string,
+    onChanged: () => void,
+    signal?: AbortSignal,
+  ) => void
 }
 
 export type EditorSurfaceProps =
@@ -113,7 +136,7 @@ const DARK_ATTRIBUTE = 'data-ds-dark-theme'
 export function EditorSurface({
   t, sessionId, useWorkspaces, useStore, actions,
   listWorkspaceEntries, gitStatus, readFile, writeFile,
-  deletePath, renamePath, createWorkspaceDirectory,
+  deletePath, renamePath, createWorkspaceDirectory, watchPath,
 }: EditorSurfaceProps) {
   const workspace = useWorkspaces(state =>
     state.items.find(item => item.sessionIds.includes(sessionId)),
@@ -123,8 +146,12 @@ export function EditorSurface({
   const [status, setStatus] = useState<EditorPaneStatus>({ kind: 'idle' })
   const [dark, setDark] = useState(() => document.body.hasAttribute(DARK_ATTRIBUTE))
   const [newFileTrigger, setNewFileTrigger] = useState(0)
+  const [externalChange, setExternalChange] = useState<ExternalChangeDialog | null>(null)
   const ioAbort = useRef<AbortController | null>(null)
   const retryRef = useRef<(() => void) | null>(null)
+  const watchAbort = useRef<Map<string, AbortController>>(new Map())
+  const tabsRef = useRef(tabs)
+  tabsRef.current = tabs
 
   useEffect(() => {
     const sync = (): void => { setDark(document.body.hasAttribute(DARK_ATTRIBUTE)) }
@@ -191,6 +218,60 @@ export function EditorSurface({
       setStatus({ kind: 'error', op: 'open', message: t('editor.error.open') })
     }
   }, [tabs, actions, workspace, readFile, t])
+
+  const checkExternalChange = useCallback(async (path: string): Promise<void> => {
+    if (workspace === undefined) return
+    const tab = tabsRef.current.find(item => item.path === path)
+    if (tab?.kind !== 'text') return
+    try {
+      const result = await readFile(workspace.workspaceId, path, 'text')
+      if (result.kind !== 'text') return
+      if (result.text === tab.buffer) return
+      setExternalChange({ path, name: tab.name })
+    } catch (error: unknown) {
+      void error
+    }
+  }, [workspace, readFile])
+
+  useEffect(() => {
+    if (workspace === undefined) return
+    const textPaths = new Set(
+      tabs.filter(tab => tab.kind === 'text').map(tab => tab.path),
+    )
+    for (const [path, controller] of watchAbort.current) {
+      if (!textPaths.has(path)) {
+        controller.abort()
+        watchAbort.current.delete(path)
+      }
+    }
+    for (const path of textPaths) {
+      if (watchAbort.current.has(path)) continue
+      const controller = new AbortController()
+      watchAbort.current.set(path, controller)
+      watchPath(
+        workspace.workspaceId,
+        path,
+        () => { void checkExternalChange(path) },
+        controller.signal,
+      )
+    }
+  }, [tabs, workspace, watchPath, checkExternalChange])
+
+  useEffect(() => () => {
+    for (const controller of watchAbort.current.values()) controller.abort()
+    watchAbort.current.clear()
+  }, [])
+
+  const reloadExternalChange = useCallback(async (): Promise<void> => {
+    if (externalChange === null || workspace === undefined) return
+    try {
+      const result = await readFile(workspace.workspaceId, externalChange.path, 'text')
+      if (result.kind === 'text') actions.reloadTextTab(externalChange.path, result.text)
+      setExternalChange(null)
+    } catch (error: unknown) {
+      void error
+    }
+  }, [externalChange, workspace, readFile, actions])
 
   const saveActive = useCallback(async () => {
     const active = tabs.find(tab => tab.path === activePath)
@@ -263,6 +344,26 @@ export function EditorSurface({
         onSave={() => { void saveActive() }}
         onRetry={() => { retryRef.current?.() }}
         onNewFile={() => { setNewFileTrigger(current => current + 1) }}
+      />
+      <Modal
+        open={externalChange !== null}
+        onClose={() => { setExternalChange(null) }}
+        closeLabel={t('editor.dialog.close')}
+        title={t('editor.dialog.externalChange.title')}
+        className={dialogCss.dialogSurface ?? ''}
+        {...externalChange === null
+          ? {}
+          : { description: t('editor.dialog.externalChange.desc', { name: externalChange.name }) }}
+        footer={(
+          <>
+            <Button variant="outline" onClick={() => { setExternalChange(null) }}>
+              {t('editor.dialog.externalChange.keepLocal')}
+            </Button>
+            <Button variant="primary" onClick={() => { void reloadExternalChange() }}>
+              {t('editor.dialog.externalChange.reload')}
+            </Button>
+          </>
+        )}
       />
     </div>
   )

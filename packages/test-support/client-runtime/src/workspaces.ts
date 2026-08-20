@@ -275,6 +275,23 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
+   * Subscribe to external disk changes for one opened path (recorded; default no-op).
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path to watch.
+   * @param onChanged - invoked on each Host path-changed frame.
+   * @param signal - aborts the subscription when the caller supersedes it.
+   */
+  watchPath(
+    workspaceId: WorkspaceId,
+    path: string,
+    onChanged: () => void,
+    signal?: AbortSignal,
+  ): void {
+    this.calls.push({ method: 'watchPath', args: [workspaceId, path, onChanged, signal] })
+    this.stubs.get('watchPath')?.(workspaceId, path, onChanged, signal)
+  }
+
+  /**
    * Browse child creation (recorded). The default joins parent and name.
    * @param path - absolute existing parent directory.
    * @param name - single path segment.
