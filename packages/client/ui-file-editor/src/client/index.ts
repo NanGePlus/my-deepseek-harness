@@ -6,6 +6,7 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { EditorSurface, type FileEditorInjected } from './EditorSurface.tsx'
+import { createFileEditorStore } from './stores.ts'
 import { en, zh, type FileEditorKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -32,11 +33,16 @@ export function apply(ctx: ClientContext): void {
     listWorkspaceEntries: (workspaceId, path, signal) =>
       ctx.workspaces.listWorkspaceEntries(workspaceId, path, signal),
     gitStatus: (workspaceId, signal) => ctx.workspaces.gitStatus(workspaceId, signal),
+    readFile: (workspaceId, path, kind, signal) =>
+      ctx.workspaces.readFile(workspaceId, path, kind, signal),
+    writeFile: (workspaceId, path, text, signal) =>
+      ctx.workspaces.writeFile(workspaceId, path, text, signal),
   })
 
   ctx.slots.inject('conversation.details.editor', () => ctx.slots.register({
     name: 'conversation.details.editor',
     locale: NS,
+    store: createFileEditorStore,
     inject: injected,
   }, EditorSurface))
 }

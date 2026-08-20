@@ -6,13 +6,13 @@ Status: implemented
 
 ## 问题
 
-文件编辑器 V1 将编辑界面放入现有 Web details 栏，与 Tool 详情切换（[ADR-0002](../../../docs/adr/0002-file-editor-details-tab.md)）。该栏此前只渲染 Tool 输出，没有 Tab 壳层，也没有编辑器 surface 的 occupant 槽位，文件编辑器 PRD 的 US-1~US-3 缺少集成点。
+文件编辑器 V1 将编辑界面放入现有 Web details 栏，与 Tool 详情切换（[ADR-0002](../../../../docs/adr/0002-file-editor-details-tab.md)）。该栏此前只渲染 Tool 输出，没有 Tab 壳层，也没有编辑器 surface 的 occupant 槽位，文件编辑器 PRD 的 US-1~US-3 缺少集成点。
 
 ## 决策
 
 `ui-conversation` 拥有 details **壳层**：在 `DetailsPanel` 中增加 segmented Tab（`Tool 详情` | `文件编辑器`），Tool 正文抽到 `ToolDetailsBody`，Tab 选择写入共享 per-session chat store（`detailsTab: 'tool' | 'editor'`）。选中 **文件编辑器** 时调用 `layout.openDetails()`，在栏已收起时也能展开，且不新增第四栏或 overlay。
 
-`ui-file-editor` 向新子槽 `conversation.details.editor` 注入 `EditorSurface`。[文件树 issue](2026-08-20-editor-surface-file-tree.md) 拥有 Workspace 绑定、列表、过滤、图标与 Git 徽章；Monaco 与文件缓冲区仍属后续 issue。
+`ui-file-editor` 向新子槽 `conversation.details.editor` 注入 `EditorSurface`。[文件树 issue](2026-08-20-editor-surface-file-tree.md) 拥有 Workspace 绑定、列表、过滤、图标与 Git 徽章；[打开三档、Tab 与保存](2026-08-20-editor-surface-open-tabs-save.md) 拥有缓冲与 Monaco。
 
 `ui-layout` 在有非 blank Session 占用 details 时（`detailsSession` 已定义）始终挂载 details 拖动手柄，即使渲染宽度为 0，以便用户在自动收起后拖开右栏。
 
@@ -32,6 +32,6 @@ Status: implemented
 
 `packages/client/ui-conversation/tests/details-panel-tabs.client.spec.tsx` 覆盖默认文案、选中编辑器 Tab（展开 details + 渲染 editor 席位）、切回 Tool 详情。
 
-`packages/client/ui-file-editor/tests/*` 覆盖槽位注入，以及[文件树笔记](2026-08-20-editor-surface-file-tree.md) 拥有的文件树各态。
+`packages/client/ui-file-editor/tests/*` 覆盖槽位注入、[文件树笔记](2026-08-20-editor-surface-file-tree.md) 拥有的文件树各态，以及[打开／Tab／保存笔记](2026-08-20-editor-surface-open-tabs-save.md) 拥有的打开／保存各态。
 
 `apps/web/tests/details-segmented-tab.e2e.ts` 回放 segmented Tab 的 aria 与编辑界面快照（文件树 + 未打开文件空态）。

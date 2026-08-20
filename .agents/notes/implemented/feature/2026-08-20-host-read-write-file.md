@@ -6,7 +6,7 @@ English | [中文](2026-08-20-host-read-write-file.zh.md)
 
 ## Problem
 
-The Web file editor needs Host-mediated read and explicit save for editable text and image preview bytes inside a Session's bound Workspace. The browser must not touch disk directly ([ADR-0001](../../../docs/adr/0001-file-editor-host-rpc.md)).
+The Web file editor needs Host-mediated read and explicit save for editable text and image preview bytes inside a Session's bound Workspace. The browser must not touch disk directly ([ADR-0001](../../../../docs/adr/0001-file-editor-host-rpc.md)).
 
 ## Decision
 
@@ -28,10 +28,12 @@ Implementation lives in `read-write-file.ts`; wire types and zod schemas extend 
 
 ## Consequences
 
-- `ui-file-editor` open/save (Issue #21) can call these RPCs through a later `WorkspaceRuntime` forwarder.
+- `ui-file-editor` open/save calls these RPCs through `WorkspaceRuntime` ([open / tabs / save](2026-08-20-editor-surface-open-tabs-save.md)).
 - `deletePath`, `renamePath`, and `watchPath` remain separate issues.
 - No file-size cap in V1; giant reads follow Node's memory behavior.
 
 ## Testing
 
 `packages/host/apiproxy/tests/api-proxy-read-write-file.spec.ts` covers text read, PNG byte read, write persistence, and out-of-bounds read/write rejection through `createApiProxy`.
+
+`packages/client/runtime/tests/workspaces-service.client.spec.ts` covers Client forwarding of `readFile` / `writeFile` and `DirectoryBrowseError`.

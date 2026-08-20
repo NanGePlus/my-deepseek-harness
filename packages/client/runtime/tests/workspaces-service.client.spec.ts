@@ -383,6 +383,39 @@ describe('WorkspaceRuntime', () => {
     await expect(gitFailure).rejects.toMatchObject({ rpcError: { code: 'workspace-not-found' } })
   })
 
+  it('passes workspace file reads and writes through the host wire', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const workspaces = new WorkspaceRuntime(ctx, api, new SessionRuntime(ctx, api, fakeRemote()))
+    api.onReadFile = () => Promise.resolve(ok({ kind: 'text', path: '/w/alpha/a.ts', text: 'export {}\n' }))
+    await expect(workspaces.readFile(wid('alpha'), '/w/alpha/a.ts', 'text')).resolves.toEqual({
+      kind: 'text', path: '/w/alpha/a.ts', text: 'export {}\n',
+    })
+    expect(api.callsOf('host.readFile')).toEqual([
+      { workspaceId: 'alpha', path: '/w/alpha/a.ts', kind: 'text' },
+    ])
+    api.onReadFile = () => Promise.resolve(err({
+      code: 'file-not-found', message: 'gone', details: { path: '/w/alpha/missing.ts' },
+    }))
+    const readFailure = workspaces.readFile(wid('alpha'), '/w/alpha/missing.ts', 'text')
+    await expect(readFailure).rejects.toBeInstanceOf(DirectoryBrowseError)
+    await expect(readFailure).rejects.toMatchObject({ rpcError: { code: 'file-not-found' } })
+
+    api.onWriteFile = () => Promise.resolve(ok({ path: '/w/alpha/a.ts' }))
+    await expect(workspaces.writeFile(wid('alpha'), '/w/alpha/a.ts', 'ok\n')).resolves.toEqual({
+      path: '/w/alpha/a.ts',
+    })
+    expect(api.callsOf('host.writeFile')).toEqual([
+      { workspaceId: 'alpha', path: '/w/alpha/a.ts', text: 'ok\n' },
+    ])
+    api.onWriteFile = () => Promise.resolve(err({
+      code: 'file-write-failed', message: 'denied', details: { path: '/w/alpha/a.ts' },
+    }))
+    const writeFailure = workspaces.writeFile(wid('alpha'), '/w/alpha/a.ts', 'x')
+    await expect(writeFailure).rejects.toBeInstanceOf(DirectoryBrowseError)
+    await expect(writeFailure).rejects.toMatchObject({ rpcError: { code: 'file-write-failed' } })
+  })
+
   it('opens a filesystem path through the host without local state', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()

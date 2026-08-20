@@ -18,6 +18,19 @@ export const zh = {
   'editor.tree.git.badge': 'Git {letter}',
   'editor.tree.loading': '加载中',
   'editor.tree.label': '文件树',
+  'editor.tabs.label': '编辑器标签页',
+  'editor.tab.dirty': '未保存',
+  'editor.tab.close': '关闭 {name}',
+  'editor.save': '保存',
+  'editor.retry': '重试',
+  'editor.nonOpenable': '不支持打开此文件类型',
+  'editor.loading.open': '加载中…',
+  'editor.loading.save': '保存中…',
+  'editor.error.open': '无法打开此文件',
+  'editor.error.save': '无法保存此文件',
+  'editor.theme.light': '浅色',
+  'editor.theme.dark': '深色',
+  'editor.buffer.label': '{name}，{language}，{theme}',
 } as const
 
 /** English dictionary, checked complete against the zh key set. */
@@ -40,6 +53,19 @@ export const en = {
   'editor.tree.git.badge': 'Git {letter}',
   'editor.tree.loading': 'Loading',
   'editor.tree.label': 'File tree',
+  'editor.tabs.label': 'Editor tabs',
+  'editor.tab.dirty': 'Unsaved',
+  'editor.tab.close': 'Close {name}',
+  'editor.save': 'Save',
+  'editor.retry': 'Retry',
+  'editor.nonOpenable': 'This file type cannot be opened',
+  'editor.loading.open': 'Loading…',
+  'editor.loading.save': 'Saving…',
+  'editor.error.open': 'Could not open this file',
+  'editor.error.save': 'Could not save this file',
+  'editor.theme.light': 'light',
+  'editor.theme.dark': 'dark',
+  'editor.buffer.label': '{name}, {language}, {theme}',
 } as const
 
 /** The fileEditor namespace key union. */

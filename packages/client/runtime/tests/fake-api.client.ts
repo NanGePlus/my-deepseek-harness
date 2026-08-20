@@ -142,6 +142,25 @@ export class FakeApiClient implements IApiClient {
   }>> =
     () => Promise.resolve(ok({ entries: [] }))
 
+  onReadFile: (payload: unknown) => Promise<RpcResponse<{
+    kind: 'text' | 'bytes'
+    path: string
+    text?: string
+    data?: string
+    mediaType?: string
+  }>> = (payload) => {
+    const request = payload as { path: string; kind: 'text' | 'bytes' }
+    if (request.kind === 'bytes') {
+      return Promise.resolve(ok({
+        kind: 'bytes', path: request.path, data: '', mediaType: 'image/png',
+      }))
+    }
+    return Promise.resolve(ok({ kind: 'text', path: request.path, text: '' }))
+  }
+
+  onWriteFile: (payload: unknown) => Promise<RpcResponse<{ path: string }>> = payload =>
+    Promise.resolve(ok({ path: (payload as { path: string }).path }))
+
   private readonly muxConns: StreamConn<MuxFrame>[] = []
   private readonly hostConns: StreamConn<HostFrame>[] = []
   lastSearchSignal: AbortSignal | undefined
@@ -197,8 +216,8 @@ export class FakeApiClient implements IApiClient {
       this.onListWorkspaceEntries(payload),
     ),
     gitStatus: (payload: unknown) => this.record('host.gitStatus', payload, this.onGitStatus(payload)),
-    readFile: (payload: unknown) => this.record('host.readFile', payload, Promise.resolve(ok({ kind: 'text', path: '', text: '' }))),
-    writeFile: (payload: unknown) => this.record('host.writeFile', payload, Promise.resolve(ok({ path: '' }))),
+    readFile: (payload: unknown) => this.record('host.readFile', payload, this.onReadFile(payload)),
+    writeFile: (payload: unknown) => this.record('host.writeFile', payload, this.onWriteFile(payload)),
     openPath: (payload: unknown) => this.record('host.openPath', payload, this.onOpenPath(payload)),
   }
 

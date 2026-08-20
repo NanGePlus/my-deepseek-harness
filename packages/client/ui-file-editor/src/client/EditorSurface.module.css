@@ -5,6 +5,8 @@
   min-width: 0;
   --editor-hover-tint: color-mix(in srgb, rgb(38, 49, 72) 6%, var(--dsw-alias-bg-overlay));
   --editor-selected-tint: var(--dsw-static-neutral-bluish-75);
+  --editor-tab-active-line: var(--dsw-alias-brand-primary);
+  --editor-dirty-dot: var(--dsw-alias-state-warn-primary);
 }
 
 :global(body[data-ds-dark-theme]) .editorRoot {
@@ -16,56 +18,4 @@
   flex: none;
   width: 1px;
   background: var(--dsw-alias-border-l2);
-}
-
-.editorPane {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  align-items: center;
-  justify-content: center;
-  background: var(--dsw-alias-markdown-code-block);
-}
-
-.emptyCard {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 24px 16px;
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-overlay);
-  text-align: center;
-}
-
-.emptyTitle {
-  font-family: var(--dsw-font-family);
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 600;
-  color: var(--dsw-alias-label-primary);
-}
-
-.emptyBody {
-  font-family: var(--dsw-font-family);
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
-}
-
-.emptyCta {
-  margin-top: 4px;
-  padding: 6px 12px;
-  border: none;
-  border-radius: 6px;
-  background: var(--dsw-alias-button-primary-fill);
-  font-family: var(--dsw-font-family);
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-primary-foreground);
-  cursor: not-allowed;
-  opacity: 0.55;
 }

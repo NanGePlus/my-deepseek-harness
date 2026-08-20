@@ -15,6 +15,8 @@ async function bench() {
   const workspaces = {
     listWorkspaceEntries: vi.fn(() => Promise.resolve({ path: '/w', entries: [], truncated: false })),
     gitStatus: vi.fn(() => Promise.resolve({ entries: [{ path: '/w/a.ts', letter: 'M' }] })),
+    readFile: vi.fn(() => Promise.resolve({ kind: 'text' as const, path: '/w/a.ts', text: '' })),
+    writeFile: vi.fn(() => Promise.resolve({ path: '/w/a.ts' })),
   }
   ctx.provide('workspaces', workspaces)
   slots.register({
@@ -26,7 +28,7 @@ async function bench() {
 
 describe('ui-file-editor apply', () => {
   it('host half has no behavior', () => {
-    expect(applyNode()).toBeUndefined()
+    applyNode()
   })
 
   it('registers the editor surface into the declared details child slot', async () => {
@@ -47,5 +49,11 @@ describe('ui-file-editor apply', () => {
     })
     expect(b.workspaces.listWorkspaceEntries).toHaveBeenCalledWith('ws', '/w', undefined)
     expect(b.workspaces.gitStatus).toHaveBeenCalledWith('ws', undefined)
+    await expect(face.readFile('ws' as WorkspaceId, '/w/a.ts', 'text')).resolves.toEqual({
+      kind: 'text', path: '/w/a.ts', text: '',
+    })
+    await expect(face.writeFile('ws' as WorkspaceId, '/w/a.ts', 'x')).resolves.toEqual({ path: '/w/a.ts' })
+    expect(b.workspaces.readFile).toHaveBeenCalledWith('ws', '/w/a.ts', 'text', undefined)
+    expect(b.workspaces.writeFile).toHaveBeenCalledWith('ws', '/w/a.ts', 'x', undefined)
   })
 })

@@ -3,6 +3,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   DirectoryListing, GitStatusListing, IWorkspaces, SessionId, SnapshotStore,
   WorkspaceEntriesListing, WorkspaceId, WorkspaceListState, WorkspaceView,
+  FileReadKind, FileReadResult, FileWriteResult,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { workspaceListState } from './fixtures.ts'
 import type { Stabilizer } from './fixtures.ts'
@@ -170,6 +171,47 @@ export class TestWorkspaces implements IWorkspaces {
     const stub = this.stubs.get('gitStatus')
     if (stub !== undefined) return await (stub(workspaceId, signal) as Promise<GitStatusListing>)
     return { entries: [] }
+  }
+
+  /**
+   * Read a Workspace file (recorded). The default returns empty text or empty bytes.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param kind - `text` or `bytes`.
+   * @param signal - optional abort signal.
+   * @returns the Host read payload.
+   */
+  async readFile(
+    workspaceId: WorkspaceId,
+    path: string,
+    kind: FileReadKind,
+    signal?: AbortSignal,
+  ): Promise<FileReadResult> {
+    this.calls.push({ method: 'readFile', args: [workspaceId, path, kind, signal] })
+    const stub = this.stubs.get('readFile')
+    if (stub !== undefined) return await (stub(workspaceId, path, kind, signal) as Promise<FileReadResult>)
+    if (kind === 'bytes') return { kind: 'bytes', path, data: '', mediaType: 'image/png' }
+    return { kind: 'text', path, text: '' }
+  }
+
+  /**
+   * Write a Workspace file (recorded). The default echoes the path.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param text - UTF-8 body.
+   * @param signal - optional abort signal.
+   * @returns the written path.
+   */
+  async writeFile(
+    workspaceId: WorkspaceId,
+    path: string,
+    text: string,
+    signal?: AbortSignal,
+  ): Promise<FileWriteResult> {
+    this.calls.push({ method: 'writeFile', args: [workspaceId, path, text, signal] })
+    const stub = this.stubs.get('writeFile')
+    if (stub !== undefined) return await (stub(workspaceId, path, text, signal) as Promise<FileWriteResult>)
+    return { path }
   }
 
   /**

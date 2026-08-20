@@ -19,6 +19,7 @@ export type {
   DirectoryEntry, DirectoryListing, GitStatusEntry, GitStatusListing,
   ToolCallView, ToolResultView, WorkspaceApi, WorkspaceId, WorkspaceView,
   WorkspaceEntry, WorkspaceEntriesListing,
+  FileReadKind, FileTextRead, FileBytesRead, FileReadResult, FileWriteResult,
   SkillsApi, SkillEntry,
   ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,
   MessageId, ModelReasoningEffort, ModelSelection, QueueAction, QueuedInboxItem, SessionModels,

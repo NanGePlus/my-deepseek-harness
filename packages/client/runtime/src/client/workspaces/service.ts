@@ -4,6 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {
   DirectoryListing, GitStatusListing, IApiClient, RpcError,
   SessionId, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
+  FileReadKind, FileReadResult, FileWriteResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '../contract/store.ts'
 import { createSnapshotStore } from '../contract/store.ts'
@@ -252,6 +253,44 @@ export class WorkspaceRuntime implements IWorkspaces {
    */
   async gitStatus(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitStatusListing> {
     const response = await this.api.host.gitStatus({ workspaceId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Read one file inside a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param kind - `text` for editable sources; `bytes` for image preview.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the text or byte payload.
+   */
+  async readFile(
+    workspaceId: WorkspaceId,
+    path: string,
+    kind: FileReadKind,
+    signal?: AbortSignal,
+  ): Promise<FileReadResult> {
+    const response = await this.api.host.readFile({ workspaceId, path, kind }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Write UTF-8 text to one path inside a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param text - UTF-8 body to write (creates the file when absent).
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the written path.
+   */
+  async writeFile(
+    workspaceId: WorkspaceId,
+    path: string,
+    text: string,
+    signal?: AbortSignal,
+  ): Promise<FileWriteResult> {
+    const response = await this.api.host.writeFile({ workspaceId, path, text }, signal)
     if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
     return response.result.value
   }

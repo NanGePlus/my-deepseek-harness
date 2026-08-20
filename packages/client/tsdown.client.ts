@@ -226,7 +226,9 @@ function clientConfig(id: string, entry: string): UserConfig {
     }, {
       name: 'dsh-css-modules-inline',
       resolveId(source: string, importer: string | undefined) {
-        if (!source.endsWith('.module.css')) return null
+        // Plain `.css` (monaco-editor) and `.module.css` both become virtual
+        // JS so tsdown's css-guard never asks for `@tsdown/css`.
+        if (!source.endsWith('.css')) return null
         const abs = importer !== undefined ? sourceAssetPath(source, importer) : source
         return CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
       },
@@ -236,10 +238,13 @@ function clientConfig(id: string, entry: string): UserConfig {
         // The virtual id otherwise hides the physical stylesheet from Rolldown's watch graph.
         this.addWatchFile(fileId)
         const source = await readFile(fileId)
+        const cssModules = fileId.endsWith('.module.css')
+          ? { pattern: '[hash]_[local]' as const }
+          : undefined
         const { code, exports: cssExports } = transform({
           filename: fileId,
           code: source,
-          cssModules: { pattern: '[hash]_[local]' },
+          cssModules,
           minify: true,
         })
         const classMap: Record<string, string> = {}
@@ -260,6 +265,9 @@ function clientConfig(id: string, entry: string): UserConfig {
       },
     }],
     outputOptions: {
+      // One factory file: the plugin loader fetches only lib/client.js.
+      // monaco-editor's dynamic import must stay inside that file.
+      codeSplitting: false,
       entryFileNames: 'client.js',
       // The map is served from /plugins/<scoped-package>/client.js.map. The
       // browser resolves its local sources back into URLs that mirror the
