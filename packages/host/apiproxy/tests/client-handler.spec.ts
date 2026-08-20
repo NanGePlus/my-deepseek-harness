@@ -78,6 +78,8 @@ function scriptedApi(overrides: {
       listDirectory: r => ok(r, { path: '/t', home: '/t', crumbs: [], entries: [], truncated: false }),
       listWorkspaceEntries: r => ok(r, { path: r.payload.path, entries: [], truncated: false }),
       gitStatus: r => ok(r, { entries: [] }),
+      readFile: r => ok(r, { kind: 'text', path: r.payload.path, text: '' }),
+      writeFile: r => ok(r, { path: r.payload.path }),
       createDirectory: r => ok(r, { path: '/t/new' }),
       openPath: r => ok(r, { opened: true as const }),
       ...overrides.host,

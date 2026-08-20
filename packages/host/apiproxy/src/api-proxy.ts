@@ -115,6 +115,14 @@ import {
   WorkspacePathOutOfBoundsError,
 } from './list-workspace-entries.ts'
 import { readGitStatus } from './git-status.ts'
+import {
+  readWorkspaceFile,
+  writeWorkspaceFile,
+  WorkspaceFileNotFoundError,
+  WorkspaceFileNotRegularError,
+  WorkspaceFileUnreadableError,
+  WorkspaceFileWriteFailedError,
+} from './read-write-file.ts'
 
 /** Page size when history is called without maxMessages. */
 const DEFAULT_MAX_MESSAGES = 50
@@ -3056,6 +3064,88 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         } catch (error: unknown) {
           if (signal.aborted) {
             return err(request, { code: 'cancelled', message: 'git status was aborted', details: {} })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async readFile(request, signal) {
+        const { workspaceId, path, kind } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await readWorkspaceFile(workspace.path, path, kind, signal))
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'file read was aborted', details: {} })
+          }
+          if (error instanceof WorkspacePathOutOfBoundsError) {
+            return err(request, {
+              code: 'workspace-path-out-of-bounds',
+              message: error.message,
+              details: { workspaceId, path: error.path },
+            })
+          }
+          if (error instanceof WorkspaceFileNotFoundError) {
+            return err(request, {
+              code: 'file-not-found',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          if (error instanceof WorkspaceFileNotRegularError) {
+            return err(request, {
+              code: 'file-not-regular',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          if (error instanceof WorkspaceFileUnreadableError) {
+            return err(request, {
+              code: 'file-unreadable',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async writeFile(request, signal) {
+        const { workspaceId, path, text } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await writeWorkspaceFile(workspace.path, path, text, signal))
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'file write was aborted', details: {} })
+          }
+          if (error instanceof WorkspacePathOutOfBoundsError) {
+            return err(request, {
+              code: 'workspace-path-out-of-bounds',
+              message: error.message,
+              details: { workspaceId, path: error.path },
+            })
+          }
+          if (error instanceof WorkspaceFileWriteFailedError) {
+            return err(request, {
+              code: 'file-write-failed',
+              message: error.message,
+              details: { path: error.path },
+            })
           }
           return err(request, {
             code: 'internal',

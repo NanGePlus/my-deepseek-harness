@@ -52,6 +52,38 @@ export interface GitStatusListing {
   entries: GitStatusEntry[]
 }
 
+/** host.readFile request discriminator: text for editable sources, bytes for image preview. */
+export type FileReadKind = 'text' | 'bytes'
+
+/** host.readFile response when `kind` is `text`. */
+export interface FileTextRead {
+  kind: 'text'
+  /** Absolute host path of the read file. */
+  path: string
+  /** UTF-8 text content. */
+  text: string
+}
+
+/** host.readFile response when `kind` is `bytes`. */
+export interface FileBytesRead {
+  kind: 'bytes'
+  /** Absolute host path of the read file. */
+  path: string
+  /** Canonical base64 of the on-disk bytes. */
+  data: string
+  /** Image media type derived from the file extension. */
+  mediaType: string
+}
+
+/** host.readFile response value. */
+export type FileReadResult = FileTextRead | FileBytesRead
+
+/** host.writeFile response value. */
+export interface FileWriteResult {
+  /** Absolute host path written. */
+  path: string
+}
+
 /** host.listDirectory response value: one directory level plus its ancestry. */
 export interface DirectoryListing {
   /** Absolute path of the listed directory. */
@@ -142,6 +174,26 @@ export interface HostApi {
     request: RpcRequest<{ workspaceId: WorkspaceId }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<GitStatusListing>>
+
+  /**
+   * Read one regular file inside a registered Workspace; the path must lie
+   * within that Workspace's root (`workspace-path-out-of-bounds` otherwise).
+   * Text reads return UTF-8; byte reads return canonical base64 for image preview.
+   */
+  readFile(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string; kind: FileReadKind }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<FileReadResult>>
+
+  /**
+   * Write editable UTF-8 text to one path inside a registered Workspace,
+   * creating the file when absent; out-of-bounds paths fail with
+   * `workspace-path-out-of-bounds`.
+   */
+  writeFile(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string; text: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<FileWriteResult>>
 
   /**
    * Open a filesystem path with the operating system's default application
