@@ -159,6 +159,9 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async listWorkspaceEntries(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { path: request.payload.path, entries: [], truncated: false } } }
       },
+      async gitStatus(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { entries: [] } } }
+      },
       async openPath(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { opened: true as const } } }
       },

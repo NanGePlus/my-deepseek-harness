@@ -43,6 +43,7 @@ export interface RpcMethodMap {
   'host.listDirectory': HostApi['listDirectory']
   'host.createDirectory': HostApi['createDirectory']
   'host.listWorkspaceEntries': HostApi['listWorkspaceEntries']
+  'host.gitStatus': HostApi['gitStatus']
   'host.openPath': HostApi['openPath']
   'workspace.list': WorkspaceApi['list']
   'workspace.create': WorkspaceApi['create']

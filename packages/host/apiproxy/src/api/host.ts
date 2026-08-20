@@ -38,6 +38,20 @@ export interface WorkspaceEntriesListing {
   truncated: boolean
 }
 
+/** One Git badge row for host.gitStatus. */
+export interface GitStatusEntry {
+  /** Absolute host path — the client never joins path segments itself. */
+  path: string
+  /** Client badge letter (M modified, U untracked, D deleted, etc.). */
+  letter: string
+}
+
+/** host.gitStatus response value: working-tree badges for a Workspace root. */
+export interface GitStatusListing {
+  /** Badge rows, path-sorted; empty when Git is absent or the root is not a repository. */
+  entries: GitStatusEntry[]
+}
+
 /** host.listDirectory response value: one directory level plus its ancestry. */
 export interface DirectoryListing {
   /** Absolute path of the listed directory. */
@@ -118,6 +132,16 @@ export interface HostApi {
     request: RpcRequest<{ workspaceId: WorkspaceId; path: string }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<WorkspaceEntriesListing>>
+
+  /**
+   * Read Git working-tree badge letters for a registered Workspace by running
+   * `git status --porcelain` at its root. Non-repositories and hosts without
+   * `git` return an empty entry list without error.
+   */
+  gitStatus(
+    request: RpcRequest<{ workspaceId: WorkspaceId }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<GitStatusListing>>
 
   /**
    * Open a filesystem path with the operating system's default application
