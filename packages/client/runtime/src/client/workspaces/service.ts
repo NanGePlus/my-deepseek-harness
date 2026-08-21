@@ -5,6 +5,7 @@ import type {
   DirectoryListing, GitStatusListing, IApiClient, RpcError,
   SessionId, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
+  LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '../contract/store.ts'
 import { createSnapshotStore } from '../contract/store.ts'
@@ -374,6 +375,68 @@ export class WorkspaceRuntime implements IWorkspaces {
         void error
       }
     })()
+  }
+
+  /**
+   * Sync one editor buffer with the host language server.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param text - current edit-buffer text.
+   * @param version - monotonic document version (>= 1).
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  async lspSyncDocument(
+    workspaceId: WorkspaceId,
+    path: string,
+    text: string,
+    version: number,
+    signal?: AbortSignal,
+  ): Promise<LspSyncDocumentResult> {
+    const response = await this.api.host.lspSyncDocument({ workspaceId, path, text, version }, signal)
+    if (!response.result.ok) throw new Error(`LSP sync failed: ${response.result.error.message}`)
+    return response.result.value
+  }
+
+  /**
+   * Close one editor document in the host language server.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  async lspCloseDocument(
+    workspaceId: WorkspaceId,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<LspCloseDocumentResult> {
+    const response = await this.api.host.lspCloseDocument({ workspaceId, path }, signal)
+    if (!response.result.ok) throw new Error(`LSP close failed: ${response.result.error.message}`)
+    return response.result.value
+  }
+
+  /**
+   * Query hover for one open editor document.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param text - current edit-buffer text.
+   * @param version - monotonic document version (>= 1).
+   * @param line - zero-based UTF-16 line.
+   * @param character - zero-based UTF-16 character.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  async lspHoverDocument(
+    workspaceId: WorkspaceId,
+    path: string,
+    text: string,
+    version: number,
+    line: number,
+    character: number,
+    signal?: AbortSignal,
+  ): Promise<LspHoverDocumentResult> {
+    const response = await this.api.host.lspHoverDocument({
+      workspaceId, path, text, version, line, character,
+    }, signal)
+    if (!response.result.ok) throw new Error(`LSP hover failed: ${response.result.error.message}`)
+    return response.result.value
   }
 
   /**

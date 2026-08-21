@@ -1,0 +1,24 @@
+.iconButton {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.iconButton[aria-pressed='true'] {
+  color: var(--dsw-alias-label-primary);
+}
+
+.panelRight {
+  transform: scaleX(-1);
+}

@@ -37,12 +37,64 @@ afterEach(() => {
 
 const SID = 's1' as SessionId
 
+/** Build DetailsPanel props for direct host tests in this suite. */
+function detailsPanelProps(input: {
+  snapshot: ConversationSnapshot
+  chat: ReturnType<ReturnType<typeof createChatStore>['create']>
+  renderSlot: DetailsSlotProps['renderSlot']
+  sessions?: SessionListState
+}): DetailsSlotProps {
+  const sessionList = createSnapshotStore<SessionListState>(input.sessions ?? {
+    ids: [SID],
+    byId: {
+      [SID]: {
+        id: SID,
+        displayTitle: 's1',
+        running: false,
+        blank: false,
+        updatedAt: 0,
+      },
+    },
+    current: SID,
+    phase: 'ready',
+    subagentsByParent: {},
+    jobsBySession: {},
+    currentAddress: undefined,
+  })
+  const workspaces = createSnapshotStore<WorkspaceListState>({
+    items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
+    baselinesReady: true, recentWorkspaceId: undefined,
+  })
+  return {
+    SessionProvider: SessionProviderStub,
+    renderSlot: input.renderSlot,
+    useSessions: bindSnapshotSelector(sessionList),
+    useWorkspaces: bindSnapshotSelector(workspaces),
+    useChat: bindSnapshotSelector({
+      getSnapshot: () => ({
+        sessionId: input.sessions?.current ?? SID,
+        state: input.chat.getSnapshot(),
+        actions: input.chat.actions as import('../src/client/session-bound-source.ts').SessionChatBindingActions,
+      }),
+      subscribe: listener => input.chat.subscribe(listener),
+    }),
+    useConversation: bindSnapshotSelector({
+      getSnapshot: () => input.snapshot,
+      subscribe: () => () => {},
+    }),
+    closeDetails: vi.fn(),
+    openDetails: vi.fn(),
+    t: t as DetailsSlotProps['t'],
+  }
+}
+
 /** Minimal framework seat for direct DetailsPanel host tests. */
 const SessionProviderStub: SessionProviderComponent = ({ children }) => children(SID)
 
 /** Observe the owner currency without importing the Tool details renderer. */
 function renderToolDetailsProbe(owners?: DetailsToolOwnerProps[]): DetailsSlotProps['renderSlot'] {
-  return (_key, owner) => {
+  return (key, owner) => {
+    if (key !== 'conversation.details.tool') return null
     owners?.push(owner as unknown as DetailsToolOwnerProps)
     return <div data-testid="tool-details-seat" />
   }
@@ -110,35 +162,17 @@ describe('render branch tails', () => {
     const snap = snapshotBase()
     const chat = createChatStore().create()
     chat.actions.select({ turnSeq: 1, callId: 'ghost' } satisfies SelectionTarget)
-    const emptyList = createSnapshotStore<SessionListState>(
-      { ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined })
-    const emptyWorkspaces = createSnapshotStore<WorkspaceListState>({
-      items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
-      baselinesReady: true, recentWorkspaceId: undefined,
-    })
+    chat.actions.setDetailsTab('tool')
     const view = render(
-      <DetailsPanel
-        SessionProvider={SessionProviderStub}
-        renderSlot={renderToolDetailsProbe()}
-        sessionId={SID}
-        useSession={bindSnapshotSelector({ getSnapshot: () => snap, subscribe: () => () => {} })}
-        useSessions={bindSnapshotSelector(emptyList)}
-        useWorkspaces={bindSnapshotSelector(emptyWorkspaces)}
-        useProjection={(() => undefined)}
-        useInput={(() => { throw new Error('unused') })}
-        inputActions={{
-          setDraft: () => {},
-          addImages: () => true,
-          removeImage: () => {},
-          pruneImages: () => {},
-          submit: () => {},
-        }}
-        useStore={bindSnapshotSelector(chat)}
-        actions={chat.actions}
-        closeDetails={vi.fn()}
-        openDetails={vi.fn()}
-        t={t}
-      />,
+      <DetailsPanel {...detailsPanelProps({
+        snapshot: snap,
+        chat,
+        renderSlot: renderToolDetailsProbe(),
+        sessions: {
+          ids: [], byId: {}, current: undefined, phase: 'ready',
+          subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
+        },
+      })} />,
     )
     expect(view.getByRole('tab', { name: 'Tool 详情' })).toBeTruthy()
     expect(view.getByText('该调用不在当前窗口内')).toBeTruthy()
@@ -167,36 +201,14 @@ describe('render branch tails', () => {
     snap.chat = chatSnapshotFixture({ runningCalls: snap.runningCalls })
     const chat = createChatStore().create()
     chat.actions.select({ turnSeq: 9, callId: 'p1:code:1:code:1', toolName: 'read' } satisfies SelectionTarget)
-    const emptyList = createSnapshotStore<SessionListState>(
-      { ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined })
-    const emptyWorkspaces = createSnapshotStore<WorkspaceListState>({
-      items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
-      baselinesReady: true, recentWorkspaceId: undefined,
-    })
+    chat.actions.setDetailsTab('tool')
     const owners: DetailsToolOwnerProps[] = []
     const view = render(
-      <DetailsPanel
-        SessionProvider={SessionProviderStub}
-        renderSlot={renderToolDetailsProbe(owners)}
-        sessionId={SID}
-        useSession={bindSnapshotSelector({ getSnapshot: () => snap, subscribe: () => () => {} })}
-        useSessions={bindSnapshotSelector(emptyList)}
-        useWorkspaces={bindSnapshotSelector(emptyWorkspaces)}
-        useProjection={(() => undefined)}
-        useInput={(() => { throw new Error('unused') })}
-        inputActions={{
-          setDraft: () => {},
-          addImages: () => true,
-          removeImage: () => {},
-          pruneImages: () => {},
-          submit: () => {},
-        }}
-        useStore={bindSnapshotSelector(chat)}
-        actions={chat.actions}
-        closeDetails={vi.fn()}
-        openDetails={vi.fn()}
-        t={t}
-      />,
+      <DetailsPanel {...detailsPanelProps({
+        snapshot: snap,
+        chat,
+        renderSlot: renderToolDetailsProbe(owners),
+      })} />,
     )
     // Conversation resolves the selected sub-call and hands its complete
     // frozen block to the Tool-owned details seat.

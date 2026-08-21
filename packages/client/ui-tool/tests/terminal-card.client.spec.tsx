@@ -11,7 +11,7 @@ import {
   createSnapshotStore, EMPTY_CONVERSATION_VIEWS,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
-  ConversationSnapshot, RunningToolCall, SessionId, SessionListState, ToolResultNode, WorkspaceListState,
+  ConversationSnapshot, RunningToolCall, SessionId, SessionListState, ToolResultNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ToolCallView, ToolResultView } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SelectionTarget } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -22,7 +22,7 @@ import { createChatStore } from '@deepseek-ai/dsh-client-ui-conversation/src/cli
 import { GenericToolCard, type GenericToolCardProps } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { DetailsPanel } from '@deepseek-ai/dsh-client-ui-conversation/src/client/skeleton/DetailsPanel.tsx'
 import { BashRow } from '../src/client/tool/toolviews/bash-sample.tsx'
-import { renderToolDetails, SessionProviderStub, toolChatSnapshot } from './tool-details-render.client.tsx'
+import { detailsPanelTestProps, renderToolDetails, toolChatSnapshot } from './tool-details-render.client.tsx'
 import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
 
 type BashRowProps = Parameters<typeof BashRow>[0]
@@ -447,37 +447,14 @@ describe('DetailsPanel Output section', () => {
     localStorage.clear()
     const chat = createChatStore().create()
     if (selection !== null) chat.actions.select(selection)
-    const sessions = createSnapshotStore<SessionListState>(cwd === undefined
-      ? { ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined }
-      : {
-        ids: [SID],
-        byId: { [SID]: { id: SID, displayTitle: 'r', running: false, blank: false, updatedAt: 0, cwd } },
-        current: SID,
-        phase: 'ready',
-        subagentsByParent: {}, jobsBySession: {},
-        currentAddress: undefined,
-      })
-    const workspaces = createSnapshotStore<WorkspaceListState>({
-      items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
-      baselinesReady: true, recentWorkspaceId: undefined,
-    })
     return render(
-      <DetailsPanel
-        SessionProvider={SessionProviderStub}
-        renderSlot={renderToolDetails(t)}
-        sessionId={SID}
-        useSession={bindSnapshotSelector({ getSnapshot: () => snapshot, subscribe: () => () => {} })}
-        useSessions={bindSnapshotSelector(sessions)}
-        useWorkspaces={bindSnapshotSelector(workspaces)}
-        useInput={(() => { throw new Error('unused') })}
-        inputActions={{ setDraft: () => {}, addImages: () => true, removeImage: () => {}, pruneImages: () => {}, submit: () => {} }}
-        useProjection={(() => undefined)}
-        useStore={bindSnapshotSelector(chat)}
-        actions={chat.actions}
-        closeDetails={vi.fn()}
-        openDetails={vi.fn()}
-        t={t}
-      />,
+      <DetailsPanel {...detailsPanelTestProps({
+        snapshot,
+        chat,
+        renderSlot: renderToolDetails(t),
+        t,
+        ...(cwd !== undefined ? { cwd } : {}),
+      })} />,
     )
   }
 
@@ -636,39 +613,6 @@ describe('DetailsPanel Output section', () => {
     expect(view.getByText('点击消息流中的工具行查看详情')).toBeTruthy()
   })
 
-  it('the close button reaches closeDetails', () => {
-    localStorage.clear()
-    const chat = createChatStore().create()
-    const closeDetails = vi.fn()
-    const snap = snapshot()
-    const view = render(
-      <DetailsPanel
-        SessionProvider={SessionProviderStub}
-        renderSlot={renderToolDetails(t)}
-        sessionId={SID}
-        useSession={bindSnapshotSelector({ getSnapshot: () => snap, subscribe: () => () => {} })}
-        useSessions={bindSnapshotSelector(createSnapshotStore<SessionListState>(
-          {
-            ids: [], byId: {}, current: undefined, phase: 'ready',
-            subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
-          }))}
-        useWorkspaces={bindSnapshotSelector(createSnapshotStore<WorkspaceListState>({
-          items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
-          baselinesReady: true, recentWorkspaceId: undefined,
-        }))}
-        useInput={(() => { throw new Error('unused') })}
-        inputActions={{ setDraft: () => {}, addImages: () => true, removeImage: () => {}, pruneImages: () => {}, submit: () => {} }}
-        useProjection={(() => undefined)}
-        useStore={bindSnapshotSelector(chat)}
-        actions={chat.actions}
-        closeDetails={closeDetails}
-        openDetails={vi.fn()}
-        t={t}
-      />,
-    )
-    fireEvent.click(view.getByRole('button', { name: '关闭详情' }))
-    expect(closeDetails).toHaveBeenCalledTimes(1)
-  })
 
   it('a non-text result block renders as JSON, and an empty result falls back to its error', () => {
     const nonText = mount(snapshot({

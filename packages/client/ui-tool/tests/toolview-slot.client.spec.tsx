@@ -54,7 +54,7 @@ function AppRoot({ renderSlot }: AppRootProps) {
 
 const LAYOUT_CHILDREN = {
   'conversation': { kind: 'single', scope: 'session-maybe' },
-  'details': { kind: 'single', scope: 'session' },
+  'details': { kind: 'single', scope: 'root' },
 } as const
 
 /**
@@ -139,11 +139,11 @@ describe('keyed toolview hole through the real machinery', () => {
     await b.runtime.dispose()
   })
 
-  it('bash summary clicks do not open details or host paths', async () => {
+  it('bash summary clicks open details but not host paths', async () => {
     const b = await bench([toolResult(3, 'c1', 'bash')])
     const view = b.runtime.renderRoot()
     view.getByText('Build').click()
-    expect(b.layout.openDetails).not.toHaveBeenCalled()
+    expect(b.layout.openDetails).toHaveBeenCalledTimes(1)
     expect(b.runtime.workspaces.calls.some(c => c.method === 'openPath')).toBe(false)
     await b.runtime.dispose()
   })

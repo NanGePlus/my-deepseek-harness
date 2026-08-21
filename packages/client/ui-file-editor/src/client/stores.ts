@@ -1,7 +1,8 @@
 /**
- * Session-scoped editor tabs and edit buffers. Dirty is derived
+ * Workspace-scoped editor tabs and edit buffers. Dirty is derived
  * (`buffer !== saved`); nothing here is written to the Session log.
  */
+import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
 
 /** Editable-text tab: buffer is the unsaved copy; saved is the last explicit write. */
@@ -44,71 +45,109 @@ export interface NonOpenableEditorTab {
 /** One open editor tab. */
 export type EditorTab = TextEditorTab | PreviewEditorTab | NonOpenableEditorTab
 
-/** Editor-surface store: open tabs and the active path. */
+/** Editor-surface store: open tabs and the active path for one Workspace. */
 export interface FileEditorState {
   tabs: EditorTab[]
   /** Path of the focused tab; undefined when no tab is open. */
   activePath: string | undefined
 }
 
+/** Root store: one editor partition per registered Workspace. */
+export interface FileEditorRootState {
+  byWorkspace: Partial<Record<WorkspaceId, FileEditorState>>
+}
+
+const EMPTY_PARTITION: FileEditorState = { tabs: [], activePath: undefined }
+
+/**
+ * Read one Workspace editor partition (empty when never opened).
+ * @param root - root store snapshot.
+ * @param workspaceId - bound Workspace id.
+ */
+export function workspaceEditorState(
+  root: FileEditorRootState,
+  workspaceId: WorkspaceId,
+): FileEditorState {
+  return root.byWorkspace[workspaceId] ?? EMPTY_PARTITION
+}
+
+function partition(draft: FileEditorRootState, workspaceId: WorkspaceId): FileEditorState {
+  let state = draft.byWorkspace[workspaceId]
+  if (state === undefined) {
+    state = { tabs: [], activePath: undefined }
+    draft.byWorkspace[workspaceId] = state
+  }
+  return state
+}
+
 /** Annotation twin of the actions literal; drift fails at defineStore. */
 type FileEditorActions = {
-  openTab: (draft: FileEditorState, tab: EditorTab) => void
-  focusTab: (draft: FileEditorState, path: string) => void
-  closeTab: (draft: FileEditorState, path: string) => void
-  setBuffer: (draft: FileEditorState, path: string, buffer: string) => void
-  markSaved: (draft: FileEditorState, path: string) => void
-  reloadTextTab: (draft: FileEditorState, path: string, text: string) => void
-  renameTabPath: (draft: FileEditorState, oldPath: string, newPath: string, newName: string) => void
-  closeAllTabs: (draft: FileEditorState) => void
+  openTab: (draft: FileEditorRootState, workspaceId: WorkspaceId, tab: EditorTab) => void
+  focusTab: (draft: FileEditorRootState, workspaceId: WorkspaceId, path: string) => void
+  closeTab: (draft: FileEditorRootState, workspaceId: WorkspaceId, path: string) => void
+  setBuffer: (draft: FileEditorRootState, workspaceId: WorkspaceId, path: string, buffer: string) => void
+  markSaved: (draft: FileEditorRootState, workspaceId: WorkspaceId, path: string) => void
+  reloadTextTab: (draft: FileEditorRootState, workspaceId: WorkspaceId, path: string, text: string) => void
+  renameTabPath: (
+    draft: FileEditorRootState,
+    workspaceId: WorkspaceId,
+    oldPath: string,
+    newPath: string,
+    newName: string,
+  ) => void
+  closeAllTabs: (draft: FileEditorRootState, workspaceId: WorkspaceId) => void
 }
 
 /**
- * Create the exclusive file-editor store handle (one instance per Session).
+ * Create the exclusive file-editor store handle (one root instance, partitions per Workspace).
  * @returns the store handle for `slots.register`.
  */
-export function createFileEditorStore(): EngineStoreHandle<FileEditorState, FileEditorActions> {
+export function createFileEditorStore(): EngineStoreHandle<FileEditorRootState, FileEditorActions> {
   return defineStore({
-    init: (): FileEditorState => ({ tabs: [], activePath: undefined }),
+    init: (): FileEditorRootState => ({ byWorkspace: {} }),
     actions: {
-      openTab: (draft, tab: EditorTab) => {
-        draft.tabs.push(tab)
-        draft.activePath = tab.path
+      openTab: (draft, workspaceId, tab) => {
+        const state = partition(draft, workspaceId)
+        state.tabs.push(tab)
+        state.activePath = tab.path
       },
-      focusTab: (draft, path: string) => {
-        draft.activePath = path
+      focusTab: (draft, workspaceId, path) => {
+        partition(draft, workspaceId).activePath = path
       },
-      closeTab: (draft, path: string) => {
-        draft.tabs = draft.tabs.filter(item => item.path !== path)
-        if (draft.activePath === path) draft.activePath = draft.tabs.at(-1)?.path
+      closeTab: (draft, workspaceId, path) => {
+        const state = partition(draft, workspaceId)
+        state.tabs = state.tabs.filter(item => item.path !== path)
+        if (state.activePath === path) state.activePath = state.tabs.at(-1)?.path
       },
-      setBuffer: (draft, path: string, buffer: string) => {
-        const tab = draft.tabs.find(item => item.path === path)
+      setBuffer: (draft, workspaceId, path, buffer) => {
+        const tab = partition(draft, workspaceId).tabs.find(item => item.path === path)
         if (tab?.kind === 'text') tab.buffer = buffer
       },
-      markSaved: (draft, path: string) => {
-        const tab = draft.tabs.find(item => item.path === path)
+      markSaved: (draft, workspaceId, path) => {
+        const tab = partition(draft, workspaceId).tabs.find(item => item.path === path)
         if (tab?.kind === 'text') tab.saved = tab.buffer
       },
-      reloadTextTab: (draft, path: string, text: string) => {
-        const tab = draft.tabs.find(item => item.path === path)
+      reloadTextTab: (draft, workspaceId, path, text) => {
+        const tab = partition(draft, workspaceId).tabs.find(item => item.path === path)
         if (tab?.kind === 'text') {
           tab.buffer = text
           tab.saved = text
         }
       },
-      renameTabPath: (draft, oldPath: string, newPath: string, newName: string) => {
-        for (const tab of draft.tabs) {
+      renameTabPath: (draft, workspaceId, oldPath, newPath, newName) => {
+        const state = partition(draft, workspaceId)
+        for (const tab of state.tabs) {
           if (tab.path === oldPath) {
             tab.path = newPath
             tab.name = newName
           }
         }
-        if (draft.activePath === oldPath) draft.activePath = newPath
+        if (state.activePath === oldPath) state.activePath = newPath
       },
-      closeAllTabs: (draft) => {
-        draft.tabs = []
-        draft.activePath = undefined
+      closeAllTabs: (draft, workspaceId) => {
+        const state = partition(draft, workspaceId)
+        state.tabs = []
+        state.activePath = undefined
       },
     },
   })

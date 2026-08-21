@@ -171,7 +171,7 @@ async function bench(snapshot: ConversationSnapshot) {
     name: 'root',
     children: {
       'conversation': { kind: 'single', scope: 'session-maybe' },
-      'details': { kind: 'single', scope: 'session' },
+      'details': { kind: 'single', scope: 'root' },
     },
   }, AppRoot)
 
@@ -262,7 +262,7 @@ describe('run_code sub-calls through the real chat machinery', () => {
     expect(nested).not.toBeNull()
   })
 
-  it('a file sub-row click opens the host path; bash sub-rows do not open details', async () => {
+  it('a file sub-row click opens the host path; bash sub-rows open details', async () => {
     const parent = 'call-64'
     const subCalls = [
       subCall(11, parent, 1, 'read', { path: 'notes/demo.txt' }, 'ok'),
@@ -276,7 +276,7 @@ describe('run_code sub-calls through the real chat machinery', () => {
       expect(b.workspaces.openPath).toHaveBeenCalledWith('notes/demo.txt')
     })
     view.getByText('List notes').click()
-    expect(b.layout.openDetails).not.toHaveBeenCalled()
+    expect(b.layout.openDetails).toHaveBeenCalledTimes(1)
   })
 
   it('a RUNNING run_code call nests its so-far dispatches under the spinner row', async () => {

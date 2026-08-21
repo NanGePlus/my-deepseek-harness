@@ -207,3 +207,63 @@ export const watchPathFrameSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('host/path-changed'), path: z.string() }),
   z.object({ type: z.literal('stream/error'), error: rpcErrorSchema }),
 ])
+
+const hostLspPositionSchema = z.object({
+  line: z.number().int().min(0),
+  character: z.number().int().min(0),
+})
+
+const hostLspRangeSchema = z.object({
+  start: hostLspPositionSchema,
+  end: hostLspPositionSchema,
+})
+
+const hostLspDiagnosticSchema = z.object({
+  message: z.string(),
+  severity: z.enum(['error', 'warning', 'info', 'hint']),
+  range: hostLspRangeSchema,
+})
+
+/** host.lspSyncDocument request payload. */
+export const hostLspSyncDocumentRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+  text: z.string(),
+  version: z.number().int().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.lspSyncDocument'>>>
+
+/** host.lspSyncDocument response value. */
+export const hostLspSyncDocumentValueSchema = z.object({
+  diagnostics: z.array(hostLspDiagnosticSchema),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.lspSyncDocument'>>>
+
+/** host.lspCloseDocument request payload. */
+export const hostLspCloseDocumentRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.lspCloseDocument'>>>
+
+/** host.lspCloseDocument response value. */
+export const hostLspCloseDocumentValueSchema = z.object({
+  closed: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.lspCloseDocument'>>>
+
+/** host.lspHoverDocument request payload. */
+export const hostLspHoverDocumentRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+  text: z.string(),
+  version: z.number().int().min(1),
+  line: z.number().int().min(0),
+  character: z.number().int().min(0),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.lspHoverDocument'>>>
+
+const hostLspHoverSchema = z.object({
+  contents: z.string(),
+  range: hostLspRangeSchema.optional(),
+})
+
+/** host.lspHoverDocument response value. */
+export const hostLspHoverDocumentValueSchema = z.object({
+  hover: hostLspHoverSchema.nullable(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.lspHoverDocument'>>>

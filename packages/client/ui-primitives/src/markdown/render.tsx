@@ -22,6 +22,8 @@ import type * as Md from 'mdast'
 import type {} from 'mdast-util-math'
 import { normalizeUri } from 'micromark-util-sanitize-uri'
 import { CodeBlock } from './CodeBlock.tsx'
+import { MermaidBlock } from './MermaidBlock.tsx'
+import type { MermaidSecurityLevel } from './mermaid-load.ts'
 import { renderTexToReact } from './katex.tsx'
 import type { PositionedBlock } from './incremental.ts'
 import css from './MarkdownText.module.css'
@@ -133,6 +135,8 @@ export interface MarkdownRenderContext {
   readonly footnoteOrder: string[]
   /** References rendered per identifier; drives the section's back-reference count. */
   readonly footnoteCounts: Map<string, number>
+  /** Mermaid sanitizer mode for settled diagram fences. */
+  readonly mermaidSecurityLevel?: MermaidSecurityLevel | undefined
 }
 
 /**
@@ -297,6 +301,12 @@ function renderNode(node: Md.RootContent, key: Key, context: MarkdownRenderConte
   }
 }
 
+function fenceLanguage(language: string | null | undefined): string | undefined {
+  if (language === null || language === undefined) return undefined
+  const match = /^[\w-]+/.exec(language.trim().toLowerCase())
+  return match?.[0]
+}
+
 function renderCode(node: Md.Code, key: Key, context: MarkdownRenderContext): ReactNode {
   const language = node.lang ?? undefined
   if (node.value === '') {
@@ -307,13 +317,22 @@ function renderCode(node: Md.Code, key: Key, context: MarkdownRenderContext): Re
       </pre>
     )
   }
-  // The replaced pipeline recovered the grammar id from the hast class with
-  // /language-([\w-]+)/, which truncates at the first non-word character.
-  const lang = language === undefined ? undefined : /^[\w-]+/.exec(language)?.[0]
+  const lang = fenceLanguage(language)
   if (!context.streaming && lang === 'math') {
     // ```math fences render as display TeX once settled (rehype-katex parity);
     // its text extraction saw the code block's trailing newline.
     return <Fragment key={key}>{renderTexToReact(`${node.value}\n`, true)}</Fragment>
+  }
+  if (!context.streaming && lang === 'mermaid') {
+    return (
+      <MermaidBlock
+        key={key}
+        source={`${node.value}\n`}
+        securityLevel={context.mermaidSecurityLevel}
+        copyLabel={context.codeLabels?.copyLabel}
+        copiedLabel={context.codeLabels?.copiedLabel}
+      />
+    )
   }
   return (
     <CodeBlock

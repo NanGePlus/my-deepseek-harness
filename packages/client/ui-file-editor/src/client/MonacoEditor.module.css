@@ -4,12 +4,28 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
+  background: var(--dsw-specific-sidebar-fill);
 }
 
 .host {
   flex: 1;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
+}
+
+.host :global(.monaco-editor),
+.host :global(.monaco-editor .margin),
+.host :global(.monaco-editor .monaco-editor-background) {
+  background-color: var(--dsw-specific-sidebar-fill);
+}
+
+.document .host :global(.monaco-editor),
+.document .host :global(.monaco-editor .margin),
+.document .host :global(.monaco-editor .monaco-editor-background) {
+  background-color: var(--dsw-alias-bg-base);
 }
 
 .fallback {
@@ -19,11 +35,43 @@
   min-height: 0;
   padding: 8px 12px;
   border: none;
-  background: transparent;
+  background: var(--dsw-specific-sidebar-fill);
   font-family: var(--ds-font-family-code);
   font-size: 13px;
   line-height: 20px;
   color: var(--dsw-alias-label-primary);
   resize: none;
   outline: none;
+}
+
+.document {
+  background: var(--dsw-alias-bg-base);
+}
+
+/* Monaco renders hovers inside the editor host when fixedOverflowWidgets is true. */
+.wrap :global(.monaco-hover) {
+  background: var(--dsw-alias-bg-overlay) !important;
+  border: 1px solid var(--dsw-alias-border-l2) !important;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+}
+
+.wrap :global(.monaco-hover-content) {
+  padding: 6px 10px;
+  font-family: var(--dsw-font-family);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+}
+
+.wrap :global(.monaco-hover-content .markdown-hover),
+.wrap :global(.monaco-hover-content .hover-row) {
+  color: var(--dsw-alias-label-primary);
+}
+
+.wrap :global(.monaco-hover-content .monaco-tokenized-source) {
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 18px;
 }

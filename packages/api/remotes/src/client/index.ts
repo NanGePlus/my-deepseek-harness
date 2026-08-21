@@ -43,6 +43,8 @@ export type {
   SubagentAddress, SubagentCatalog, JobView, ToolCallView, ToolEventView, ToolResultView,
   WorkspaceEntry, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
   FileReadKind, FileTextRead, FileBytesRead, FileReadResult, FileWriteResult, PathMutationResult,
+  HostLspDiagnostic, HostLspPosition, HostLspRange, LspSyncDocumentResult, LspCloseDocumentResult,
+  HostLspHover, LspHoverDocumentResult,
 } from '@deepseek-ai/dsh-client-connection/client'
 export type {} from '@deepseek-ai/dsh-api-gateway/client'
 export type {} from '@deepseek-ai/dsh-cordis-host-runner/remote'

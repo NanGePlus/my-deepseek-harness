@@ -5,21 +5,25 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import clsx from 'clsx'
 import {
   Button, IconCloseOutline16, IconEditOutline16, IconFolderClose16, IconPlusOutline16,
-  IconSearchOutline16, IconTrashOutline16, Input, Modal,
+  IconSearchOutline16, IconTrashOutline16, IconChevronLeftOutline14, Input, Modal, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
-  FileWriteResult, GitStatusListing, PathMutationResult, WorkspaceEntriesListing, WorkspaceEntry,
+  FileWriteResult, GitStatusListing, HostLspDiagnostic, PathMutationResult, WorkspaceEntriesListing, WorkspaceEntry,
   WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { FileTypeIcon } from './file-type-icon.tsx'
+import { lspErrorCount } from './diagnostics-ui.ts'
 import {
   joinChildPath, parentDirectoryForCreate, siblingNameExists,
 } from './file-tree-parent.ts'
 import { flattenVisibleTree, paintVisibleRows } from './flatten-visible.ts'
 import css from './FileTreePane.module.css'
+import iconCss from './IconButton.module.css'
 import dialogCss from './FileTreeDialogs.module.css'
+
+const TOOLTIP_DELAY_MS = 500
 
 /** Host listing and Git callbacks injected from WorkspaceRuntime. */
 export interface FileTreeHost {
@@ -116,6 +120,14 @@ export interface FileTreePaneProps extends FileTreeHost, FileTreeMutationHost {
   onOpenFile: (entry: WorkspaceEntry) => void
   /** Increment to open the new-file dialog from outside the toolbar. */
   newFileTrigger?: number
+  /** Increment after disk writes so Git badges refresh without rebinding the Workspace. */
+  gitRefreshTrigger?: number
+  /** When true, the pane is visually collapsed (width 0). */
+  collapsed?: boolean
+  /** Hide the file tree pane. */
+  onHide?: () => void
+  /** Explicit tree width in pixels; omit to use the default ratio. */
+  treeWidthPx?: number | null
   /**
    * Notify the editor pane that a path was deleted on disk.
    * @param path - deleted absolute path.
@@ -128,6 +140,8 @@ export interface FileTreePaneProps extends FileTreeHost, FileTreeMutationHost {
    * @param newName - new base name.
    */
   onPathRenamed?: (oldPath: string, newPath: string, newName: string) => void
+  /** Language-server diagnostics keyed by absolute file path. */
+  diagnosticsByPath?: ReadonlyMap<string, readonly HostLspDiagnostic[]> | undefined
 }
 
 const ROW_HEIGHT_PX = 22
@@ -150,7 +164,9 @@ function isNameConflict(error: unknown): boolean {
 export function FileTreePane({
   workspace, listWorkspaceEntries, gitStatus, deletePath, renamePath,
   createWorkspaceDirectory, writeFile, t, onOpenFile, newFileTrigger = 0,
-  onPathDeleted, onPathRenamed,
+  gitRefreshTrigger = 0,
+  collapsed = false, onHide, treeWidthPx = null,
+  onPathDeleted, onPathRenamed, diagnosticsByPath,
 }: FileTreePaneProps) {
   const [childrenByPath, setChildrenByPath] = useState<Map<string, readonly WorkspaceEntry[]>>(
     () => new Map(),
@@ -168,6 +184,7 @@ export function FileTreePane({
   const [opError, setOpError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const listingAbort = useRef<AbortController | null>(null)
+  const gitAbort = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const composingRef = useRef(false)
 
@@ -217,9 +234,33 @@ export function FileTreePane({
     }
   }, [workspace, expanded, fetchDirectory])
 
+  const boundWorkspaceId = workspace?.workspaceId
+  const boundWorkspacePath = workspace?.path
+
+  const refreshGitStatus = useCallback(async () => {
+    if (workspace === undefined) return
+    gitAbort.current?.abort()
+    const ac = new AbortController()
+    gitAbort.current = ac
+    setGitLoading(true)
+    try {
+      const listing = await gitStatus(workspace.workspaceId, ac.signal)
+      if (ac.signal.aborted) return
+      setGitByPath(new Map(listing.entries.map(entry => [entry.path, entry.letter])))
+    } catch (error: unknown) {
+      if (ac.signal.aborted) return
+      void error
+      setGitByPath(new Map())
+    } finally {
+      if (!ac.signal.aborted) setGitLoading(false)
+    }
+  }, [workspace, gitStatus])
+
   useEffect(() => {
     const ac = new AbortController()
     listingAbort.current = ac
+    gitAbort.current?.abort()
+    gitAbort.current = null
     setChildrenByPath(new Map())
     setExpanded(new Set())
     setLoadingPaths(new Set())
@@ -232,37 +273,31 @@ export function FileTreePane({
     setNameError(null)
     setOpError(null)
     setSubmitting(false)
-    if (workspace === undefined) {
+    if (boundWorkspaceId === undefined || boundWorkspacePath === undefined) {
       setGitLoading(false)
       return () => { ac.abort() }
     }
-    setGitLoading(true)
-    void listWorkspaceEntries(workspace.workspaceId, workspace.path, ac.signal)
+    void listWorkspaceEntries(boundWorkspaceId, boundWorkspacePath, ac.signal)
       .then((listing) => {
         if (ac.signal.aborted) return
-        setChildrenByPath(new Map([[workspace.path, listing.entries]]))
+        setChildrenByPath(new Map([[boundWorkspacePath, listing.entries]]))
       })
       .catch((error: unknown) => {
         if (ac.signal.aborted) return
         void error
+        setChildrenByPath(new Map([[boundWorkspacePath, []]]))
       })
-    void gitStatus(workspace.workspaceId, ac.signal)
-      .then((listing) => {
-        if (ac.signal.aborted) return
-        setGitByPath(new Map(listing.entries.map(entry => [entry.path, entry.letter])))
-      })
-      .catch((error: unknown) => {
-        if (ac.signal.aborted) return
-        setGitByPath(new Map())
-        void error
-      })
-      .finally(() => {
-        if (!ac.signal.aborted) setGitLoading(false)
-      })
+    void refreshGitStatus()
     return () => {
       ac.abort()
+      gitAbort.current?.abort()
     }
-  }, [workspace, listWorkspaceEntries, gitStatus])
+  }, [boundWorkspaceId, boundWorkspacePath, listWorkspaceEntries, refreshGitStatus])
+
+  useEffect(() => {
+    if (gitRefreshTrigger === 0) return
+    void refreshGitStatus()
+  }, [gitRefreshTrigger, refreshGitStatus])
 
   useEffect(() => {
     if (newFileTrigger === 0 || workspace === undefined) return
@@ -299,11 +334,14 @@ export function FileTreePane({
     ? []
     : (childrenByPath.get(workspace.path) ?? [])
   const rootLoaded = workspace !== undefined && childrenByPath.has(workspace.path)
+  const rootPending = workspace !== undefined && !rootLoaded
   const rows = useMemo(
     () => flattenVisibleTree(rootEntries, expanded, loadingPaths, childrenByPath, filter),
     [rootEntries, expanded, loadingPaths, childrenByPath, filter],
   )
-  const emptyWorkspace = rootLoaded && rootEntries.length === 0 && filter.trim() === ''
+  const showTreeEmpty = filter.trim() === '' && !rootPending && (
+    workspace === undefined || rootEntries.length === 0
+  )
   const filterNoMatch = rootLoaded && rootEntries.length > 0 && filter.trim() !== '' && rows.length === 0
 
   const virtualizer = useVirtualizer({
@@ -373,6 +411,7 @@ export function FileTreePane({
         setSelectedPath(result.path)
         setNameDialog(null)
         setNameDraft('')
+        void refreshGitStatus()
         return
       }
       const parent = parentDirectoryForCreate(workspace.path, selectedEntry)
@@ -388,6 +427,7 @@ export function FileTreePane({
         setSelectedPath(result.path)
         setNameDialog(null)
         setNameDraft('')
+        void refreshGitStatus()
         return
       }
       await writeFile(workspace.workspaceId, childPath, '')
@@ -402,6 +442,7 @@ export function FileTreePane({
       onOpenFile(created)
       setNameDialog(null)
       setNameDraft('')
+      void refreshGitStatus()
     } catch (error: unknown) {
       if (isNameConflict(error)) {
         setNameError(t('editor.error.renameConflict'))
@@ -427,6 +468,7 @@ export function FileTreePane({
       if (selectedPath === deleteTarget.path) setSelectedPath(undefined)
       await invalidateDirectory(parent)
       setDeleteTarget(null)
+      void refreshGitStatus()
     } catch (error: unknown) {
       void error
       setOpError(t('editor.error.delete'))
@@ -448,156 +490,206 @@ export function FileTreePane({
   const treeLabel = workspace?.title ?? t('editor.tree.label')
 
   return (
-    <div className={css.pane}>
+    <div
+      className={clsx(
+        css.pane,
+        collapsed && css.paneCollapsed,
+        treeWidthPx !== null && css.paneResized,
+      )}
+      style={treeWidthPx !== null ? { width: treeWidthPx } : undefined}
+      data-file-tree-pane="true"
+      aria-hidden={collapsed || undefined}
+    >
       {gitLoading
         ? <div className={css.gitBar} role="progressbar" aria-label={t('editor.tree.git.loading')} />
         : <div className={css.gitBarSlot} />}
       <div className={css.filterRow}>
-        <Input
-          icon={<IconSearchOutline16 size={16} />}
-          className={css.filterInput as string}
-          value={filter}
-          placeholder={t('editor.tree.filter.placeholder')}
-          aria-label={t('editor.tree.filter.placeholder')}
-          onChange={(event) => { setFilter(event.target.value) }}
-        />
-        {filter !== '' && (
-          <button
-            type="button"
-            className={css.filterIconClear}
-            aria-label={t('editor.tree.filter.clear')}
-            onClick={clearFilter}
-          >
-            <IconCloseOutline16 size={16} />
-          </button>
+        <div className={css.filterField}>
+          <Input
+            icon={<IconSearchOutline16 size={16} />}
+            className={css.filterInput as string}
+            value={filter}
+            placeholder={t('editor.tree.filter.placeholder')}
+            aria-label={t('editor.tree.filter.placeholder')}
+            onChange={(event) => { setFilter(event.target.value) }}
+          />
+          {filter !== '' && (
+            <Tooltip label={t('editor.tree.filter.clear')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
+              <button
+                type="button"
+                className={clsx(iconCss.iconButton, iconCss.iconButtonSm, css.filterIconClear)}
+                aria-label={t('editor.tree.filter.clear')}
+                onClick={clearFilter}
+              >
+                <IconCloseOutline16 size={16} />
+              </button>
+            </Tooltip>
+          )}
+        </div>
+        {onHide !== undefined && (
+          <Tooltip label={t('editor.tree.hide')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
+            <button
+              type="button"
+              className={clsx(iconCss.iconButton, iconCss.iconButtonSm, css.treeToggleAnchor)}
+              aria-label={t('editor.tree.hide')}
+              onClick={onHide}
+            >
+              <IconChevronLeftOutline14 size={14} />
+            </button>
+          </Tooltip>
         )}
       </div>
       <div className={css.toolbar} data-file-tree-toolbar="true">
-        <button
-          type="button"
-          className={clsx(css.toolButton, workspaceBound && css.toolButtonActive)}
-          disabled={!workspaceBound}
-          aria-label={t('editor.tree.newFile')}
-          onClick={() => { openNameDialog('new-file') }}
-        >
-          <IconPlusOutline16 size={16} />
-        </button>
-        <button
-          type="button"
-          className={clsx(css.toolButton, workspaceBound && css.toolButtonActive)}
-          disabled={!workspaceBound}
-          aria-label={t('editor.tree.newFolder')}
-          onClick={() => { openNameDialog('new-folder') }}
-        >
-          <IconFolderClose16 size={16} />
-        </button>
-        <button
-          type="button"
-          className={clsx(css.toolButton, selectedEntry !== undefined && css.toolButtonActive)}
-          disabled={selectedEntry === undefined}
-          aria-label={t('editor.tree.rename')}
-          onClick={() => {
-            if (selectedEntry !== undefined) openNameDialog('rename', selectedEntry)
-          }}
-        >
-          <IconEditOutline16 size={16} />
-        </button>
-        <button
-          type="button"
-          className={clsx(css.toolButton, selectedEntry !== undefined && css.toolButtonActive)}
-          disabled={selectedEntry === undefined}
-          aria-label={t('editor.tree.delete')}
-          onClick={() => {
-            if (selectedEntry !== undefined) {
-              setDeleteTarget(selectedEntry)
-              setOpError(null)
-            }
-          }}
-        >
-          <IconTrashOutline16 size={16} />
-        </button>
+        <Tooltip label={t('editor.tree.newFile')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
+          <button
+            type="button"
+            className={iconCss.iconButton}
+            aria-label={t('editor.tree.newFile')}
+            aria-disabled={!workspaceBound || undefined}
+            onClick={workspaceBound ? () => { openNameDialog('new-file') } : undefined}
+          >
+            <IconPlusOutline16 size={16} />
+          </button>
+        </Tooltip>
+        <Tooltip label={t('editor.tree.newFolder')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
+          <button
+            type="button"
+            className={iconCss.iconButton}
+            aria-label={t('editor.tree.newFolder')}
+            aria-disabled={!workspaceBound || undefined}
+            onClick={workspaceBound ? () => { openNameDialog('new-folder') } : undefined}
+          >
+            <IconFolderClose16 size={16} />
+          </button>
+        </Tooltip>
+        <Tooltip label={t('editor.tree.rename')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
+          <button
+            type="button"
+            className={iconCss.iconButton}
+            aria-label={t('editor.tree.rename')}
+            aria-disabled={selectedEntry === undefined || undefined}
+            onClick={selectedEntry !== undefined
+              ? () => { openNameDialog('rename', selectedEntry) }
+              : undefined}
+          >
+            <IconEditOutline16 size={16} />
+          </button>
+        </Tooltip>
+        <Tooltip label={t('editor.tree.delete')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
+          <button
+            type="button"
+            className={iconCss.iconButton}
+            aria-label={t('editor.tree.delete')}
+            aria-disabled={selectedEntry === undefined || undefined}
+            onClick={selectedEntry !== undefined
+              ? () => {
+                setDeleteTarget(selectedEntry)
+                setOpError(null)
+              }
+              : undefined}
+          >
+            <IconTrashOutline16 size={16} />
+          </button>
+        </Tooltip>
       </div>
-      <div className={css.treeScroll} ref={scrollRef} data-tree-scroll="true">
-        {emptyWorkspace && (
+      <div
+        className={css.treeScroll}
+        ref={scrollRef}
+        data-tree-scroll="true"
+        data-empty={showTreeEmpty || undefined}
+      >
+        {showTreeEmpty && (
           <div className={css.empty}>
             <div className={css.emptyTitle}>{t('editor.tree.empty.title')}</div>
-            <button
-              type="button"
-              className={css.emptyCta}
-              disabled={!workspaceBound}
-              onClick={() => { openNameDialog('new-file') }}
-            >
-              {t('editor.tree.empty.cta')}
-            </button>
           </div>
         )}
         {filterNoMatch && (
           <div className={css.empty}>
             <div className={css.emptyTitle}>{t('editor.tree.filter.noMatch')}</div>
-            <button type="button" className={css.textClear} onClick={clearFilter}>
-              {t('editor.tree.filter.clear')}
-            </button>
+            <Tooltip label={t('editor.tree.filter.clear')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
+              <button type="button" className={iconCss.ghostTextButton} onClick={clearFilter}>
+                {t('editor.tree.filter.clear')}
+              </button>
+            </Tooltip>
           </div>
         )}
-        <div
-          role="tree"
-          aria-label={treeLabel}
-          className={css.tree}
-          style={{ height: `${virtualizer.getTotalSize()}px` }}
-        >
-          {paintedRows.map(({ row, start }) => {
-            const letter = gitByPath.get(row.entry.path)
-            const selected = selectedPath === row.entry.path
-            return (
-              <div
-                key={row.entry.path}
-                role="treeitem"
-                aria-expanded={row.entry.isDirectory ? row.expanded : undefined}
-                aria-selected={selected}
-                aria-level={row.depth + 1}
-                aria-busy={row.loading || undefined}
-                className={clsx(css.row, selected && css.rowSelected)}
-                style={{
-                  transform: `translateY(${start}px)`,
-                  paddingLeft: `${row.depth * 12}px`,
-                }}
-                onClick={() => {
-                  setSelectedPath(row.entry.path)
-                  if (!row.entry.isDirectory) onOpenFile(row.entry)
-                }}
-                onDoubleClick={() => { void toggleDirectory(row.entry) }}
-              >
-                {row.entry.isDirectory
-                  ? (
-                    <button
-                      type="button"
-                      className={css.disclosure}
-                      aria-label={row.expanded
-                        ? t('editor.tree.collapse', { name: row.entry.name })
-                        : t('editor.tree.expand', { name: row.entry.name })}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        void toggleDirectory(row.entry)
-                      }}
-                    >
-                      <span className={clsx(css.chevron, row.expanded && css.chevronOpen)} />
-                    </button>
-                  )
-                  : <span className={css.disclosureSpacer} />}
-                <FileTypeIcon entry={row.entry} expanded={row.expanded} t={t} />
-                <span className={css.name}>{row.entry.name}</span>
-                {letter !== undefined && (
-                  <span className={clsx(css.badge, badgeClass(letter))} aria-label={t('editor.tree.git.badge', { letter })}>
-                    {letter}
-                  </span>
-                )}
-                {row.loading && (
-                  <span className={css.spinner} role="status" aria-label={t('editor.tree.loading')} />
-                )}
-              </div>
-            )
-          })}
-        </div>
+        {!showTreeEmpty && (
+          <div
+            role="tree"
+            aria-label={treeLabel}
+            className={css.tree}
+            style={{ height: `${virtualizer.getTotalSize()}px` }}
+          >
+            {paintedRows.map(({ row, start }) => {
+              const letter = gitByPath.get(row.entry.path)
+              const selected = selectedPath === row.entry.path
+              const errorCount = row.entry.isDirectory
+                ? 0
+                : lspErrorCount(diagnosticsByPath?.get(row.entry.path))
+              return (
+                <div
+                  key={row.entry.path}
+                  role="treeitem"
+                  aria-expanded={row.entry.isDirectory ? row.expanded : undefined}
+                  aria-selected={selected}
+                  aria-level={row.depth + 1}
+                  aria-busy={row.loading || undefined}
+                  className={clsx(css.row, selected && css.rowSelected)}
+                  style={{
+                    transform: `translateY(${start}px)`,
+                    paddingLeft: `${row.depth * 12}px`,
+                  }}
+                  onClick={() => {
+                    setSelectedPath(row.entry.path)
+                    if (row.entry.isDirectory) void toggleDirectory(row.entry)
+                    else onOpenFile(row.entry)
+                  }}
+                >
+                  {row.entry.isDirectory
+                    ? (
+                      <Tooltip
+                        label={row.expanded
+                          ? t('editor.tree.collapse', { name: row.entry.name })
+                          : t('editor.tree.expand', { name: row.entry.name })}
+                        side="bottom"
+                        delayMs={TOOLTIP_DELAY_MS}
+                      >
+                        <button
+                          type="button"
+                          className={iconCss.disclosureButton}
+                          aria-label={row.expanded
+                            ? t('editor.tree.collapse', { name: row.entry.name })
+                            : t('editor.tree.expand', { name: row.entry.name })}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void toggleDirectory(row.entry)
+                          }}
+                        >
+                          <span className={clsx(css.chevron, row.expanded && css.chevronOpen)} />
+                        </button>
+                      </Tooltip>
+                    )
+                    : <span className={css.disclosureSpacer} />}
+                  <FileTypeIcon entry={row.entry} expanded={row.expanded} t={t} />
+                  <span className={clsx(css.name, errorCount > 0 && css.nameError)}>{row.entry.name}</span>
+                  {errorCount > 0 && (
+                    <span className={css.errorCount} aria-label={t('editor.tab.errors', { count: errorCount })}>
+                      {errorCount}
+                    </span>
+                  )}
+                  {letter !== undefined && (
+                    <span className={clsx(css.badge, badgeClass(letter))} aria-label={t('editor.tree.git.badge', { letter })}>
+                      {letter}
+                    </span>
+                  )}
+                  {row.loading && (
+                    <span className={css.spinner} role="status" aria-label={t('editor.tree.loading')} />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
       <Modal
         open={nameDialog !== null}

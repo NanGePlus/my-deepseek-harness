@@ -99,6 +99,9 @@
       "path": "../../runtime-diagnostics/invariants"
     },
     {
+      "path": "../../lsp/lsp-editor"
+    },
+    {
       "path": "../../util/native-command"
     }
   ]

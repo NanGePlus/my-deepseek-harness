@@ -1,7 +1,12 @@
 /** Monaco (or textarea fallback) for an editable-text tab. */
 
 import { useEffect, useRef, useState } from 'react'
+import clsx from 'clsx'
+import type { HostLspDiagnostic, HostLspHover } from '@deepseek-ai/dsh-client-runtime/client'
 import { loadMonacoEditor, type MonacoEditorModule, type MonacoStandaloneEditor } from './monaco-load.ts'
+import { ensureMonacoConfigured } from './monaco-config.ts'
+import { setLspHoverHandler } from './monaco-hover.ts'
+import { installMonacoEnvironment } from './monaco-environment.ts'
 import css from './MonacoEditor.module.css'
 
 /** Props for the editable-text editor widget. */
@@ -12,50 +17,57 @@ export interface MonacoEditorProps {
   value: string
   /** Monaco language id. */
   language: string
+  /** Language-server diagnostics for the current buffer. */
+  diagnostics?: readonly HostLspDiagnostic[] | undefined
   /** Accessible name (file, language, theme). */
   ariaLabel: string
   /** Harness theme: dark when `body[data-ds-dark-theme]` is set. */
   dark: boolean
   /**
+   * Editor canvas background token family.
+   * `document` uses bg-base (white in light mode) for Markdown source editing.
+   */
+  surface?: 'sidebar' | 'document' | undefined
+  /**
    * Buffer change from the user.
    * @param value - the new buffer text.
    */
   onChange: (value: string) => void
+  /**
+   * Language-server hover at a zero-based UTF-16 cursor position.
+   * @param line - zero-based line.
+   * @param character - zero-based character.
+   * @param signal - aborts a superseded hover request.
+   */
+  onHover?: (line: number, character: number, signal?: AbortSignal) => Promise<HostLspHover | null>
 }
 
-let themesDefined = false
-
 /**
- * Derive Monaco themes from live `--dsw-alias-*` values so light/dark follow
- * the Harness document theme without a second palette.
- * @param monaco - loaded monaco-editor module.
+ * Built-in Monaco theme id; background is applied through CSS so token colors
+ * stay on the default vs / vs-dark palette.
  * @param dark - whether `body[data-ds-dark-theme]` is set.
- * @returns the theme id to pass to `create`.
+ * @returns Monaco theme id.
  */
-function themeIdFor(monaco: MonacoEditorModule, dark: boolean): string {
-  const custom = dark ? 'dsh-dark' : 'dsh-light'
-  const builtin = dark ? 'vs-dark' : 'vs'
-  if (themesDefined) return custom
-  const styles = getComputedStyle(document.documentElement)
-  const bg = styles.getPropertyValue('--dsw-alias-markdown-code-block').trim()
-  const fg = styles.getPropertyValue('--dsw-alias-label-primary').trim()
-  if (bg !== '' && fg !== '') {
-    monaco.editor.defineTheme('dsh-light', {
-      base: 'vs',
-      inherit: true,
-      rules: [],
-      colors: { 'editor.background': bg, 'editor.foreground': fg },
-    })
-    monaco.editor.defineTheme('dsh-dark', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: [],
-      colors: { 'editor.background': bg, 'editor.foreground': fg },
-    })
-    themesDefined = true
-    return custom
+function themeIdFor(dark: boolean): string {
+  return dark ? 'vs-dark' : 'vs'
+}
+
+function markerSeverity(
+  monaco: MonacoEditorModule,
+  severity: HostLspDiagnostic['severity'],
+): number {
+  switch (severity) {
+    case 'error': return monaco.MarkerSeverity.Error
+    case 'warning': return monaco.MarkerSeverity.Warning
+    case 'info': return monaco.MarkerSeverity.Info
+    default: return monaco.MarkerSeverity.Hint
   }
-  return builtin
+}
+
+type EditorHandle = {
+  setValue: (next: string) => void
+  dispose: () => void
+  setDiagnostics: (items: readonly HostLspDiagnostic[] | undefined) => void
 }
 
 /**
@@ -64,15 +76,25 @@ function themeIdFor(monaco: MonacoEditorModule, dark: boolean): string {
  * @param props - buffer, language, theme, and change callback.
  */
 export function MonacoEditor({
-  path, value, language, ariaLabel, dark, onChange,
+  path, value, language, diagnostics, ariaLabel, dark, surface = 'sidebar', onChange, onHover,
 }: MonacoEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null)
-  const editorRef = useRef<{ setValue: (next: string) => void; dispose: () => void } | null>(null)
+  const editorRef = useRef<EditorHandle | null>(null)
+  const monacoRef = useRef<MonacoEditorModule | null>(null)
   const valueRef = useRef(value)
   const onChangeRef = useRef(onChange)
+  const onHoverRef = useRef(onHover)
   const [fallback, setFallback] = useState(true)
   valueRef.current = value
   onChangeRef.current = onChange
+  onHoverRef.current = onHover
+
+  useEffect(() => {
+    setLspHoverHandler(onHover)
+    return () => {
+      if (onHoverRef.current === onHover) setLspHoverHandler(undefined)
+    }
+  }, [onHover])
 
   useEffect(() => {
     const host = hostRef.current
@@ -84,17 +106,11 @@ export function MonacoEditor({
       if (monaco === undefined) return
       /* v8 ignore next -- cleanup sets cancelled before the host unmounts */
       if (hostRef.current === null) return
-      const global = globalThis as typeof globalThis & {
-        MonacoEnvironment?: { getWorker: () => Worker }
-      }
-      global.MonacoEnvironment ??= {
-        getWorker: () => {
-          /* v8 ignore next -- monaco calls this from editor.create in a browser */
-          return new Worker('data:text/javascript,onmessage=function(){}')
-        },
-      }
-      const theme = themeIdFor(monaco, dark)
-      const fontFamily = getComputedStyle(document.documentElement)
+      installMonacoEnvironment()
+      ensureMonacoConfigured(monaco)
+      const theme = themeIdFor(dark)
+      monacoRef.current = monaco
+      const fontFamily = getComputedStyle(document.body)
         .getPropertyValue('--ds-font-family-code')
         .trim() || 'ui-monospace, SFMono-Regular, Menlo, Monaco, monospace'
       let editor: MonacoStandaloneEditor
@@ -109,8 +125,17 @@ export function MonacoEditor({
           minimap: { enabled: false },
           automaticLayout: true,
           scrollBeyondLastLine: false,
+          wordWrap: 'on',
+          wrappingStrategy: 'advanced',
+          scrollbar: { horizontal: 'auto', vertical: 'auto' },
           renderLineHighlight: 'none',
           overviewRulerLanes: 0,
+          fixedOverflowWidgets: true,
+          links: false,
+          quickSuggestions: false,
+          parameterHints: { enabled: false },
+          suggestOnTriggerCharacters: false,
+          hover: { enabled: true, above: true },
         })
       } catch (error: unknown) {
         // jsdom and worker-less hosts: monaco.editor.create throws; keep textarea.
@@ -126,6 +151,19 @@ export function MonacoEditor({
         setValue: (next) => {
           if (editor.getValue() !== next) editor.setValue(next)
         },
+        setDiagnostics: (items) => {
+          const currentModel = editor.getModel()
+          if (currentModel === null) return
+          const markers = (items ?? []).map(item => ({
+            severity: markerSeverity(monaco, item.severity),
+            message: item.message,
+            startLineNumber: item.range.start.line + 1,
+            startColumn: item.range.start.character + 1,
+            endLineNumber: item.range.end.line + 1,
+            endColumn: item.range.end.character + 1,
+          }))
+          monaco.editor.setModelMarkers(currentModel, 'dsh-lsp', markers)
+        },
         dispose: () => { editor.dispose() },
       }
       setFallback(false)
@@ -136,17 +174,21 @@ export function MonacoEditor({
       editorRef.current = null
       setFallback(true)
     }
-  }, [path, language, dark])
+  }, [path, language, dark, surface])
 
   useEffect(() => {
     editorRef.current?.setValue(value)
   }, [value])
 
+  useEffect(() => {
+    editorRef.current?.setDiagnostics(diagnostics)
+  }, [diagnostics])
+
   return (
-    <div className={css.wrap}>
+    <div className={clsx(css.wrap, surface === 'document' && css.document)}>
       {fallback && (
         <textarea
-          className={css.fallback}
+          className={clsx(css.fallback, surface === 'document' && css.document)}
           aria-label={ariaLabel}
           value={value}
           spellCheck={false}

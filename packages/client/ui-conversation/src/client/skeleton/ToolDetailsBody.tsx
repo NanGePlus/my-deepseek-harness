@@ -3,15 +3,21 @@
 import { Fragment } from 'react'
 import { CodeBlock } from '@deepseek-ai/dsh-client-ui-primitives'
 import { shallowEqual } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ConversationSnapshot, RunningToolCall, ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
+import type { SessionChatBinding } from '../session-bound-source.ts'
+import type { ConversationSnapshot, RunningToolCall, SessionId, ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { DetailsSlotProps } from '../contract/slots.ts'
 import { findToolCall } from '../chat/tool-node-reader.ts'
 import css from './DetailsPanel.module.css'
 
 type ToolDetailsBodyProps = Pick<
   DetailsSlotProps,
-  'useSession' | 'useSessions' | 'sessionId' | 'useStore' | 'renderSlot' | 't'
->
+  'useSessions' | 'renderSlot' | 't'
+> & {
+  sessionId: SessionId | undefined
+  useChat: SnapshotSelectorHook<SessionChatBinding>
+  useSession: SnapshotSelectorHook<ConversationSnapshot>
+}
 
 interface CallMaterial {
   name: string
@@ -49,9 +55,9 @@ function rawResultText(block: ToolCallBlock): string {
 }
 
 /** Renders Tool 详情 tab body for the shared details store selection. */
-export function ToolDetailsBody({ useSession, useSessions, sessionId, useStore, renderSlot, t }: ToolDetailsBodyProps) {
-  const selection = useStore(s => s.selection)
-  const sessionCwd = useSessions(list => list.byId[sessionId]?.cwd)
+export function ToolDetailsBody({ useSession, useSessions, sessionId, useChat, renderSlot, t }: ToolDetailsBodyProps) {
+  const selection = useChat(binding => binding.state.selection)
+  const sessionCwd = useSessions(list => sessionId === undefined ? undefined : list.byId[sessionId]?.cwd)
   const callId = selection?.callId
   const material = useSession(
     s => (callId === undefined ? null : materialFor(s, callId)),

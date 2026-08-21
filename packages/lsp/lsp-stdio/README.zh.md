@@ -26,6 +26,7 @@ Namespace 插件（`name`／`inject`／`Config`／`apply`，无默认导出）�
 | `args` | `[]` | 传给可执行文件的参数。 |
 | `env` | `{}` | 合并到已清理 credential 的环境之上的额外 env（匹配 `KEY`／`PASSWORD`／`SECRET`／`TOKEN` 的变量不会转发）；显式 `DSH_*` 条目在 seam 清除环境中同名值之后合并。 |
 | `extensionToLanguage` | （必填） | 小写、以点开头的扩展名 → LSP language id（例如 `{ '.ts': 'typescript' }`）。 |
+| `optional` | `false` | 为 true 时，无法解析的 `command` 会跳过该服务器，而不是导致插件加载失败。 |
 | `initializationOptions` | `null` | 转发给服务器的静态 `initialize` 选项。 |
 | `configuration` | `null` | 每个 `workspace/configuration` 配置项的静态答案。 |
 | `maxMessageBytes` | `16000000` | 从服务器接受的单条 framed 消息最大大小。 |

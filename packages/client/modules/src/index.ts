@@ -426,22 +426,13 @@ export class ClientModuleRegistry extends Service {
     }
     /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server requests. */
     const pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname)
-    // The id may contain a scope slash. Anything else under /plugins (including
-    // /plugins/events when the HMR row is absent) is an unknown resource.
-    const prefix = '/plugins/'
-    const mapSuffix = '/client.js.map'
-    const bundleSuffix = '/client.js'
-    const isSourceMap = pathname.startsWith(prefix) && pathname.endsWith(mapSuffix)
-    const suffix = isSourceMap ? mapSuffix : bundleSuffix
-    const clientPath = pathname.startsWith(prefix) && pathname.endsWith(suffix)
-      ? this.clientPath(pathname.slice(prefix.length, -suffix.length))
-      : undefined
-    const path = clientPath === undefined ? undefined : `${clientPath}${isSourceMap ? '.map' : ''}`
+    const path = this.resolvePluginAssetPath(pathname)
     if (path === undefined) {
       res.writeHead(404)
       res.end()
       return
     }
+    const isSourceMap = pathname.endsWith('.map')
     try {
       const body = await readFile(path)
       res.writeHead(200, {
@@ -454,6 +445,39 @@ export class ClientModuleRegistry extends Service {
       res.writeHead(404)
       res.end()
     }
+  }
+
+  /**
+   * Map a `/plugins/<id>/…` request to a readable file under the plugin lib dir.
+   * @param pathname - decoded request pathname.
+   * @returns absolute filesystem path, or `undefined` when unregistered/unknown.
+   */
+  private resolvePluginAssetPath(pathname: string): string | undefined {
+    const prefix = '/plugins/'
+    if (!pathname.startsWith(prefix)) return undefined
+    const rest = pathname.slice(prefix.length)
+    const mapSuffix = '/client.js.map'
+    const bundleSuffix = '/client.js'
+    const monacoPrefix = '/monaco/'
+    if (rest.endsWith(mapSuffix)) {
+      const clientPath = this.clientPath(rest.slice(0, -mapSuffix.length))
+      return clientPath === undefined ? undefined : `${clientPath}.map`
+    }
+    if (rest.endsWith(bundleSuffix)) {
+      const clientPath = this.clientPath(rest.slice(0, -bundleSuffix.length))
+      return clientPath
+    }
+    const monacoIndex = rest.indexOf(monacoPrefix)
+    if (monacoIndex >= 0) {
+      const id = rest.slice(0, monacoIndex)
+      const workerName = rest.slice(monacoIndex + monacoPrefix.length)
+      if (workerName.includes('/') || workerName.includes('\\') || !/^[a-z0-9.-]+\.js$/i.test(workerName)) {
+        return undefined
+      }
+      const clientPath = this.clientPath(id)
+      return clientPath === undefined ? undefined : join(dirname(clientPath), 'monaco', workerName)
+    }
+    return undefined
   }
 }
 

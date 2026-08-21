@@ -23,6 +23,9 @@ import {
   hostDeletePathValueSchema,
   hostRenamePathValueSchema,
   hostCreateWorkspaceDirectoryValueSchema,
+  hostLspSyncDocumentValueSchema,
+  hostLspCloseDocumentValueSchema,
+  hostLspHoverDocumentValueSchema,
   watchPathFrameSchema,
 } from '../api/host.schema.ts'
 import {
@@ -126,6 +129,9 @@ export interface IApiClient {
     renamePath(payload: RequestPayload<'host.renamePath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.renamePath'>>>
     createWorkspaceDirectory(payload: RequestPayload<'host.createWorkspaceDirectory'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.createWorkspaceDirectory'>>>
     openPath(payload: RequestPayload<'host.openPath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.openPath'>>>
+    lspSyncDocument(payload: RequestPayload<'host.lspSyncDocument'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.lspSyncDocument'>>>
+    lspCloseDocument(payload: RequestPayload<'host.lspCloseDocument'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.lspCloseDocument'>>>
+    lspHoverDocument(payload: RequestPayload<'host.lspHoverDocument'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.lspHoverDocument'>>>
     watchPath(
       payload: { workspaceId: RequestPayload<'host.readFile'>['workspaceId']; path: string },
       signal: AbortSignal,
@@ -218,6 +224,9 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'host.renamePath': hostRenamePathValueSchema,
   'host.createWorkspaceDirectory': hostCreateWorkspaceDirectoryValueSchema,
   'host.openPath': hostOpenPathValueSchema,
+  'host.lspSyncDocument': hostLspSyncDocumentValueSchema,
+  'host.lspCloseDocument': hostLspCloseDocumentValueSchema,
+  'host.lspHoverDocument': hostLspHoverDocumentValueSchema,
   'workspace.list': workspaceListValueSchema,
   'workspace.create': workspaceCreateValueSchema,
   'workspace.rename': workspaceRenameValueSchema,
@@ -485,6 +494,9 @@ export abstract class AbstractApiClient implements IApiClient {
     renamePath: (payload, signal) => this.callUnary('host.renamePath', payload, signal),
     createWorkspaceDirectory: (payload, signal) => this.callUnary('host.createWorkspaceDirectory', payload, signal),
     openPath: (payload, signal) => this.callUnary('host.openPath', payload, signal),
+    lspSyncDocument: (payload, signal) => this.callUnary('host.lspSyncDocument', payload, signal),
+    lspCloseDocument: (payload, signal) => this.callUnary('host.lspCloseDocument', payload, signal),
+    lspHoverDocument: (payload, signal) => this.callUnary('host.lspHoverDocument', payload, signal),
     watchPath: (payload, signal, onOpen) => this.openWatchPath(payload, signal, onOpen),
   }
 

@@ -5,23 +5,16 @@
   flex-direction: column;
   height: 100%;
   min-width: 0;
-  border-left: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-base);
-  --editor-selected-tint: var(--dsw-static-neutral-bluish-75);
   --editor-tab-active-line: var(--dsw-alias-brand-primary);
-}
-
-:global(body[data-ds-dark-theme]) .root {
-  --editor-selected-tint: #353638;
 }
 
 .header {
   display: flex;
   align-items: stretch;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 12px 0;
+  padding: 0;
   border-bottom: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-specific-sidebar-fill);
 }
 
 .tabBar {
@@ -34,6 +27,7 @@
 .tab {
   flex: 1;
   min-width: 0;
+  margin-bottom: -1px;
   padding: 8px 12px 10px;
   border: none;
   border-bottom: 2px solid transparent;
@@ -50,27 +44,8 @@
 }
 
 .tabActive {
-  background: var(--editor-selected-tint);
   border-bottom-color: var(--editor-tab-active-line);
   color: var(--dsw-alias-label-primary);
-}
-
-.close {
-  display: grid;
-  flex: none;
-  place-items: center;
-  align-self: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-}
-
-.close:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .body {
@@ -83,6 +58,17 @@
 .bodyFlush {
   padding: 0;
   overflow: hidden;
+}
+
+.tabPanel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.tabPanelHidden {
+  display: none;
 }
 
 .toolTitle {

@@ -86,9 +86,14 @@ const LANGUAGE_LABEL: Readonly<Record<string, string>> = {
   sql: 'SQL',
   lua: 'Lua',
   r: 'R',
-  dockerfile: 'Dockerfile',
+  dockerfile: 'dockerfile',
   plaintext: 'Plain Text',
 }
+
+/** Monaco language ids that receive the host LSP hover provider. */
+export const MONACO_HOVER_LANGUAGE_IDS: readonly string[] = [
+  ...new Set([...Object.values(LANGUAGE_BY_EXT), 'plaintext']),
+]
 
 /**
  * Last path segment of an absolute Host path.
@@ -143,4 +148,29 @@ export function languageForPath(path: string): string {
  */
 export function languageLabel(language: string): string {
   return LANGUAGE_LABEL[language] ?? language
+}
+
+/**
+ * Whether a text tab uses the Markdown preview/source switcher.
+ * @param language - Monaco language id from {@link languageForPath}.
+ * @returns true for Markdown sources.
+ */
+export function isMarkdownLanguage(language: string): boolean {
+  return language === 'markdown'
+}
+
+/**
+ * Path segments shown in the Markdown editor breadcrumb.
+ * @param workspaceRoot - bound Workspace root, if any.
+ * @param filePath - Host-absolute file path.
+ * @returns segments relative to the workspace root, or the file name alone.
+ */
+export function breadcrumbSegments(workspaceRoot: string | undefined, filePath: string): readonly string[] {
+  if (workspaceRoot === undefined) return [fileNameOf(filePath)]
+  const normalizedRoot = workspaceRoot.replace(/[/\\]+$/, '')
+  if (filePath === normalizedRoot) return [fileNameOf(filePath)]
+  const prefix = `${normalizedRoot}/`
+  if (!filePath.startsWith(prefix)) return [fileNameOf(filePath)]
+  const parts = filePath.slice(prefix.length).split(/[/\\]/).filter(part => part !== '')
+  return parts.length > 0 ? parts : [fileNameOf(filePath)]
 }

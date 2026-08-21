@@ -2,7 +2,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { resolveSlotLabel, type BoundActions } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  resolveWorkspacePath, type ISessions, type SessionId,
+  resolveWorkspacePath, type ConversationSnapshot, type ISessions, type SessionId,
+  EMPTY_CHAT_SNAPSHOT, EMPTY_CONVERSATION_VIEWS,
 } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: the ctx.settingsScope Context merge. Cross-plugin collaboration
 // goes through the service, never a value import (client bundle purity gate).
@@ -35,6 +36,9 @@ import { queueDockEntry } from './queue/QueueDock.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { DetailsPanel } from './skeleton/DetailsPanel.tsx'
+import { DetailsPanelToggle } from './skeleton/DetailsPanelToggle.tsx'
+import type { DetailsPanelToggleInjected } from './skeleton/DetailsPanelToggle.tsx'
+import { createSessionBoundSource, createSessionChatBindingSource, type SessionChatBindingActions } from './session-bound-source.ts'
 import { en, NS, zh, type ConversationKey } from './locales.ts'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
@@ -268,6 +272,17 @@ export function apply(ctx: Context): void {
     }),
   }, ConversationSessionHeader)
 
+  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+    name: 'conversation.session.header.utilities',
+    id: 'details-panel-toggle',
+    order: 10,
+    locale: NS,
+    inject: (): DetailsPanelToggleInjected => ({
+      toggleDetails: () => { layout.toggleDetails() },
+      hooks: { detailsOpen: layout.detailsOpen },
+    }),
+  }, DetailsPanelToggle))
+
   // The default composer body: its own single slot inside the composer
   // chain's fallback. Public machine surface arrives via the
   // provide channel above; the keyboard command face and the stop/retry
@@ -389,6 +404,7 @@ export function apply(ctx: Context): void {
       return {
         openDetails: (target) => {
           actions.select(target)
+          actions.setDetailsTab('tool')
           layout.openDetails()
         },
         fileMentions: owner => ctx.get('chatFileMentions')?.forClosing(owner),
@@ -441,17 +457,55 @@ export function apply(ctx: Context): void {
   // registration path into the input dock declared above.
   ctx.plugin(queueDockEntry)
 
+  const absentConversation: ConversationSnapshot = {
+    sessionId: '' as SessionId,
+    views: EMPTY_CONVERSATION_VIEWS,
+    chat: EMPTY_CHAT_SNAPSHOT,
+    nodes: [],
+    turnTimings: new Map(),
+    turnEnds: new Map(),
+    partial: null,
+    runningCalls: [],
+    pending: [],
+    queue: [],
+    running: false,
+    subagent: null,
+    composerPhase: 'blank',
+    removed: false,
+    openState: 'loading',
+    openError: null,
+    hasMore: false,
+    loadingOlder: false,
+    promptError: null,
+    blank: true,
+    lastAgentError: null,
+  }
+
   slots.register({
     name: 'details',
     locale: NS,
     children: {
       'conversation.details.tool': { kind: 'single', scope: 'session' },
-      'conversation.details.editor': { kind: 'single', scope: 'session' },
+      'conversation.details.editor': { kind: 'single', scope: 'root' },
     },
-    store: chatStore,
     inject: (): DetailsInjected => ({
       openDetails: () => { layout.openDetails() },
       closeDetails: () => { layout.closeDetails() },
+      hooks: {
+        chat: createSessionChatBindingSource(sessions.list, (sessionId) => {
+          const instance = slots.sessionStore(chatStore, sessionId)
+          return {
+            getSnapshot: () => instance.getSnapshot(),
+            subscribe: listener => instance.subscribe(listener),
+            actions: instance.actions as SessionChatBindingActions,
+          }
+        }),
+        conversation: createSessionBoundSource(
+          sessions.list,
+          sessionId => sessions.binding(sessionId)?.session,
+          absentConversation,
+        ),
+      },
     }),
   }, DetailsPanel)
 

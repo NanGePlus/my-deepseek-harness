@@ -9,6 +9,7 @@
 import type {
   DirectoryListing, GitStatusListing, SessionId, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
+  LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceListState } from '../workspaces/service.ts'
 import type { ObservableSnapshot } from './store.ts'
@@ -145,6 +146,51 @@ export interface IWorkspaces {
     onChanged: () => void,
     signal?: AbortSignal,
   ): void
+  /**
+   * Sync one editor buffer with the host language server and return diagnostics.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param text - current edit-buffer text.
+   * @param version - monotonic document version (>= 1).
+   * @param signal - aborts a superseded sync.
+   */
+  lspSyncDocument(
+    workspaceId: WorkspaceId,
+    path: string,
+    text: string,
+    version: number,
+    signal?: AbortSignal,
+  ): Promise<LspSyncDocumentResult>
+  /**
+   * Close one editor document in the host language server.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param signal - aborts a superseded close.
+   */
+  lspCloseDocument(
+    workspaceId: WorkspaceId,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<LspCloseDocumentResult>
+  /**
+   * Query hover for one open editor document at a cursor position.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param text - current edit-buffer text.
+   * @param version - monotonic document version (>= 1).
+   * @param line - zero-based UTF-16 line.
+   * @param character - zero-based UTF-16 character.
+   * @param signal - aborts a superseded hover request.
+   */
+  lspHoverDocument(
+    workspaceId: WorkspaceId,
+    path: string,
+    text: string,
+    version: number,
+    line: number,
+    character: number,
+    signal?: AbortSignal,
+  ): Promise<LspHoverDocumentResult>
   /**
    * Create one child directory through the Host's `browse` capability.
    * @param path - absolute existing parent directory.

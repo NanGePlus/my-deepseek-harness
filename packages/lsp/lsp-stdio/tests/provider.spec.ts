@@ -6,6 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import Lsp, { type LspQueryRequest } from '@deepseek-ai/dsh-lsp'
+import LspEditor from '@deepseek-ai/dsh-lsp-editor'
 import * as LspLocal from '@deepseek-ai/dsh-lsp-stdio'
 import type { Config, LspLocalServerConfig } from '@deepseek-ai/dsh-lsp-stdio'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -192,6 +193,34 @@ describe('lsp-stdio provider resolution', () => {
       },
     })).rejects.toThrow(/was not found on PATH/)
     await expect(ctx.lsp.query(query())).rejects.toThrow(expect.objectContaining({ code: 'LSP_UNAVAILABLE' }))
+    await ctx.fiber.dispose()
+  })
+
+  it('skips optional servers whose executables are missing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const ctx = new Context()
+    await ctx.plugin(Lsp)
+    await ctx.plugin(LspEditor)
+    await ctx.plugin(LocalSubprocessRuntime)
+    await ctx.plugin(LocalFileSystem, { cwd: process.cwd() })
+    await ctx.plugin(LspLocal, {
+      servers: {
+        valid: { command: process.execPath, extensionToLanguage: { '.ts': 'typescript' } },
+        missing: {
+          command: 'definitely-not-a-real-lsp-binary-xyz',
+          optional: true,
+          extensionToLanguage: { '.py': 'python' },
+        },
+      },
+    })
+    await expect(ctx.lspEditor.syncDocument({
+      workspaceRoot: process.cwd(),
+      filePath: `${process.cwd()}/a.py`,
+      text: 'x = 1\n',
+      version: 1,
+    })).rejects.toThrow(expect.objectContaining({ code: 'LSP_UNAVAILABLE' }))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('skipping optional server "missing"'))
+    warn.mockRestore()
     await ctx.fiber.dispose()
   })
 

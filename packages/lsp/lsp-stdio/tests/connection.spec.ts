@@ -154,7 +154,7 @@ function connectScript(script: string, maxStderrBytes = 100_000, writer?: Connec
     maxStderrBytes,
     killGraceMs: 3_000,
     configuration: null,
-  }, spawnSubprocess, () => Promise.resolve(null), writer)
+  }, spawnSubprocess, () => Promise.resolve(null), () => {}, writer)
   open.push(conn)
   return conn
 }

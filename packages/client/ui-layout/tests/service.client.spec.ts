@@ -16,11 +16,12 @@ function fakePanels(): PanelActions {
     setNarrow: vi.fn(),
     openDetails: vi.fn(),
     closeDetails: vi.fn(),
+    toggleDetails: vi.fn(),
   }
 }
 
 describe('LayoutController', () => {
-  it('forwards the three panel actions to the attached set', () => {
+  it('forwards the panel actions to the attached set', () => {
     const service = new LayoutController()
     const panels = fakePanels()
     service.attachPanels(panels)
@@ -28,12 +29,27 @@ describe('LayoutController', () => {
     service.toggleSidebar()
     service.openDetails()
     service.closeDetails()
+    service.toggleDetails()
 
     expect(panels.toggleSidebar).toHaveBeenCalledTimes(1)
     expect(panels.openDetails).toHaveBeenCalledTimes(1)
     expect(panels.closeDetails).toHaveBeenCalledTimes(1)
+    expect(panels.toggleDetails).toHaveBeenCalledTimes(1)
     expect(panels.setSidebar).not.toHaveBeenCalled()
     expect(panels.setDetails).not.toHaveBeenCalled()
+  })
+
+  it('mirrors rendered details width into the detailsOpen observable', () => {
+    const service = new LayoutController()
+    const seen: boolean[] = []
+    const unsub = service.detailsOpen.subscribe(() => {
+      seen.push(service.detailsOpen.getSnapshot())
+    })
+    service.setDetailsOpen(true)
+    service.setDetailsOpen(true)
+    service.setDetailsOpen(false)
+    unsub()
+    expect(seen).toEqual([true, false])
   })
 
   it('fails loud before the root entry wired its actions', () => {
@@ -41,6 +57,7 @@ describe('LayoutController', () => {
     expect(() => { service.toggleSidebar() }).toThrow(/panel actions not wired/)
     expect(() => { service.openDetails() }).toThrow(/panel actions not wired/)
     expect(() => { service.closeDetails() }).toThrow(/panel actions not wired/)
+    expect(() => { service.toggleDetails() }).toThrow(/panel actions not wired/)
   })
 
   it('re-attach overwrites the stale action set (entry re-register)', () => {

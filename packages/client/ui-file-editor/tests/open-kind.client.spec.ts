@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extnameOf, fileNameOf, languageForPath, languageLabel, openKindForPath } from '../src/client/open-kind.ts'
+import { breadcrumbSegments, extnameOf, fileNameOf, isMarkdownLanguage, languageForPath, languageLabel, MONACO_HOVER_LANGUAGE_IDS, openKindForPath } from '../src/client/open-kind.ts'
 
 describe('open-kind', () => {
   it('classifies image, known-binary, and everything else', () => {
@@ -30,5 +30,20 @@ describe('open-kind', () => {
   it('labels known language ids and echoes unknown ids', () => {
     expect(languageLabel('markdown')).toBe('Markdown')
     expect(languageLabel('made-up')).toBe('made-up')
+  })
+
+  it('detects Markdown language and builds workspace-relative breadcrumbs', () => {
+    expect(isMarkdownLanguage('markdown')).toBe(true)
+    expect(isMarkdownLanguage('typescript')).toBe(false)
+    expect(breadcrumbSegments('/w/alpha', '/w/alpha/apps/cli/README.zh.md'))
+      .toEqual(['apps', 'cli', 'README.zh.md'])
+    expect(breadcrumbSegments(undefined, '/else/README.md')).toEqual(['README.md'])
+  })
+
+  it('lists every editable Monaco language id for LSP hover registration', () => {
+    expect(MONACO_HOVER_LANGUAGE_IDS).toContain('python')
+    expect(MONACO_HOVER_LANGUAGE_IDS).toContain('json')
+    expect(MONACO_HOVER_LANGUAGE_IDS).toContain('yaml')
+    expect(MONACO_HOVER_LANGUAGE_IDS).toContain('plaintext')
   })
 })

@@ -1,0 +1,47 @@
+.diagram {
+  margin: 16px 0;
+  overflow: auto;
+  overflow-wrap: normal;
+  word-break: normal;
+  color: var(--dsw-alias-label-primary);
+}
+
+.diagram :global(svg) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.diagram :global(svg foreignObject) {
+  overflow: visible;
+}
+
+.diagram :global(svg foreignObject *) {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+/* Belt-and-suspenders: stateDiagram notes ship with #666/#fff in neutral theme. */
+.diagram :global(svg .statediagram-note rect) {
+  fill: var(--dsw-alias-fill-secondary);
+  stroke: var(--dsw-alias-border-l2);
+}
+
+.diagram :global(svg .statediagram-note .nodeLabel),
+.diagram :global(svg .statediagram-note text) {
+  color: var(--dsw-alias-label-primary);
+  fill: var(--dsw-alias-label-primary);
+}
+
+.diagram :global(svg .edgeLabel),
+.diagram :global(svg .label) {
+  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.pending {
+  min-height: 120px;
+  margin: 16px 0;
+  border-radius: 8px;
+  background: var(--dsw-alias-fill-secondary);
+}

@@ -32,7 +32,7 @@ const WEB_TITLES: Record<string, string> = {
  * the completed retrieval's web card as the row's collapsed-by-default card
  * body. The row discriminates on `toolName` only to pick its icon and title.
  */
-export function WebRow({ toolName, block, inspect, t }: WebRowProps) {
+export function WebRow({ toolName, block, openDetails, inspect, t }: WebRowProps) {
   const model = toolRowModel(toolName, block)
   const web = webCardModel(block)
   // Web search uses a globe; local grep/glob keep the magnifier family.
@@ -50,6 +50,7 @@ export function WebRow({ toolName, block, inspect, t }: WebRowProps) {
       errorSummary={model.errorSummary}
       web={web}
       state={model.state}
+      onOpenDetails={openDetails}
       inspect={inspect}
     />
   )

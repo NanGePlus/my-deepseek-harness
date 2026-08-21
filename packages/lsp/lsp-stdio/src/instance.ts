@@ -61,7 +61,13 @@ export class LspInstance {
    * @param writer - optional connection writer used by transport conformance tests.
    */
   constructor(private readonly spec: InstanceSpec, spawner: ConnectionSpawner, writer?: ConnectionWriter) {
-    this.connection = new LspConnection(spec, spawner, (method, params) => this.answerServerRequest(method, params), writer)
+    this.connection = new LspConnection(
+      spec,
+      spawner,
+      (method, params) => this.answerServerRequest(method, params),
+      () => {},
+      writer,
+    )
     this.ready = this.initialize()
     // A handshake rejection must not surface as an unhandled rejection before the first query awaits
     // it; queries attach the real handler.

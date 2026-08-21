@@ -95,6 +95,46 @@ export type WatchPathFrame =
   | { type: 'host/path-changed'; path: string }
   | { type: 'stream/error'; error: RpcError }
 
+/** Zero-based UTF-16 position in an editor buffer. */
+export interface HostLspPosition {
+  line: number
+  character: number
+}
+
+/** Zero-based UTF-16 range in an editor buffer. */
+export interface HostLspRange {
+  start: HostLspPosition
+  end: HostLspPosition
+}
+
+/** One language-server diagnostic for Monaco markers. */
+export interface HostLspDiagnostic {
+  message: string
+  severity: 'error' | 'warning' | 'info' | 'hint'
+  range: HostLspRange
+}
+
+/** host.lspSyncDocument response value. */
+export interface LspSyncDocumentResult {
+  diagnostics: HostLspDiagnostic[]
+}
+
+/** host.lspCloseDocument response value. */
+export interface LspCloseDocumentResult {
+  closed: true
+}
+
+/** Normalized hover content for the editor surface. */
+export interface HostLspHover {
+  contents: string
+  range?: HostLspRange
+}
+
+/** host.lspHoverDocument response value. */
+export interface LspHoverDocumentResult {
+  hover: HostLspHover | null
+}
+
 /** host.listDirectory response value: one directory level plus its ancestry. */
 export interface DirectoryListing {
   /** Absolute path of the listed directory. */
@@ -255,4 +295,31 @@ export interface HostApi {
     request: RpcRequest<{ workspaceId: WorkspaceId; path: string }>,
     signal: AbortSignal,
   ): AsyncIterable<RpcRequest<WatchPathFrame>>
+
+  /**
+   * Sync one editor buffer with the host language server and return diagnostics.
+   * Fails with `lsp-unavailable` when the deployment mounts no editor LSP backend.
+   */
+  lspSyncDocument(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string; text: string; version: number }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<LspSyncDocumentResult>>
+
+  /**
+   * Close one editor document in the host language server.
+   * Fails with `lsp-unavailable` when the deployment mounts no editor LSP backend.
+   */
+  lspCloseDocument(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<LspCloseDocumentResult>>
+
+  /**
+   * Query hover for one open editor document at a cursor position.
+   * Fails with `lsp-unavailable` when the deployment mounts no editor LSP backend.
+   */
+  lspHoverDocument(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string; text: string; version: number; line: number; character: number }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<LspHoverDocumentResult>>
 }

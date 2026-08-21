@@ -77,12 +77,14 @@ export class LspConnection {
    * @param spec - how to launch the server and answer its config requests.
    * @param spawner - the subprocess seam's spawn (the provider passes `ctx.subprocess.spawn`).
    * @param onServerRequest - answers a server→client request; rejects to send an error response.
+   * @param onNotification - handles server→client notifications such as publishDiagnostics.
    * @param writer - message writer; tests inject callback failures without relying on OS pipe races.
    */
   constructor(
     spec: ConnectionSpec,
     spawner: ConnectionSpawner,
     private readonly onServerRequest: (method: string, params: unknown) => Promise<unknown>,
+    private readonly onNotification: (method: string, params: unknown) => void = () => {},
     private readonly writer: ConnectionWriter = writeConnectionMessage,
   ) {
     this.decoder = new MessageDecoder(spec.maxMessageBytes)
@@ -251,7 +253,7 @@ export class LspConnection {
       return
     }
     if (typeof method === 'string') {
-      // A server→client notification (e.g. diagnostics, logs): ignored by this MVP host.
+      this.onNotification(method, frame.params)
       return
     }
     if (typeof id === 'number') this.handleResponse(id, frame)
