@@ -20,6 +20,7 @@
     "!dist/**/*.map"
   ],
   "scripts": {
+    "prebuild": "node ../../packages/client/ui-file-editor/scripts/sync-material-icons.mjs",
     "build": "vite build",
     "dev": "vite",
     "watch": "vite build --watch"

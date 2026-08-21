@@ -1,8 +1,10 @@
-/** File-type glyphs for file-tree rows (Material-style subset, not content thumbnails). */
+/** File-type glyphs for file-tree rows (Material Icon Theme subset, not content thumbnails). */
 
-import { IconFolderClose16, IconFolderOpenOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceEntry } from '@deepseek-ai/dsh-client-runtime/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
+import { FILE_ICON_BASE_URL } from './file-icon-base.ts'
+import { fileIconUrlForEntry } from './resolve-file-icon.ts'
+import css from './file-type-icon.module.css'
 
 /** Props for one file-tree type icon. */
 export interface FileTypeIconProps {
@@ -14,31 +16,32 @@ export interface FileTypeIconProps {
   t: TranslateNS<'fileEditor'>
 }
 
+const FALLBACK_FILE_ICON = `${FILE_ICON_BASE_URL}/file.svg`
+
 /**
- * Render a 16px type icon for a file-tree row.
+ * Render a 16px Material Icon Theme glyph for a file-tree row.
  * @param props - entry, expansion, and copy.
- * @returns an img-role glyph (folder vs generic file).
+ * @returns an img-role glyph resolved from the entry name and path.
  */
 export function FileTypeIcon({ entry, expanded, t }: FileTypeIconProps) {
-  if (entry.isDirectory) {
-    const Icon = expanded ? IconFolderOpenOutline16 : IconFolderClose16
-    return (
-      <span role="img" aria-label={t('editor.tree.icon.folder')}>
-        <Icon size={16} />
-      </span>
-    )
-  }
+  const label = entry.isDirectory ? t('editor.tree.icon.folder') : t('editor.tree.icon.file')
+  const src = fileIconUrlForEntry(entry, expanded)
+
   return (
-    <span role="img" aria-label={t('editor.tree.icon.file')}>
-      <svg width={16} height={16} viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path
-          d="M4.2 1.5h5.1L12.8 5v9.5H4.2V1.5Z"
-          stroke="currentColor"
-          strokeWidth="1.2"
-          strokeLinejoin="round"
-        />
-        <path d="M9.2 1.6V5h3.5" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-      </svg>
+    <span className={css.icon} role="img" aria-label={label}>
+      <img
+        className={css.glyph}
+        src={src}
+        width={16}
+        height={16}
+        alt=""
+        decoding="async"
+        onError={(event) => {
+          const img = event.currentTarget
+          if (img.src.endsWith(FALLBACK_FILE_ICON)) return
+          img.src = FALLBACK_FILE_ICON
+        }}
+      />
     </span>
   )
 }
