@@ -258,6 +258,7 @@ export function FileTreePane({
       .catch((error: unknown) => {
         if (ac.signal.aborted) return
         void error
+        setChildrenByPath(new Map([[boundWorkspacePath, []]]))
       })
     void gitStatus(boundWorkspaceId, ac.signal)
       .then((listing) => {
@@ -312,11 +313,14 @@ export function FileTreePane({
     ? []
     : (childrenByPath.get(workspace.path) ?? [])
   const rootLoaded = workspace !== undefined && childrenByPath.has(workspace.path)
+  const rootPending = workspace !== undefined && !rootLoaded
   const rows = useMemo(
     () => flattenVisibleTree(rootEntries, expanded, loadingPaths, childrenByPath, filter),
     [rootEntries, expanded, loadingPaths, childrenByPath, filter],
   )
-  const emptyWorkspace = rootLoaded && rootEntries.length === 0 && filter.trim() === ''
+  const showTreeEmpty = filter.trim() === '' && !rootPending && (
+    workspace === undefined || rootEntries.length === 0
+  )
   const filterNoMatch = rootLoaded && rootEntries.length > 0 && filter.trim() !== '' && rows.length === 0
 
   const virtualizer = useVirtualizer({
@@ -563,21 +567,15 @@ export function FileTreePane({
           </button>
         </Tooltip>
       </div>
-      <div className={css.treeScroll} ref={scrollRef} data-tree-scroll="true">
-        {emptyWorkspace && (
+      <div
+        className={css.treeScroll}
+        ref={scrollRef}
+        data-tree-scroll="true"
+        data-empty={showTreeEmpty || undefined}
+      >
+        {showTreeEmpty && (
           <div className={css.empty}>
             <div className={css.emptyTitle}>{t('editor.tree.empty.title')}</div>
-            <Tooltip label={t('editor.tree.empty.cta')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
-              <button
-                type="button"
-                className={iconCss.primaryButton}
-                aria-label={t('editor.tree.empty.cta')}
-                aria-disabled={!workspaceBound || undefined}
-                onClick={workspaceBound ? () => { openNameDialog('new-file') } : undefined}
-              >
-                {t('editor.tree.empty.cta')}
-              </button>
-            </Tooltip>
           </div>
         )}
         {filterNoMatch && (
@@ -590,73 +588,75 @@ export function FileTreePane({
             </Tooltip>
           </div>
         )}
-        <div
-          role="tree"
-          aria-label={treeLabel}
-          className={css.tree}
-          style={{ height: `${virtualizer.getTotalSize()}px` }}
-        >
-          {paintedRows.map(({ row, start }) => {
-            const letter = gitByPath.get(row.entry.path)
-            const selected = selectedPath === row.entry.path
-            return (
-              <div
-                key={row.entry.path}
-                role="treeitem"
-                aria-expanded={row.entry.isDirectory ? row.expanded : undefined}
-                aria-selected={selected}
-                aria-level={row.depth + 1}
-                aria-busy={row.loading || undefined}
-                className={clsx(css.row, selected && css.rowSelected)}
-                style={{
-                  transform: `translateY(${start}px)`,
-                  paddingLeft: `${row.depth * 12}px`,
-                }}
-                onClick={() => {
-                  setSelectedPath(row.entry.path)
-                  if (row.entry.isDirectory) void toggleDirectory(row.entry)
-                  else onOpenFile(row.entry)
-                }}
-              >
-                {row.entry.isDirectory
-                  ? (
-                    <Tooltip
-                      label={row.expanded
-                        ? t('editor.tree.collapse', { name: row.entry.name })
-                        : t('editor.tree.expand', { name: row.entry.name })}
-                      side="bottom"
-                      delayMs={TOOLTIP_DELAY_MS}
-                    >
-                      <button
-                        type="button"
-                        className={iconCss.disclosureButton}
-                        aria-label={row.expanded
+        {!showTreeEmpty && (
+          <div
+            role="tree"
+            aria-label={treeLabel}
+            className={css.tree}
+            style={{ height: `${virtualizer.getTotalSize()}px` }}
+          >
+            {paintedRows.map(({ row, start }) => {
+              const letter = gitByPath.get(row.entry.path)
+              const selected = selectedPath === row.entry.path
+              return (
+                <div
+                  key={row.entry.path}
+                  role="treeitem"
+                  aria-expanded={row.entry.isDirectory ? row.expanded : undefined}
+                  aria-selected={selected}
+                  aria-level={row.depth + 1}
+                  aria-busy={row.loading || undefined}
+                  className={clsx(css.row, selected && css.rowSelected)}
+                  style={{
+                    transform: `translateY(${start}px)`,
+                    paddingLeft: `${row.depth * 12}px`,
+                  }}
+                  onClick={() => {
+                    setSelectedPath(row.entry.path)
+                    if (row.entry.isDirectory) void toggleDirectory(row.entry)
+                    else onOpenFile(row.entry)
+                  }}
+                >
+                  {row.entry.isDirectory
+                    ? (
+                      <Tooltip
+                        label={row.expanded
                           ? t('editor.tree.collapse', { name: row.entry.name })
                           : t('editor.tree.expand', { name: row.entry.name })}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          void toggleDirectory(row.entry)
-                        }}
+                        side="bottom"
+                        delayMs={TOOLTIP_DELAY_MS}
                       >
-                        <span className={clsx(css.chevron, row.expanded && css.chevronOpen)} />
-                      </button>
-                    </Tooltip>
-                  )
-                  : <span className={css.disclosureSpacer} />}
-                <FileTypeIcon entry={row.entry} expanded={row.expanded} t={t} />
-                <span className={css.name}>{row.entry.name}</span>
-                {letter !== undefined && (
-                  <span className={clsx(css.badge, badgeClass(letter))} aria-label={t('editor.tree.git.badge', { letter })}>
-                    {letter}
-                  </span>
-                )}
-                {row.loading && (
-                  <span className={css.spinner} role="status" aria-label={t('editor.tree.loading')} />
-                )}
-              </div>
-            )
-          })}
-        </div>
+                        <button
+                          type="button"
+                          className={iconCss.disclosureButton}
+                          aria-label={row.expanded
+                            ? t('editor.tree.collapse', { name: row.entry.name })
+                            : t('editor.tree.expand', { name: row.entry.name })}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void toggleDirectory(row.entry)
+                          }}
+                        >
+                          <span className={clsx(css.chevron, row.expanded && css.chevronOpen)} />
+                        </button>
+                      </Tooltip>
+                    )
+                    : <span className={css.disclosureSpacer} />}
+                  <FileTypeIcon entry={row.entry} expanded={row.expanded} t={t} />
+                  <span className={css.name}>{row.entry.name}</span>
+                  {letter !== undefined && (
+                    <span className={clsx(css.badge, badgeClass(letter))} aria-label={t('editor.tree.git.badge', { letter })}>
+                      {letter}
+                    </span>
+                  )}
+                  {row.loading && (
+                    <span className={css.spinner} role="status" aria-label={t('editor.tree.loading')} />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
       <Modal
         open={nameDialog !== null}

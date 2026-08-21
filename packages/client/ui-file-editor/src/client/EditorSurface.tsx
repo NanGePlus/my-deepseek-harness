@@ -180,7 +180,7 @@ export function EditorSurface({
   }, [workspaceId, actions])
   const [status, setStatus] = useState<EditorPaneStatus>({ kind: 'idle' })
   const [dark, setDark] = useState(() => document.body.hasAttribute(DARK_ATTRIBUTE))
-  const [newFileTrigger, setNewFileTrigger] = useState(0)
+  const [newFileTrigger, _setNewFileTrigger] = useState(0)
   const [treeVisible, setTreeVisible] = useState(true)
   const [treeWidthPx, setTreeWidthPx] = useState<number | null>(null)
   const [treeDragging, setTreeDragging] = useState(false)
@@ -353,13 +353,12 @@ export function EditorSurface({
     ioAbort.current?.abort()
     const ac = new AbortController()
     ioAbort.current = ac
-    setStatus({ kind: 'loading', op: 'save' })
     retryRef.current = () => { void saveActive() }
     try {
       await writeFile(workspace.workspaceId, active.path, active.buffer, ac.signal)
       if (ac.signal.aborted) return
       editorActions?.markSaved(active.path)
-      setStatus({ kind: 'idle' })
+      setStatus(prev => (prev.kind === 'error' && prev.op === 'save' ? { kind: 'idle' } : prev))
     } catch (error: unknown) {
       if (ac.signal.aborted) return
       void error
@@ -457,11 +456,11 @@ export function EditorSurface({
         t={t}
         treeCollapsed={!treeVisible}
         onShowTree={() => { setTreeVisible(true) }}
+        workspaceRoot={workspace?.path}
         onFocus={(path) => { editorActions?.focusTab(path) }}
         onClose={handleCloseTab}
         onBufferChange={(path, buffer) => { editorActions?.setBuffer(path, buffer) }}
         onRetry={() => { retryRef.current?.() }}
-        onNewFile={() => { setNewFileTrigger(current => current + 1) }}
       />
       <Modal
         open={externalChange !== null}

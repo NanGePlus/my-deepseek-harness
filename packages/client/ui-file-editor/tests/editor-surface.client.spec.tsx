@@ -79,7 +79,26 @@ function defaultReadFile(_id: WorkspaceId, path: string, kind: FileReadKind): Pr
   if (kind === 'bytes') {
     return Promise.resolve({ kind: 'bytes', path, data: PNG_BASE64, mediaType: 'image/png' })
   }
+  if (path.endsWith('.md')) {
+    return Promise.resolve({ kind: 'text', path, text: `# ${path.split('/').pop()}\n\nPreview **body**\n` })
+  }
   return Promise.resolve({ kind: 'text', path, text: `contents of ${path}\n` })
+}
+
+async function switchMarkdownToSource(): Promise<void> {
+  await waitFor(() => {
+    expect(screen.getByRole('tab', { name: 'Markdown' })).toBeTruthy()
+  })
+  fireEvent.click(screen.getByRole('tab', { name: 'Markdown' }))
+  await waitFor(() => {
+    expect(screen.getByRole('tab', { name: 'Markdown' }).getAttribute('aria-selected')).toBe('true')
+  })
+}
+
+async function markdownEditor(name = 'README.md'): Promise<HTMLTextAreaElement> {
+  await waitFor(() => { expect(screen.getByRole('tab', { name: new RegExp(name) })).toBeTruthy() })
+  await switchMarkdownToSource()
+  return waitFor(() => screen.getByRole<HTMLTextAreaElement>('textbox', { name: new RegExp(name) }))
 }
 
 const SRC_CHILDREN: WorkspaceEntry[] = [
@@ -266,13 +285,12 @@ describe('EditorSurface file tree', () => {
     expect(listWorkspaceEntries).toHaveBeenCalledWith('ws2', '/w/beta', expect.any(AbortSignal))
   })
 
-  it('empty-workspace: shows the empty-directory copy and New file CTA', async () => {
+  it('empty-workspace: shows the empty-workspace copy without a tree CTA', async () => {
     const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => ({
       path, entries: [] as WorkspaceEntry[], truncated: false,
     }))
     mount({ list: listWorkspaceEntries })
-    await waitFor(() => { expect(screen.getByText('此目录为空')).toBeTruthy() })
-    expect(screen.getAllByRole('button', { name: '新建文件' }).length).toBeGreaterThan(0)
+    await waitFor(() => { expect(screen.getByText('该工作区暂无文件')).toBeTruthy() })
     expect(screen.getByText('未打开文件')).toBeTruthy()
   })
 
@@ -371,7 +389,7 @@ describe('EditorSurface file tree', () => {
       throw new Error('denied')
     })
     mount({ list: listWorkspaceEntries })
-    await waitFor(() => { expect(screen.getByPlaceholderText('按文件名过滤')).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByText('该工作区暂无文件')).toBeTruthy() })
     expect(screen.queryByText('README.md')).toBeNull()
   })
 
@@ -379,6 +397,7 @@ describe('EditorSurface file tree', () => {
     const listWorkspaceEntries = vi.fn(async () => listingFor(ROOT))
     mount({ items: [], list: listWorkspaceEntries })
     expect(screen.getByPlaceholderText('按文件名过滤')).toBeTruthy()
+    expect(screen.getByText('该工作区暂无文件')).toBeTruthy()
     expect(listWorkspaceEntries).not.toHaveBeenCalled()
     expect(screen.getByText('未打开文件')).toBeTruthy()
   })
@@ -494,11 +513,43 @@ describe('EditorSurface open / save', () => {
     await clickFile('README.md')
     await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
     expect(screen.queryByText('未打开文件')).toBeNull()
-    expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy()
-    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md.*Markdown/ }).value)
-      .toBe('contents of /w/alpha/README.md\n')
+    expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
+    const box = await markdownEditor()
+    expect(box.value).toBe('# README.md\n\nPreview **body**\n')
     expect(screen.queryByRole('button', { name: '保存' })).toBeNull()
     expect(b.readFile).toHaveBeenCalledWith(WID, `${ROOT}/README.md`, 'text', expect.any(AbortSignal))
+  })
+
+  it('markdown-preview: toggles between preview and Markdown source', async () => {
+    mount()
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy() })
+    await markdownEditor()
+    fireEvent.click(screen.getByRole('tab', { name: '预览' }))
+    expect(screen.queryByRole('textbox', { name: /README\.md/ })).toBeNull()
+    expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
+  })
+
+  it('markdown-source-save: saving keeps Markdown source mode and the editor mounted', async () => {
+    let releaseWrite!: (result: FileWriteResult) => void
+    const b = mount({
+      write: () => new Promise<FileWriteResult>((resolve) => { releaseWrite = resolve }),
+    })
+    await clickFile('README.md')
+    const box = await markdownEditor()
+    fireEvent.change(box, { target: { value: '# edited\n\nsaved body\n' } })
+    saveShortcut()
+    expect(screen.queryByText('保存中…')).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Markdown' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md/ }).value)
+      .toBe('# edited\n\nsaved body\n')
+    await act(async () => { releaseWrite({ path: `${ROOT}/README.md` }) })
+    await waitFor(() => { expect(screen.queryByLabelText('未保存')).toBeNull() })
+    expect(screen.getByRole('tab', { name: 'Markdown' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.queryByRole('heading', { level: 1, name: 'edited' })).toBeNull()
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md/ }).value)
+      .toBe('# edited\n\nsaved body\n')
+    expect(b.writeFile).toHaveBeenCalledWith(WID, `${ROOT}/README.md`, '# edited\n\nsaved body\n', expect.any(AbortSignal))
   })
 
   it('default-preview: opening an image shows a read-only preview', async () => {
@@ -527,7 +578,7 @@ describe('EditorSurface open / save', () => {
     mount()
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
     expect(screen.getByText('未打开文件')).toBeTruthy()
-    expect(screen.getByText('从左侧文件树选择文件，或新建文件')).toBeTruthy()
+    expect(screen.getByText('从左侧文件树选择文件')).toBeTruthy()
     expect(screen.queryByRole('tablist', { name: '编辑器标签页' })).toBeNull()
     fireEvent.keyDown(window, { key: 's', metaKey: true })
   })
@@ -535,14 +586,13 @@ describe('EditorSurface open / save', () => {
   it('dirty-unsaved: editing shows a dirty mark; ⌘S writes and clears it', async () => {
     const b = mount()
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy() })
-    const box = screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md.*Markdown/ })
+    const box = await markdownEditor()
     fireEvent.change(box, { target: { value: 'edited readme\n' } })
     await waitFor(() => { expect(screen.getByLabelText('未保存')).toBeTruthy() })
     saveShortcut()
     await waitFor(() => { expect(screen.queryByLabelText('未保存')).toBeNull() })
     expect(b.writeFile).toHaveBeenCalledWith(WID, `${ROOT}/README.md`, 'edited readme\n', expect.any(AbortSignal))
-    const again = screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md.*Markdown/ })
+    const again = await markdownEditor()
     fireEvent.change(again, { target: { value: 'again\n' } })
     await waitFor(() => { expect(screen.getByLabelText('未保存')).toBeTruthy() })
     saveShortcut()
@@ -575,7 +625,7 @@ describe('EditorSurface open / save', () => {
     await waitFor(() => { expect(screen.getByRole('textbox', { name: /untracked\.ts.*TypeScript/ })).toBeTruthy() })
     expect(b.readFile).toHaveBeenCalledTimes(2)
     fireEvent.click(screen.getByRole('tab', { name: /README\.md/ }))
-    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy() })
+    await markdownEditor()
     await clickFile('README.md')
     expect(b.readFile).toHaveBeenCalledTimes(2)
     fireEvent.click(screen.getByRole('button', { name: '关闭 README.md' }))
@@ -607,8 +657,8 @@ describe('EditorSurface open / save', () => {
   it('does not save when the Session no longer has a Workspace', async () => {
     const b = mount()
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy() })
-    fireEvent.change(screen.getByRole('textbox', { name: /README\.md/ }), { target: { value: 'x\n' } })
+    const readmeBox = await markdownEditor()
+    fireEvent.change(readmeBox, { target: { value: 'x\n' } })
     b.workspacesStore.update((draft) => { draft.items = [] })
     b.view.rerender(<EditorSurface {...b.props} />)
     saveShortcut()
@@ -633,8 +683,8 @@ describe('EditorSurface open / save', () => {
       write: () => new Promise<FileWriteResult>((resolve) => { release = resolve }),
     })
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README.md/ })).toBeTruthy() })
-    fireEvent.change(screen.getByRole('textbox', { name: /README.md/ }), { target: { value: 'x\n' } })
+    const readmeBox = await markdownEditor()
+    fireEvent.change(readmeBox, { target: { value: 'x\n' } })
     saveShortcut()
     b.view.unmount()
     await act(async () => { release({ path: `${ROOT}/README.md` }) })
@@ -646,14 +696,14 @@ describe('EditorSurface open / save', () => {
       write: () => new Promise<FileWriteResult>((_resolve, reject) => { fail = reject }),
     })
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README.md/ })).toBeTruthy() })
-    fireEvent.change(screen.getByRole('textbox', { name: /README.md/ }), { target: { value: 'x\n' } })
+    const readmeBox = await markdownEditor()
+    fireEvent.change(readmeBox, { target: { value: 'x\n' } })
     saveShortcut()
     b.view.unmount()
     await act(async () => { fail(new Error('gone')) })
   })
 
-  it('loading-open-save: open and save show in-pane status without hiding the tree', async () => {
+  it('silent-save: save keeps the editor visible without in-pane loading', async () => {
     let releaseRead!: (result: FileReadResult) => void
     let releaseWrite!: (result: FileWriteResult) => void
     const b = mount({
@@ -667,13 +717,14 @@ describe('EditorSurface open / save', () => {
     await act(async () => {
       releaseRead({ kind: 'text', path: `${ROOT}/README.md`, text: 'loaded\n' })
     })
-    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy() })
-    fireEvent.change(screen.getByRole('textbox', { name: /README\.md.*Markdown/ }), { target: { value: 'dirty\n' } })
+    const box = await markdownEditor()
+    fireEvent.change(box, { target: { value: 'dirty\n' } })
     saveShortcut()
-    await waitFor(() => { expect(screen.getByText('保存中…')).toBeTruthy() })
+    expect(screen.queryByText('保存中…')).toBeNull()
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md/ }).value).toBe('dirty\n')
     expect(screen.getByPlaceholderText('按文件名过滤')).toBeTruthy()
     await act(async () => { releaseWrite({ path: `${ROOT}/README.md` }) })
-    await waitFor(() => { expect(screen.queryByText('保存中…')).toBeNull() })
+    await waitFor(() => { expect(screen.queryByLabelText('未保存')).toBeNull() })
     expect(b.writeFile).toHaveBeenCalled()
   })
 
@@ -695,8 +746,8 @@ describe('EditorSurface open / save', () => {
     expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
     openFail = false
     fireEvent.click(screen.getByRole('button', { name: '重试' }))
-    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy() })
-    fireEvent.change(screen.getByRole('textbox', { name: /README\.md.*Markdown/ }), { target: { value: 'x\n' } })
+    const box = await markdownEditor()
+    fireEvent.change(box, { target: { value: 'x\n' } })
     saveShortcut()
     await waitFor(() => { expect(screen.getByText('无法保存此文件')).toBeTruthy() })
     writeFail = false
@@ -710,6 +761,8 @@ describe('EditorSurface open / save', () => {
     document.body.removeAttribute('data-ds-dark-theme')
     mount()
     await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
+    await switchMarkdownToSource()
     await waitFor(() => { expect(screen.getByRole('textbox', { name: /浅色/ })).toBeTruthy() })
     await act(async () => { document.body.setAttribute('data-ds-dark-theme', '') })
     await waitFor(() => { expect(screen.getByRole('textbox', { name: /深色/ })).toBeTruthy() })
@@ -843,14 +896,6 @@ describe('EditorSurface file operations', () => {
     expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length).toBeGreaterThan(1)
   })
 
-  it('opens the new-file dialog from the empty editor CTA', async () => {
-    mount()
-    await waitFor(() => { expect(screen.getByText('未打开文件')).toBeTruthy() })
-    const emptyCard = screen.getByText('从左侧文件树选择文件，或新建文件').parentElement!
-    fireEvent.click(within(emptyCard).getByRole('button', { name: '新建文件' }))
-    await waitFor(() => { expect(screen.getByRole('dialog', { name: '新建文件' })).toBeTruthy() })
-  })
-
   it('renames the selected path and updates an open tab', async () => {
     const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => listingFor(path))
     const b = mount({ list: listWorkspaceEntries })
@@ -861,9 +906,8 @@ describe('EditorSurface file operations', () => {
     const renameDialog = await waitFor(() => screen.getByRole('dialog', { name: '重命名' }))
     fireEvent.change(within(renameDialog).getByLabelText('名称'), { target: { value: 'GUIDE.md' } })
     fireEvent.click(within(renameDialog).getByRole('button', { name: '重命名' }))
-    await waitFor(() => { expect(screen.getByText('GUIDE.md')).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /GUIDE\.md/ })).toBeTruthy() })
     expect(b.renamePath).toHaveBeenCalledWith(WID, `${ROOT}/README.md`, 'GUIDE.md')
-    expect(screen.getByRole('tab', { name: /GUIDE\.md/ })).toBeTruthy()
     expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length).toBeGreaterThan(1)
   })
 
@@ -983,7 +1027,7 @@ describe('EditorSurface external change', () => {
       },
     })
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy() })
+    await markdownEditor()
     expect(watch.watchPath).toHaveBeenCalledWith(WID, README, expect.any(Function), expect.any(AbortSignal))
     await act(async () => { watch.trigger(README) })
     const dialog = await waitFor(() => screen.getByRole('dialog', { name: '文件已在磁盘上更改' }))
@@ -1009,16 +1053,13 @@ describe('EditorSurface external change', () => {
       },
     })
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy() })
-    fireEvent.change(
-      screen.getByRole('textbox', { name: /README\.md/ }),
-      { target: { value: 'local edits\n' } },
-    )
+    const box = await markdownEditor()
+    fireEvent.change(box, { target: { value: 'local edits\n' } })
     await act(async () => { watch.trigger(README) })
     const dialog = await waitFor(() => screen.getByRole('dialog', { name: '文件已在磁盘上更改' }))
     fireEvent.click(within(dialog).getByRole('button', { name: '重新加载' }))
     await waitFor(() => { expect(screen.queryByRole('dialog', { name: '文件已在磁盘上更改' })).toBeNull() })
-    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md/ }).value).toBe('external\n')
+    expect((await markdownEditor()).value).toBe('external\n')
     expect(screen.queryByLabelText('未保存')).toBeNull()
   })
 
@@ -1039,16 +1080,13 @@ describe('EditorSurface external change', () => {
       },
     })
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy() })
-    fireEvent.change(
-      screen.getByRole('textbox', { name: /README\.md/ }),
-      { target: { value: 'local edits\n' } },
-    )
+    const box = await markdownEditor()
+    fireEvent.change(box, { target: { value: 'local edits\n' } })
     await act(async () => { watch.trigger(README) })
     const dialog = await waitFor(() => screen.getByRole('dialog', { name: '文件已在磁盘上更改' }))
     fireEvent.click(within(dialog).getByRole('button', { name: '保留本地编辑' }))
     await waitFor(() => { expect(screen.queryByRole('dialog', { name: '文件已在磁盘上更改' })).toBeNull() })
-    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md/ }).value).toBe('local edits\n')
+    expect((await markdownEditor()).value).toBe('local edits\n')
     expect(screen.getByLabelText('未保存')).toBeTruthy()
   })
 
@@ -1077,11 +1115,8 @@ describe('EditorSurface dirty guard', () => {
 
   async function dirtyReadme(): Promise<void> {
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy() })
-    fireEvent.change(
-      screen.getByRole('textbox', { name: /README\.md/ }),
-      { target: { value: 'local edits\n' } },
-    )
+    const box = await markdownEditor()
+    fireEvent.change(box, { target: { value: 'local edits\n' } })
     expect(screen.getByLabelText('未保存')).toBeTruthy()
   }
 

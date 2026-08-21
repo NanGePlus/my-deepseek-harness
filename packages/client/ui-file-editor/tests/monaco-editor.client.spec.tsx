@@ -36,7 +36,7 @@ beforeEach(() => {
     editor: { defineTheme, create },
   })
   delete (globalThis as { MonacoEnvironment?: unknown }).MonacoEnvironment
-  document.documentElement.style.setProperty('--dsw-alias-markdown-code-block', '#F9FAFB')
+  document.documentElement.style.setProperty('--dsw-specific-sidebar-fill', '#F9FAFB')
   document.documentElement.style.setProperty('--dsw-alias-label-primary', '#0F1115')
   document.documentElement.style.setProperty('--ds-font-family-code', 'ui-monospace')
   vi.stubGlobal('Worker', class {

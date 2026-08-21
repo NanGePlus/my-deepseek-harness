@@ -1,13 +1,11 @@
 /** Locale keys owned by the file editor surface plugin. */
 export const zh = {
   'editor.empty.title': '未打开文件',
-  'editor.empty.body': '从左侧文件树选择文件，或新建文件',
-  'editor.empty.cta': '新建文件',
+  'editor.empty.body': '从左侧文件树选择文件',
   'editor.tree.filter.placeholder': '按文件名过滤',
   'editor.tree.filter.clear': '清除过滤',
   'editor.tree.filter.noMatch': '无匹配文件',
-  'editor.tree.empty.title': '此目录为空',
-  'editor.tree.empty.cta': '新建文件',
+  'editor.tree.empty.title': '该工作区暂无文件',
   'editor.tree.newFile': '新建文件',
   'editor.tree.newFolder': '新建文件夹',
   'editor.tree.rename': '重命名',
@@ -62,18 +60,22 @@ export const zh = {
   'editor.theme.light': '浅色',
   'editor.theme.dark': '深色',
   'editor.buffer.label': '{name}，{language}，{theme}',
+  'editor.copy': '复制',
+  'editor.copied': '已复制',
+  'editor.markdown.breadcrumb': '文件路径',
+  'editor.markdown.mode.label': 'Markdown 视图',
+  'editor.markdown.mode.preview': '预览',
+  'editor.markdown.mode.source': 'Markdown',
 } as const
 
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
   'editor.empty.title': 'No file open',
-  'editor.empty.body': 'Choose a file from the tree on the left, or create one',
-  'editor.empty.cta': 'New file',
+  'editor.empty.body': 'Choose a file from the tree on the left',
   'editor.tree.filter.placeholder': 'Filter by filename',
   'editor.tree.filter.clear': 'Clear filter',
   'editor.tree.filter.noMatch': 'No matching files',
-  'editor.tree.empty.title': 'This folder is empty',
-  'editor.tree.empty.cta': 'New file',
+  'editor.tree.empty.title': 'This workspace has no files',
   'editor.tree.newFile': 'New file',
   'editor.tree.newFolder': 'New folder',
   'editor.tree.rename': 'Rename',
@@ -128,6 +130,12 @@ export const en = {
   'editor.theme.light': 'light',
   'editor.theme.dark': 'dark',
   'editor.buffer.label': '{name}, {language}, {theme}',
+  'editor.copy': 'Copy',
+  'editor.copied': 'Copied',
+  'editor.markdown.breadcrumb': 'File path',
+  'editor.markdown.mode.label': 'Markdown view',
+  'editor.markdown.mode.preview': 'Preview',
+  'editor.markdown.mode.source': 'Markdown',
 } as const
 
 /** The fileEditor namespace key union. */

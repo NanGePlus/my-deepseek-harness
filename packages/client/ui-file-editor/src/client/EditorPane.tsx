@@ -4,7 +4,8 @@ import { IconCloseOutline16, IconLoadingOutline16, IconPanelLeftOutline16, Toolt
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { MonacoEditor } from './MonacoEditor.tsx'
-import { languageLabel } from './open-kind.ts'
+import { MarkdownEditorBody } from './MarkdownEditorBody.tsx'
+import { isMarkdownLanguage, languageLabel } from './open-kind.ts'
 import { tabIsDirty, type EditorTab } from './stores.ts'
 import css from './EditorPane.module.css'
 import iconCss from './IconButton.module.css'
@@ -47,12 +48,12 @@ export interface EditorPaneProps {
   onBufferChange: (path: string, value: string) => void
   /** Retry the failed open or save. */
   onRetry: () => void
-  /** Open the new-file dialog in the tree toolbar. */
-  onNewFile: () => void
   /** True when the file tree pane is collapsed. */
   treeCollapsed?: boolean
   /** Expand the collapsed file tree pane. */
   onShowTree?: () => void
+  /** Bound Workspace root for Markdown breadcrumbs. */
+  workspaceRoot?: string | undefined
 }
 
 /**
@@ -60,11 +61,13 @@ export interface EditorPaneProps {
  * @param props - tabs, status, theme, and callbacks.
  */
 export function EditorPane({
-  tabs, activePath, status, dark, t, onFocus, onClose, onBufferChange, onRetry, onNewFile,
-  treeCollapsed = false, onShowTree,
+  tabs, activePath, status, dark, t, onFocus, onClose, onBufferChange, onRetry,
+  treeCollapsed = false, onShowTree, workspaceRoot,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.path === activePath)
   const themeLabel = dark ? t('editor.theme.dark') : t('editor.theme.light')
+  const openBlocked = (status.kind === 'loading' && status.op === 'open')
+    || (status.kind === 'error' && status.op === 'open')
 
   return (
     <div className={css.pane}>
@@ -122,17 +125,15 @@ export function EditorPane({
         </div>
       )}
       <div className={css.body}>
-        {status.kind === 'loading' && (
+        {status.kind === 'loading' && status.op === 'open' && (
           <div className={css.feedback} role="status" aria-live="polite">
             <span className={css.spinner} aria-hidden="true">
               <IconLoadingOutline16 size={24} />
             </span>
-            <span className={css.feedbackCopy}>
-              {status.op === 'save' ? t('editor.loading.save') : t('editor.loading.open')}
-            </span>
+            <span className={css.feedbackCopy}>{t('editor.loading.open')}</span>
           </div>
         )}
-        {status.kind === 'error' && (
+        {status.kind === 'error' && status.op === 'open' && (
           <div className={css.emptyCard} role="alert">
             <div className={css.errorCopy}>{status.message}</div>
             <Tooltip label={t('editor.retry')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
@@ -142,54 +143,72 @@ export function EditorPane({
             </Tooltip>
           </div>
         )}
-        {status.kind === 'idle' && active === undefined && (
-          <div className={css.emptyCard}>
-            <span className={css.emptyIcon} aria-hidden="true">
-              <svg width={48} height={48} viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M4.2 1.5h5.1L12.8 5v9.5H4.2V1.5Z"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  strokeLinejoin="round"
+        {!openBlocked && (
+          <>
+            {active === undefined && status.kind === 'idle' && (
+              <div className={css.emptyCard}>
+                <span className={css.emptyIcon} aria-hidden="true">
+                  <svg width={48} height={48} viewBox="0 0 16 16" fill="none">
+                    <path
+                      d="M4.2 1.5h5.1L12.8 5v9.5H4.2V1.5Z"
+                      stroke="currentColor"
+                      strokeWidth="1.2"
+                      strokeLinejoin="round"
+                    />
+                    <path d="M9.2 1.6V5h3.5" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <div className={css.emptyTitle}>{t('editor.empty.title')}</div>
+                <div className={css.emptyBody}>{t('editor.empty.body')}</div>
+              </div>
+            )}
+            {active?.kind === 'text' && isMarkdownLanguage(active.language) && (
+              <MarkdownEditorBody
+                tab={active}
+                workspaceRoot={workspaceRoot}
+                dark={dark}
+                t={t}
+                onBufferChange={onBufferChange}
+              />
+            )}
+            {active?.kind === 'text' && !isMarkdownLanguage(active.language) && (
+              <MonacoEditor
+                path={active.path}
+                value={active.buffer}
+                language={active.language}
+                ariaLabel={t('editor.buffer.label', {
+                  name: active.name,
+                  language: languageLabel(active.language),
+                  theme: themeLabel,
+                })}
+                dark={dark}
+                onChange={(value) => { onBufferChange(active.path, value) }}
+              />
+            )}
+            {active?.kind === 'preview' && (
+              <div className={css.preview}>
+                <img
+                  className={css.previewImage}
+                  alt={active.name}
+                  src={`data:${active.mediaType};base64,${active.data}`}
                 />
-                <path d="M9.2 1.6V5h3.5" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-              </svg>
-            </span>
-            <div className={css.emptyTitle}>{t('editor.empty.title')}</div>
-            <div className={css.emptyBody}>{t('editor.empty.body')}</div>
-            <Tooltip label={t('editor.empty.cta')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
-              <button type="button" className={iconCss.primaryButton} onClick={() => { onNewFile() }}>
-                {t('editor.empty.cta')}
+              </div>
+            )}
+            {active?.kind === 'non-openable' && (
+              <div className={css.emptyCard}>
+                <div className={css.emptyTitle}>{t('editor.nonOpenable')}</div>
+              </div>
+            )}
+          </>
+        )}
+        {status.kind === 'error' && status.op === 'save' && (
+          <div className={css.bodyOverlay} role="alert">
+            <div className={css.errorCopy}>{status.message}</div>
+            <Tooltip label={t('editor.retry')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
+              <button type="button" className={iconCss.primaryButton} onClick={() => { onRetry() }}>
+                {t('editor.retry')}
               </button>
             </Tooltip>
-          </div>
-        )}
-        {status.kind === 'idle' && active?.kind === 'text' && (
-          <MonacoEditor
-            path={active.path}
-            value={active.buffer}
-            language={active.language}
-            ariaLabel={t('editor.buffer.label', {
-              name: active.name,
-              language: languageLabel(active.language),
-              theme: themeLabel,
-            })}
-            dark={dark}
-            onChange={(value) => { onBufferChange(active.path, value) }}
-          />
-        )}
-        {status.kind === 'idle' && active?.kind === 'preview' && (
-          <div className={css.preview}>
-            <img
-              className={css.previewImage}
-              alt={active.name}
-              src={`data:${active.mediaType};base64,${active.data}`}
-            />
-          </div>
-        )}
-        {status.kind === 'idle' && active?.kind === 'non-openable' && (
-          <div className={css.emptyCard}>
-            <div className={css.emptyTitle}>{t('editor.nonOpenable')}</div>
           </div>
         )}
       </div>

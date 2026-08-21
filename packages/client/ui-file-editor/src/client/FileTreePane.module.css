@@ -6,7 +6,7 @@
   min-width: min(180px, 100%);
   min-height: 0;
   overflow: hidden;
-  background: var(--dsw-alias-bg-overlay);
+  background: var(--dsw-specific-sidebar-fill);
 }
 
 .paneResized {
@@ -101,6 +101,17 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+
+.treeScroll[data-empty='true'] {
+  display: flex;
+  flex-direction: column;
+}
+
+.treeScroll[data-empty='true'] .empty {
+  flex: 1;
+  min-height: 0;
+  justify-content: center;
 }
 
 .tree {
@@ -211,8 +222,8 @@
 
 .emptyTitle {
   font-family: var(--dsw-font-family);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 20px;
-  font-weight: 600;
-  color: var(--dsw-alias-label-primary);
+  font-weight: 400;
+  color: var(--dsw-alias-label-tertiary);
 }

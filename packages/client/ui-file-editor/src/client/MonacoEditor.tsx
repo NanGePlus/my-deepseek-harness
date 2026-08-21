@@ -37,7 +37,7 @@ function themeIdFor(monaco: MonacoEditorModule, dark: boolean): string {
   const builtin = dark ? 'vs-dark' : 'vs'
   if (themesDefined) return custom
   const styles = getComputedStyle(document.documentElement)
-  const bg = styles.getPropertyValue('--dsw-alias-markdown-code-block').trim()
+  const bg = styles.getPropertyValue('--dsw-specific-sidebar-fill').trim()
   const fg = styles.getPropertyValue('--dsw-alias-label-primary').trim()
   if (bg !== '' && fg !== '') {
     monaco.editor.defineTheme('dsh-light', {
