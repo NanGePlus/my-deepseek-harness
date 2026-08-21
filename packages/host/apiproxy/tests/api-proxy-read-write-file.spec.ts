@@ -14,6 +14,7 @@ import WorkspaceRegistry from '@deepseek-ai/dsh-workspace'
 import type { RpcRequest, RpcResponse } from '@deepseek-ai/dsh-host-apiproxy/api/rpc'
 import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api/rpc'
 import { createApiProxy } from '@deepseek-ai/dsh-host-apiproxy'
+import { WORKSPACE_FILE_READ_MAX_BYTES } from '../src/read-write-file.ts'
 import { MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 
 let nextRpc = 1
@@ -241,5 +242,25 @@ describe('host.readFile and host.writeFile path bounds', () => {
       ok: false,
       error: { code: 'file-not-regular', details: { path: dirPath } },
     })
+  })
+
+  it('reports file-too-large when stat size exceeds the read limit', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    const bigPath = join(workspacePath, 'bundle.js')
+    writeFileSync(bigPath, Buffer.alloc(WORKSPACE_FILE_READ_MAX_BYTES + 1, 97))
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const response = await api.host.readFile(
+      request({ workspaceId: workspace.workspaceId, path: bigPath, kind: 'text' }),
+      new AbortController().signal,
+    )
+
+    expect(response.result.ok).toBe(false)
+    if (response.result.ok) throw new Error('unreachable')
+    expect(response.result.error.code).toBe('file-too-large')
+    if (response.result.error.code !== 'file-too-large') throw new Error('unreachable')
+    expect(response.result.error.details.path).toBe(bigPath)
   })
 })

@@ -125,6 +125,7 @@ import {
   writeWorkspaceFile,
   WorkspaceFileNotFoundError,
   WorkspaceFileNotRegularError,
+  WorkspaceFileTooLargeError,
   WorkspaceFileUnreadableError,
   WorkspaceFileWriteFailedError,
 } from './read-write-file.ts'
@@ -3119,6 +3120,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               code: 'file-not-regular',
               message: error.message,
               details: { path: error.path },
+            })
+          }
+          if (error instanceof WorkspaceFileTooLargeError) {
+            return err(request, {
+              code: 'file-too-large',
+              message: error.message,
+              details: { path: error.path, size: error.size, limit: error.limit },
             })
           }
           if (error instanceof WorkspaceFileUnreadableError) {

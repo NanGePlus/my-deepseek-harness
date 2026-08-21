@@ -5,6 +5,7 @@ import clsx from 'clsx'
 import type { HostLspDiagnostic, HostLspHover } from '@deepseek-ai/dsh-client-runtime/client'
 import { loadMonacoEditor, type MonacoEditorModule, type MonacoStandaloneEditor } from './monaco-load.ts'
 import { ensureMonacoConfigured } from './monaco-config.ts'
+import { monacoOptionsForContent } from './editor-file-policy.ts'
 import { setLspHoverHandler } from './monaco-hover.ts'
 import { installMonacoEnvironment } from './monaco-environment.ts'
 import css from './MonacoEditor.module.css'
@@ -110,6 +111,7 @@ export function MonacoEditor({
       ensureMonacoConfigured(monaco)
       const theme = themeIdFor(dark)
       monacoRef.current = monaco
+      const contentOptions = monacoOptionsForContent(valueRef.current)
       const fontFamily = getComputedStyle(document.body)
         .getPropertyValue('--ds-font-family-code')
         .trim() || 'ui-monospace, SFMono-Regular, Menlo, Monaco, monospace'
@@ -125,8 +127,9 @@ export function MonacoEditor({
           minimap: { enabled: false },
           automaticLayout: true,
           scrollBeyondLastLine: false,
-          wordWrap: 'on',
-          wrappingStrategy: 'advanced',
+          wordWrap: contentOptions.wordWrap,
+          wrappingStrategy: contentOptions.wrappingStrategy,
+          largeFileOptimizations: contentOptions.largeFileOptimizations,
           scrollbar: { horizontal: 'auto', vertical: 'auto' },
           renderLineHighlight: 'none',
           overviewRulerLanes: 0,
@@ -182,7 +185,12 @@ export function MonacoEditor({
   }, [path, language, dark, surface])
 
   useEffect(() => {
-    editorRef.current?.setValue(value)
+    const handle = editorRef.current
+    if (handle === null) return
+    const id = window.requestAnimationFrame(() => {
+      handle.setValue(value)
+    })
+    return () => { window.cancelAnimationFrame(id) }
   }, [value])
 
   useEffect(() => {

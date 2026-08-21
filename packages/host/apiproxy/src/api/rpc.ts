@@ -44,6 +44,7 @@ export interface RpcErrorDetailsMap {
   'workspace-move-invalid': { workspaceId: string; sessionId: SessionId; beforeSessionId?: SessionId }
   'file-not-found': { path: string }
   'file-not-regular': { path: string }
+  'file-too-large': { path: string; size: number; limit: number }
   'file-unreadable': { path: string }
   'file-write-failed': { path: string }
   'path-not-found': { path: string }
