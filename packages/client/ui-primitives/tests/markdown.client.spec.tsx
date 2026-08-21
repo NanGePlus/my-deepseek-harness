@@ -263,6 +263,17 @@ describe('MarkdownText', () => {
       expect(image.getAttribute('decoding')).toBe('async')
       expect(image.getAttribute('referrerpolicy')).toBe('no-referrer')
     }
+    expect(screen.getAllByRole('button', { name: '放大' })).toHaveLength(2)
+  })
+
+  it('opens an enlarged image viewer with zoom controls from the expand button', () => {
+    render(<MarkdownText text={'![secure diagram](https://example.com/secure.png)'} />)
+    fireEvent.click(screen.getByRole('button', { name: '放大' }))
+    const dialog = screen.getByRole('dialog', { name: 'secure diagram' })
+    expect(dialog).toBeTruthy()
+    expect(screen.getByRole('button', { name: '缩小' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '退出' }))
+    expect(screen.queryByRole('dialog', { name: 'secure diagram' })).toBeNull()
   })
 
   it('neutralizes raw HTML, unsafe or relative links, and unsupported images', () => {

@@ -84,37 +84,43 @@
   will-change: transform;
 }
 
-.canvas {
-  color: var(--dsw-alias-label-primary);
-}
-
-.canvas :global(svg) {
+.lightboxImage {
   display: block;
   max-width: none;
   height: auto;
 }
 
-.canvas :global(svg foreignObject) {
+.mermaidCanvas {
+  color: var(--dsw-alias-label-primary);
+}
+
+.mermaidCanvas :global(svg) {
+  display: block;
+  max-width: none;
+  height: auto;
+}
+
+.mermaidCanvas :global(svg foreignObject) {
   overflow: visible;
 }
 
-.canvas :global(svg foreignObject *) {
+.mermaidCanvas :global(svg foreignObject *) {
   overflow-wrap: normal;
   word-break: normal;
 }
 
-.canvas :global(svg .statediagram-note rect) {
+.mermaidCanvas :global(svg .statediagram-note rect) {
   fill: var(--dsw-alias-fill-secondary);
   stroke: var(--dsw-alias-border-l2);
 }
 
-.canvas :global(svg .statediagram-note .nodeLabel),
-.canvas :global(svg .statediagram-note text) {
+.mermaidCanvas :global(svg .statediagram-note .nodeLabel),
+.mermaidCanvas :global(svg .statediagram-note text) {
   color: var(--dsw-alias-label-primary);
   fill: var(--dsw-alias-label-primary);
 }
 
-.canvas :global(svg .edgeLabel),
-.canvas :global(svg .label) {
+.mermaidCanvas :global(svg .edgeLabel),
+.mermaidCanvas :global(svg .label) {
   font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
 }

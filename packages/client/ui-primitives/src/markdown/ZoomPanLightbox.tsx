@@ -1,17 +1,17 @@
-/** Full-screen Mermaid diagram viewer with zoom and pan. */
+/** Shared zoom/pan lightbox for markdown media previews. */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { WheelEvent as ReactWheelEvent } from 'react'
+import type { ReactNode, WheelEvent as ReactWheelEvent } from 'react'
 import { createPortal } from 'react-dom'
 import {
   IconCloseOutline16,
   IconPlusOutline16,
   IconRefreshOutline16,
 } from '../icons/index.tsx'
-import css from './MermaidLightbox.module.css'
+import css from './ZoomPanLightbox.module.css'
 
-/** Localized toolbar labels for {@link MermaidLightbox}. */
-export interface MermaidLightboxLabels {
+/** Localized toolbar labels for {@link ZoomPanLightbox}. */
+export interface MediaLightboxLabels {
   /** Zoom-in control. */
   zoomInLabel?: string | undefined
   /** Zoom-out control. */
@@ -50,20 +50,45 @@ function IconMinusOutline16({ size = 16, className }: { size?: number; className
   )
 }
 
+/** Read a rendered media element's layout size for zoom anchoring. */
+function measureNaturalSize(root: HTMLElement | null): { w: number; h: number } {
+  if (root === null) return { w: 0, h: 0 }
+  const img = root.querySelector('img')
+  if (img instanceof HTMLImageElement) {
+    const width = img.naturalWidth > 0 ? img.naturalWidth : img.clientWidth
+    const height = img.naturalHeight > 0 ? img.naturalHeight : img.clientHeight
+    if (width > 0 && height > 0) return { w: width, h: height }
+  }
+  const svgEl = root.querySelector('svg')
+  if (svgEl !== null) {
+    const rect = svgEl.getBoundingClientRect()
+    const width = rect.width > 0 ? rect.width : Number.parseFloat(svgEl.getAttribute('width') ?? '0')
+    const height = rect.height > 0 ? rect.height : Number.parseFloat(svgEl.getAttribute('height') ?? '0')
+    if (width > 0 && height > 0) return { w: width, h: height }
+  }
+  return { w: 0, h: 0 }
+}
+
 /**
- * Render one enlarged Mermaid SVG with zoom controls.
- * @param props.svg - Rendered diagram markup.
+ * Render one enlarged media surface with toolbar zoom and wheel/drag navigation.
+ * @param props.dialogLabel - Accessible dialog name.
  * @param props.onClose - Exit handler for the toolbar, mask, and Escape.
  * @param props.labels - Optional localized control labels.
+ * @param props.remeasureKey - Value that triggers a fresh measurement when media changes.
+ * @param props.children - The zoomable media content.
  */
-export function MermaidLightbox({
-  svg,
+export function ZoomPanLightbox({
+  dialogLabel,
   onClose,
   labels,
+  remeasureKey,
+  children,
 }: {
-  svg: string
+  dialogLabel: string
   onClose: () => void
-  labels?: MermaidLightboxLabels | undefined
+  labels?: MediaLightboxLabels | undefined
+  remeasureKey?: unknown
+  children: ReactNode
 }) {
   const zoomInLabel = labels?.zoomInLabel ?? '放大'
   const zoomOutLabel = labels?.zoomOutLabel ?? '缩小'
@@ -73,22 +98,17 @@ export function MermaidLightbox({
   const [pan, setPan] = useState<Pan>({ x: 0, y: 0 })
   const [panning, setPanning] = useState(false)
   const viewportRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   const panDragRef = useRef<PanDrag | null>(null)
   const [natural, setNatural] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
 
   const measure = useCallback(() => {
-    const svgEl = canvasRef.current?.querySelector('svg')
-    if (svgEl === null || svgEl === undefined) return
-    const rect = svgEl.getBoundingClientRect()
-    const width = rect.width > 0 ? rect.width : Number.parseFloat(svgEl.getAttribute('width') ?? '0')
-    const height = rect.height > 0 ? rect.height : Number.parseFloat(svgEl.getAttribute('height') ?? '0')
-    if (width > 0 && height > 0) setNatural({ w: width, h: height })
+    setNatural(measureNaturalSize(contentRef.current))
   }, [])
 
   useEffect(() => {
     measure()
-  }, [svg, measure])
+  }, [measure, remeasureKey])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -167,7 +187,7 @@ export function MermaidLightbox({
   return createPortal((
     <div className={css.root} role="presentation">
       <div className={css.mask} aria-hidden="true" onClick={onClose} />
-      <div className={css.panel} role="dialog" aria-modal="true" aria-label="Mermaid diagram">
+      <div className={css.panel} role="dialog" aria-modal="true" aria-label={dialogLabel}>
         <div className={css.toolbar}>
           <button
             type="button"
@@ -197,7 +217,7 @@ export function MermaidLightbox({
         <div
           ref={viewportRef}
           className={panning ? css.viewportPanning : css.viewport}
-          data-testid="mermaid-lightbox-viewport"
+          data-testid="zoom-pan-lightbox-viewport"
           onWheel={onWheel}
           onMouseDown={onMouseDown}
         >
@@ -209,11 +229,7 @@ export function MermaidLightbox({
               height: natural.h > 0 ? natural.h : undefined,
             }}
           >
-            <div
-              ref={canvasRef}
-              className={css.canvas}
-              dangerouslySetInnerHTML={{ __html: svg }}
-            />
+            <div ref={contentRef}>{children}</div>
           </div>
         </div>
       </div>

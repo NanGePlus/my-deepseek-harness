@@ -47,4 +47,6 @@ export type { MarkdownCodeLabels, MarkdownFileMentions } from './markdown/Markdo
 export { MessageText } from './markdown/MessageText.tsx'
 export { extractMarkdownPlainText } from './markdown/plain-text.ts'
 export type { MarkdownPlainTextMode, MarkdownPlainTextOptions } from './markdown/plain-text.ts'
+export { ZoomableImage } from './markdown/ZoomableImage.tsx'
+export type { ZoomableImageLabels } from './markdown/ZoomableImage.tsx'
 export * from './icons/index.tsx'

@@ -73,7 +73,7 @@ describe('Mermaid markdown fences', () => {
       expect(screen.getByRole('button', { name: '放大' })).toBeTruthy()
     })
     fireEvent.click(screen.getByRole('button', { name: '放大' }))
-    const viewport = screen.getByTestId('mermaid-lightbox-viewport')
+    const viewport = screen.getByTestId('zoom-pan-lightbox-viewport')
     const host = viewport.firstElementChild as HTMLElement
 
     fireEvent.wheel(viewport, { deltaY: -100, clientX: 120, clientY: 80 })

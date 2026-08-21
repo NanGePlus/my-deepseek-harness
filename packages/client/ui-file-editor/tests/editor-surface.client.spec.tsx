@@ -583,6 +583,7 @@ describe('EditorSurface open / save', () => {
     expect(screen.queryByRole('button', { name: '保存' })).toBeNull()
     expect(b.readFile).toHaveBeenCalledWith(WID, `${ROOT}/logo.png`, 'bytes', expect.any(AbortSignal))
     expect(b.writeFile).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '放大' })).toBeTruthy()
   })
 
   it('non-openable: a known binary shows the hint and does not read the file', async () => {

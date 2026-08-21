@@ -3,12 +3,14 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { IconFullscreenOutline16 } from '../icons/index.tsx'
 import { CodeBlock } from './CodeBlock.tsx'
-import { MermaidLightbox, type MermaidLightboxLabels } from './MermaidLightbox.tsx'
+import frameCss from './MediaFrame.module.css'
 import { renderMermaidDiagram, type MermaidSecurityLevel } from './mermaid-load.ts'
 import css from './MermaidBlock.module.css'
+import { ZoomPanLightbox, type MediaLightboxLabels } from './ZoomPanLightbox.tsx'
+import lightboxCss from './ZoomPanLightbox.module.css'
 
 /** Toolbar labels for an inline Mermaid diagram and its lightbox. */
-export interface MermaidDiagramLabels extends MermaidLightboxLabels {
+export interface MermaidDiagramLabels extends MediaLightboxLabels {
   /** Expand control on the inline diagram. */
   expandLabel?: string | undefined
 }
@@ -93,25 +95,31 @@ export function MermaidBlock({
     return <div className={css.pending} aria-busy="true" />
   }
   return (
-    <div className={css.frame}>
+    <div className={frameCss.frame}>
       <div
         className={css.diagram}
         dangerouslySetInnerHTML={{ __html: svg }}
       />
       <button
         type="button"
-        className={css.expand}
+        className={frameCss.expand}
         aria-label={expandLabel}
         onClick={() => { setExpanded(true) }}
       >
         <IconFullscreenOutline16 size={14} />
       </button>
       {expanded && (
-        <MermaidLightbox
-          svg={svg}
+        <ZoomPanLightbox
+          dialogLabel="Mermaid diagram"
           onClose={() => { setExpanded(false) }}
           labels={diagramLabels}
-        />
+          remeasureKey={svg}
+        >
+          <div
+            className={lightboxCss.mermaidCanvas}
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
+        </ZoomPanLightbox>
       )}
     </div>
   )

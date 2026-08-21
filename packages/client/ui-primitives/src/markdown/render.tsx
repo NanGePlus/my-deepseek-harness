@@ -22,6 +22,7 @@ import type * as Md from 'mdast'
 import type {} from 'mdast-util-math'
 import { normalizeUri } from 'micromark-util-sanitize-uri'
 import { CodeBlock } from './CodeBlock.tsx'
+import { MarkdownImage } from './MarkdownImage.tsx'
 import { MermaidBlock, type MermaidDiagramLabels } from './MermaidBlock.tsx'
 import type { MermaidSecurityLevel } from './mermaid-load.ts'
 import { renderTexToReact } from './katex.tsx'
@@ -291,7 +292,7 @@ function renderNode(node: Md.RootContent, key: Key, context: MarkdownRenderConte
     case 'linkReference':
       return renderLinkReference(node, key, context)
     case 'image':
-      return renderImage(node.url, node.alt ?? '', key)
+      return renderImage(node.url, node.alt ?? '', key, context)
     case 'imageReference':
       return renderImageReference(node, key, context)
     case 'footnoteReference':
@@ -496,20 +497,18 @@ function inlineCodeHttpUrl(value: string): string | undefined {
   }
 }
 
-function renderImage(url: string, alt: string, key: Key): ReactNode {
+function renderImage(url: string, alt: string, key: Key, context: MarkdownRenderContext): ReactNode {
   const imageSrc = remoteImageUrl(sanitizeUrl(normalizeUri(url)))
   if (imageSrc === undefined) {
     return <span key={key} className={css.imageAlt}>{alt}</span>
   }
   return (
-    <img
+    <MarkdownImage
       key={key}
-      className={css.image}
       src={imageSrc}
       alt={alt}
-      loading="lazy"
-      decoding="async"
-      referrerPolicy="no-referrer"
+      className={css.image}
+      imageLabels={context.mermaidLabels}
     />
   )
 }
@@ -544,7 +543,7 @@ function renderImageReference(
 ): ReactNode {
   const definition = context.targets.definitions.get(node.identifier.toUpperCase())
   if (definition === undefined) return `![${node.alt ?? ''}${referenceSuffix(node)}`
-  return renderImage(definition.url, node.alt ?? '', key)
+  return renderImage(definition.url, node.alt ?? '', key, context)
 }
 
 function renderFootnoteReference(
