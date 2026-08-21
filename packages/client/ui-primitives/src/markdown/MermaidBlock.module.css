@@ -1,9 +1,12 @@
 .diagram {
-  margin: 16px 0;
   overflow: auto;
   overflow-wrap: normal;
   word-break: normal;
   color: var(--dsw-alias-label-primary);
+}
+
+.diagram {
+  margin: 16px 0;
 }
 
 .diagram :global(svg) {

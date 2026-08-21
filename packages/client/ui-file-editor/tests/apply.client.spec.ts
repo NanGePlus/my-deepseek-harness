@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply as applyNode } from '../src/index.ts'
 import { apply, inject } from '../src/client/index.ts'
@@ -68,5 +68,23 @@ describe('ui-file-editor apply', () => {
     face.watchPath('ws' as WorkspaceId, '/w/a.ts', () => {}, undefined)
     expect(b.workspaces.watchPath).toHaveBeenCalledWith('ws', '/w/a.ts', expect.any(Function), undefined)
     expect(face.dirtyGuard).toBeDefined()
+  })
+
+  it('provides fileEditorOpen that reads through workspaces and writes editor tabs', async () => {
+    const b = await bench()
+    b.slots.register({
+      name: 'details',
+      children: { 'conversation.details.editor': { kind: 'single', scope: 'root' } },
+    } as never, () => null)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const fileEditorOpen = b.ctx.get('fileEditorOpen')
+    expect(fileEditorOpen).toBeDefined()
+    await expect(fileEditorOpen!.openPath('ws' as WorkspaceId, '/w/readme.md')).resolves.toBe(true)
+    expect(b.workspaces.readFile).toHaveBeenCalledWith('ws', '/w/readme.md', 'text', undefined)
+    const instance = b.slots.sessionStore(
+      b.slots.entries('conversation.details.editor')[0]!.store as never,
+      '' as SessionId,
+    )
+    expect(instance.getSnapshot().byWorkspace['ws']?.activePath).toBe('/w/readme.md')
   })
 })

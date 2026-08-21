@@ -16,7 +16,7 @@ import type {
 import { FileTypeIcon } from './file-type-icon.tsx'
 import { lspErrorCount } from './diagnostics-ui.ts'
 import {
-  joinChildPath, parentDirectoryForCreate, siblingNameExists,
+  directoryChainToFile, joinChildPath, parentDirectoryForCreate, siblingNameExists,
 } from './file-tree-parent.ts'
 import { flattenVisibleTree, paintVisibleRows } from './flatten-visible.ts'
 import css from './FileTreePane.module.css'
@@ -142,6 +142,8 @@ export interface FileTreePaneProps extends FileTreeHost, FileTreeMutationHost {
   onPathRenamed?: (oldPath: string, newPath: string, newName: string) => void
   /** Language-server diagnostics keyed by absolute file path. */
   diagnosticsByPath?: ReadonlyMap<string, readonly HostLspDiagnostic[]> | undefined
+  /** Host-absolute path of the focused editor tab; reveals and selects the tree row. */
+  activeEditorPath?: string
 }
 
 const ROW_HEIGHT_PX = 22
@@ -166,7 +168,7 @@ export function FileTreePane({
   createWorkspaceDirectory, writeFile, t, onOpenFile, newFileTrigger = 0,
   gitRefreshTrigger = 0,
   collapsed = false, onHide, treeWidthPx = null,
-  onPathDeleted, onPathRenamed, diagnosticsByPath,
+  onPathDeleted, onPathRenamed, diagnosticsByPath, activeEditorPath,
 }: FileTreePaneProps) {
   const [childrenByPath, setChildrenByPath] = useState<Map<string, readonly WorkspaceEntry[]>>(
     () => new Map(),
@@ -353,6 +355,30 @@ export function FileTreePane({
   })
   const virtualItems = virtualizer.getVirtualItems()
   const paintedRows = paintVisibleRows(rows, virtualItems, ROW_HEIGHT_PX)
+
+  useEffect(() => {
+    if (workspace === undefined || activeEditorPath === undefined) return
+    const chain = directoryChainToFile(workspace.path, activeEditorPath)
+    if (chain.length === 0) return
+    let cancelled = false
+    void (async () => {
+      for (const dirPath of chain) {
+        if (cancelled) return
+        setExpanded(current => new Set(current).add(dirPath))
+        await fetchDirectory(dirPath)
+      }
+      if (cancelled) return
+      setSelectedPath(activeEditorPath)
+    })()
+    return () => { cancelled = true }
+  }, [workspace, activeEditorPath, fetchDirectory])
+
+  useEffect(() => {
+    if (activeEditorPath === undefined || selectedPath !== activeEditorPath) return
+    const index = rows.findIndex(row => row.entry.path === activeEditorPath)
+    if (index < 0) return
+    virtualizer.scrollToIndex(index, { align: 'auto' })
+  }, [activeEditorPath, selectedPath, rows, virtualizer])
 
   const clearFilter = (): void => { setFilter('') }
 

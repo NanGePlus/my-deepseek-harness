@@ -136,6 +136,11 @@ export function MonacoEditor({
           parameterHints: { enabled: false },
           suggestOnTriggerCharacters: false,
           hover: { enabled: true, above: true },
+          unicodeHighlight: {
+            invisibleCharacters: false,
+            ambiguousCharacters: false,
+            nonBasicASCII: false,
+          },
         })
       } catch (error: unknown) {
         // jsdom and worker-less hosts: monaco.editor.create throws; keep textarea.

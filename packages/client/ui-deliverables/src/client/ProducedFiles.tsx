@@ -1,8 +1,8 @@
 // ProducedFiles: the produced-file row a finished turn ends with. The paths
 // come pre-matched by the turn-tail chain from the mutation tools'
 // follow-along locations, never from the closing prose. Clicking one goes
-// through the same openFile the tool rows use — the Host's own opener, on the
-// Host machine.
+// through the same openFile the tool rows use — the details-column file
+// editor when composed in, otherwise the Host openPath fallback.
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'

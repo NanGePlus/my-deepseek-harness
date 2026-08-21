@@ -7,6 +7,7 @@
  */
 
 import { parseGfm } from './parse.ts'
+import { isBlankInlineCodeValue } from './inline-code-value.ts'
 
 /** Amount of parsed Markdown content returned by the extractor. */
 export type MarkdownPlainTextMode = 'all' | 'first-line' | 'first-paragraph'
@@ -27,7 +28,10 @@ interface MarkdownNode {
 function inlineText(node: MarkdownNode): string {
   switch (node.type) {
     case 'text':
-    case 'inlineCode':
+    case 'inlineCode': {
+      const value = node.value ?? ''
+      return isBlankInlineCodeValue(value) ? '' : value
+    }
     case 'code':
       return node.value ?? ''
     case 'image':

@@ -1,9 +1,19 @@
 /** Render a settled ```mermaid fence as SVG via Mermaid. */
 
 import { useEffect, useId, useRef, useState } from 'react'
+import { IconFullscreenOutline16 } from '../icons/index.tsx'
 import { CodeBlock } from './CodeBlock.tsx'
+import frameCss from './MediaFrame.module.css'
 import { renderMermaidDiagram, type MermaidSecurityLevel } from './mermaid-load.ts'
 import css from './MermaidBlock.module.css'
+import { ZoomPanLightbox, type MediaLightboxLabels } from './ZoomPanLightbox.tsx'
+import lightboxCss from './ZoomPanLightbox.module.css'
+
+/** Toolbar labels for an inline Mermaid diagram and its lightbox. */
+export interface MermaidDiagramLabels extends MediaLightboxLabels {
+  /** Expand control on the inline diagram. */
+  expandLabel?: string | undefined
+}
 
 /** Props for one Mermaid diagram block. */
 export interface MermaidBlockProps {
@@ -15,6 +25,8 @@ export interface MermaidBlockProps {
   copyLabel?: string | undefined
   /** Copy-button label after a successful copy. */
   copiedLabel?: string | undefined
+  /** Expand/zoom toolbar labels. */
+  diagramLabels?: MermaidDiagramLabels | undefined
 }
 
 let renderSerial = 0
@@ -36,13 +48,15 @@ function useDocumentThemeEpoch(): number {
  * @param props - diagram source, security level, and optional copy labels.
  */
 export function MermaidBlock({
-  source, securityLevel = 'strict', copyLabel, copiedLabel,
+  source, securityLevel = 'strict', copyLabel, copiedLabel, diagramLabels,
 }: MermaidBlockProps) {
   const reactId = useId()
   const themeEpoch = useDocumentThemeEpoch()
   const renderTokenRef = useRef(0)
   const [svg, setSvg] = useState<string | undefined>(undefined)
   const [failed, setFailed] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const expandLabel = diagramLabels?.expandLabel ?? '放大'
 
   useEffect(() => {
     const token = ++renderTokenRef.current
@@ -81,9 +95,32 @@ export function MermaidBlock({
     return <div className={css.pending} aria-busy="true" />
   }
   return (
-    <div
-      className={css.diagram}
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
+    <div className={frameCss.frame}>
+      <div
+        className={css.diagram}
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      <button
+        type="button"
+        className={frameCss.expand}
+        aria-label={expandLabel}
+        onClick={() => { setExpanded(true) }}
+      >
+        <IconFullscreenOutline16 size={14} />
+      </button>
+      {expanded && (
+        <ZoomPanLightbox
+          dialogLabel="Mermaid diagram"
+          onClose={() => { setExpanded(false) }}
+          labels={diagramLabels}
+          remeasureKey={svg}
+        >
+          <div
+            className={lightboxCss.mermaidCanvas}
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
+        </ZoomPanLightbox>
+      )}
+    </div>
   )
 }

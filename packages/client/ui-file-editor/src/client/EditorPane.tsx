@@ -1,6 +1,6 @@
 /** Right-pane tabs, Monaco / preview / non-openable / empty / loading / error. */
 
-import { IconCloseOutline16, IconLoadingOutline16, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconCloseOutline16, IconLoadingOutline16, IconPanelLeftOutline16, Tooltip, ZoomableImage } from '@deepseek-ai/dsh-client-ui-primitives'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { HostLspDiagnostic } from '@deepseek-ai/dsh-client-runtime/client'
@@ -220,8 +220,8 @@ export function EditorPane({
             )}
             {active?.kind === 'preview' && (
               <div className={css.preview}>
-                <img
-                  className={css.previewImage}
+                <ZoomableImage
+                  className={css.previewImage ?? ''}
                   alt={active.name}
                   src={`data:${active.mediaType};base64,${active.data}`}
                 />

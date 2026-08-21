@@ -2,10 +2,11 @@
  * File editor plugin, browser half. Registers the editor-surface occupant into
  * the details column child slot declared by ui-conversation.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { FileEditorOpen } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { EditorSurface, editorDirtyGuard, type FileEditorInjected } from './EditorSurface.tsx'
+import { openPathInEditor, type OpenPathStore } from './open-path.ts'
 import { createFileEditorStore } from './stores.ts'
 import { en, zh, type FileEditorKey } from './locales.ts'
 
@@ -28,6 +29,21 @@ export const inject = ['slots', 'workspaces', 'locale']
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-file-editor: dictionaries')
+
+  const fileEditorStore = createFileEditorStore()
+
+  const fileEditorOpen: FileEditorOpen = {
+    openPath: (workspaceId, absolutePath) => {
+      const instance = ctx.slots.sessionStore(fileEditorStore, '' as SessionId)
+      return openPathInEditor(
+        instance as unknown as OpenPathStore,
+        (wid, path, kind, signal) => ctx.workspaces.readFile(wid, path, kind, signal),
+        workspaceId,
+        absolutePath,
+      )
+    },
+  }
+  ctx.provide('fileEditorOpen', fileEditorOpen)
 
   const injected = (): FileEditorInjected & { dirtyGuard: typeof editorDirtyGuard } => ({
     listWorkspaceEntries: (workspaceId, path, signal) =>
@@ -57,7 +73,7 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('conversation.details.editor', () => ctx.slots.register({
     name: 'conversation.details.editor',
     locale: NS,
-    store: createFileEditorStore,
+    store: fileEditorStore,
     inject: injected,
   }, EditorSurface))
 }

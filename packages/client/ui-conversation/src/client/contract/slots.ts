@@ -312,10 +312,28 @@ export interface ChatFileMentions {
   forClosing(owner: TurnTailOwnerProps): MarkdownFileMentions | undefined
 }
 
+/**
+ * Optional in-app file opener, consumed via `ctx.get('fileEditorOpen')`
+ * (optional-service convention): the chat view routes session file links
+ * through this face when the file-editor plugin is composed in. Absent
+ * service — ui-file-editor composed out — falls back to the Host `openPath`.
+ */
+export interface FileEditorOpen {
+  /**
+   * Open one Host-absolute path in the details-column file editor.
+   * @param workspaceId - Workspace that owns the path.
+   * @param absolutePath - Host-absolute file path.
+   * @returns whether a tab was focused or opened.
+   */
+  openPath: (workspaceId: import('@deepseek-ai/dsh-client-runtime/client').WorkspaceId, absolutePath: string) => Promise<boolean>
+}
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Prose file-mention provider (ui-deliverables); reach via ctx.get — optional. */
     chatFileMentions: ChatFileMentions
+    /** In-app file editor opener (ui-file-editor); reach via ctx.get — optional. */
+    fileEditorOpen: FileEditorOpen
   }
 }
 
@@ -330,8 +348,9 @@ export interface TurnTailOwnerProps {
   /** The closing assistant's seq — the anchor the tail renders under. */
   seq: number
   /**
-   * Open a filesystem path through the Host (tool-row semantics; the chat
-   * view resolves relative paths against the session cwd).
+   * Open a workspace-relative path: the chat view resolves against session
+   * cwd, switches to the file-editor tab when available, otherwise Host
+   * `openPath`.
    */
   openFile: (path: string) => void
 }
