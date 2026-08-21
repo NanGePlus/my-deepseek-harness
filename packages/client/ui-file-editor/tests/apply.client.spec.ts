@@ -85,6 +85,6 @@ describe('ui-file-editor apply', () => {
       b.slots.entries('conversation.details.editor')[0]!.store as never,
       '' as SessionId,
     )
-    expect(instance.store.getSnapshot().byWorkspace['ws']?.activePath).toBe('/w/readme.md')
+    expect(instance.getSnapshot().byWorkspace['ws']?.activePath).toBe('/w/readme.md')
   })
 })

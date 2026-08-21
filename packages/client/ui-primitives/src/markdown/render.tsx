@@ -507,7 +507,7 @@ function renderImage(url: string, alt: string, key: Key, context: MarkdownRender
       key={key}
       src={imageSrc}
       alt={alt}
-      className={css.image}
+      className={css.image ?? ''}
       imageLabels={context.mermaidLabels}
     />
   )

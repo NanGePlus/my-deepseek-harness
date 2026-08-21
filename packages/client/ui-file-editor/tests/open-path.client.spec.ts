@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import { createFileEditorStore } from '../src/client/stores.ts'
-import { openPathInEditor } from '../src/client/open-path.ts'
+import { openPathInEditor, type OpenPathReadFile } from '../src/client/open-path.ts'
 
 const WID = 'ws1' as WorkspaceId
 
@@ -43,7 +43,7 @@ describe('openPathInEditor', () => {
 
   it('returns false when the Host read fails or returns the wrong kind', async () => {
     const instance = createFileEditorStore().create()
-    const readFile = vi.fn(async () => { throw new Error('offline') })
+    const readFile = vi.fn<OpenPathReadFile>(async () => { throw new Error('offline') })
     await expect(openPathInEditor(instance, readFile, WID, '/w/missing.md')).resolves.toBe(false)
     readFile.mockResolvedValueOnce({ kind: 'bytes', path: '/w/missing.md', data: 'x', mediaType: 'image/png' })
     await expect(openPathInEditor(instance, readFile, WID, '/w/missing.md')).resolves.toBe(false)

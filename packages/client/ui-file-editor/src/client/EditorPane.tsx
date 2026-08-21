@@ -221,7 +221,7 @@ export function EditorPane({
             {active?.kind === 'preview' && (
               <div className={css.preview}>
                 <ZoomableImage
-                  className={css.previewImage}
+                  className={css.previewImage ?? ''}
                   alt={active.name}
                   src={`data:${active.mediaType};base64,${active.data}`}
                 />

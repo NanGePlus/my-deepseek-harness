@@ -6,7 +6,7 @@ import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/c
 import type { FileEditorOpen } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { EditorSurface, editorDirtyGuard, type FileEditorInjected } from './EditorSurface.tsx'
-import { openPathInEditor } from './open-path.ts'
+import { openPathInEditor, type OpenPathStore } from './open-path.ts'
 import { createFileEditorStore } from './stores.ts'
 import { en, zh, type FileEditorKey } from './locales.ts'
 
@@ -36,7 +36,7 @@ export function apply(ctx: ClientContext): void {
     openPath: (workspaceId, absolutePath) => {
       const instance = ctx.slots.sessionStore(fileEditorStore, '' as SessionId)
       return openPathInEditor(
-        instance,
+        instance as unknown as OpenPathStore,
         (wid, path, kind, signal) => ctx.workspaces.readFile(wid, path, kind, signal),
         workspaceId,
         absolutePath,

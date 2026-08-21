@@ -605,7 +605,7 @@ export function EditorSurface({
         onPathRenamed={handlePathRenamed}
         onOpenFile={(entry) => { void openEntry(entry) }}
         diagnosticsByPath={lspDiagnostics}
-        activeEditorPath={activePath}
+        {...(activePath !== undefined ? { activeEditorPath: activePath } : {})}
       />
       {treeVisible && (
         <TreeSplitHandle
