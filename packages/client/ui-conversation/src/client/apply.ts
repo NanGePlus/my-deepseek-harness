@@ -410,7 +410,28 @@ export function apply(ctx: Context): void {
         fileMentions: owner => ctx.get('chatFileMentions')?.forClosing(owner),
         openFile: (path) => {
           const cwd = sessions.list.getSnapshot().byId[sessionId]?.cwd
-          void workspaces.openPath(resolveWorkspacePath(cwd, path)).catch(() => {
+          const absolutePath = resolveWorkspacePath(cwd, path)
+          if (path === '.') {
+            void workspaces.openPath(absolutePath).catch(() => {
+              // Host/OS open failures stay silent in the chat row; the native
+              // app surfaces its own error dialog when the path is unusable.
+            })
+            return
+          }
+          const fileEditorOpen = ctx.get('fileEditorOpen')
+          const workspaceId = workspaces.list.getSnapshot().items.find(
+            item => item.sessionIds.includes(sessionId),
+          )?.workspaceId
+          if (fileEditorOpen !== undefined && workspaceId !== undefined) {
+            actions.setDetailsTab('editor')
+            layout.openDetails()
+            void fileEditorOpen.openPath(workspaceId, absolutePath).catch(() => {
+              // Read/open failures stay silent in the chat row; the editor
+              // surface shows its own error state when the tab fails to load.
+            })
+            return
+          }
+          void workspaces.openPath(absolutePath).catch(() => {
             // Host/OS open failures stay silent in the chat row; the native
             // app surfaces its own error dialog when the path is unusable.
           })

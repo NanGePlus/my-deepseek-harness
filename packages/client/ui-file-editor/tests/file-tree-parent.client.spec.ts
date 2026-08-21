@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkspaceEntry } from '@deepseek-ai/dsh-client-runtime/client'
 import {
-  joinChildPath, parentDirectoryForCreate, siblingNameExists,
+  directoryChainToFile, joinChildPath, parentDirectoryForCreate, siblingNameExists,
 } from '../src/client/file-tree-parent.ts'
 
 const ROOT = '/w/alpha'
@@ -31,5 +31,14 @@ describe('file-tree-parent helpers', () => {
     const siblings = [entry('README.md', false), entry('src', true)]
     expect(siblingNameExists(siblings, 'README.md')).toBe(true)
     expect(siblingNameExists(siblings, 'notes.ts')).toBe(false)
+  })
+
+  it('lists workspace-root and intermediate directories for a nested file', () => {
+    expect(directoryChainToFile(ROOT, `${ROOT}/README.md`)).toEqual([ROOT])
+    expect(directoryChainToFile(ROOT, `${ROOT}/src/app.ts`)).toEqual([ROOT, `${ROOT}/src`])
+    expect(directoryChainToFile(ROOT, `${ROOT}/docs/adr/0001.md`)).toEqual([
+      ROOT, `${ROOT}/docs`, `${ROOT}/docs/adr`,
+    ])
+    expect(directoryChainToFile(ROOT, '/other/app.ts')).toEqual([])
   })
 })

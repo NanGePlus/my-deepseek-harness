@@ -241,6 +241,44 @@ describe('conversation slot inject API', () => {
     await b.runtime.dispose()
   })
 
+  it('openFile routes workspace files through fileEditorOpen and switches to the editor tab', async () => {
+    const b = await bench()
+    const openPath = vi.fn(() => Promise.resolve(true))
+    b.runtime.provide('fileEditorOpen', { openPath })
+    await b.runtime.workspaces.update((draft) => {
+      draft.items = [{
+        workspaceId: 'ws-1' as never,
+        path: '/proj',
+        title: 'proj',
+        sessionIds: [ROOT],
+        createdAt: '',
+        updatedAt: '',
+      }]
+    })
+    const { instance, injected } = b.chatViewApi(ROOT)
+    injected.openFile('docs/adr/0001.md')
+    await vi.waitFor(() => {
+      expect(openPath).toHaveBeenCalledWith('ws-1', '/proj/docs/adr/0001.md')
+    })
+    expect(instance.store.getSnapshot().detailsTab).toBe('editor')
+    expect(b.layoutFake.openDetails).toHaveBeenCalledTimes(1)
+    expect(b.runtime.workspaces.calls.some(c => c.method === 'openPath')).toBe(false)
+    await b.runtime.dispose()
+  })
+
+  it('openFile keeps show-in-folder on workspaces.openPath', async () => {
+    const b = await bench()
+    const openPath = vi.fn(() => Promise.resolve(true))
+    b.runtime.provide('fileEditorOpen', { openPath })
+    const { injected } = b.chatViewApi(ROOT)
+    injected.openFile('.')
+    await vi.waitFor(() => {
+      expect(b.runtime.workspaces.calls).toContainEqual({ method: 'openPath', args: ['/proj/.'] })
+    })
+    expect(openPath).not.toHaveBeenCalled()
+    await b.runtime.dispose()
+  })
+
   it('routes workspace switching through the runtime owner, carrying the draft', async () => {
     const b = await bench()
     const resident = b.residentApi(ROOT)

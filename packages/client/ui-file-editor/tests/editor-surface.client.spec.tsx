@@ -440,6 +440,26 @@ describe('EditorSurface file tree', () => {
     expect(row!.getAttribute('aria-selected')).toBe('true')
   })
 
+  it('reveals and selects the active editor tab path in the tree', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    await act(async () => {
+      b.instance.actions.openTab(WID, {
+        kind: 'text',
+        path: `${ROOT}/src/app.ts`,
+        name: 'app.ts',
+        language: 'typescript',
+        buffer: 'export {}\n',
+        saved: 'export {}\n',
+      })
+    })
+    await waitFor(() => {
+      const tree = screen.getByRole('tree', { name: 'alpha' })
+      const row = within(tree).getByText('app.ts').closest('[role="treeitem"]')
+      expect(row?.getAttribute('aria-selected')).toBe('true')
+    })
+  })
+
   it('does not apply a listing that settles after unmount', async () => {
     let releaseList!: (listing: WorkspaceEntriesListing) => void
     let releaseGit!: (listing: { entries: { path: string; letter: string }[] }) => void
