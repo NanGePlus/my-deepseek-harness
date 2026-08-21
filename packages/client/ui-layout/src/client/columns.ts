@@ -17,8 +17,8 @@
 export interface Columns { sidebar: number; center: number; details: number }
 
 // Contract-frozen geometry: the three-column concession chain's fixed points.
-/** Center column floor while details is open; conversation chrome needs this width. */
-export const CENTER_MIN = 640
+/** Center column floor while details is open; keeps header and composer usable. */
+export const CENTER_MIN = 420
 /** Sidebar drag clamp floor. */
 export const SIDEBAR_MIN = 264
 /** Sidebar drag clamp ceiling. */

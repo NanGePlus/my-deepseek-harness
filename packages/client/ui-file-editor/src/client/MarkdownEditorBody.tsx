@@ -90,6 +90,7 @@ export function MarkdownEditorBody({
           <div className={css.markdownPreview}>
             <MarkdownText
               text={tab.buffer}
+              mermaidSecurityLevel="loose"
               codeLabels={{ copyLabel: t('editor.copy'), copiedLabel: t('editor.copied') }}
             />
           </div>
@@ -98,6 +99,7 @@ export function MarkdownEditorBody({
             path={tab.path}
             value={tab.buffer}
             language={tab.language}
+            surface="document"
             ariaLabel={t('editor.buffer.label', {
               name: tab.name,
               language: languageLabel(tab.language),

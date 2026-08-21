@@ -36,6 +36,8 @@ import { queueDockEntry } from './queue/QueueDock.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { DetailsPanel } from './skeleton/DetailsPanel.tsx'
+import { DetailsPanelToggle } from './skeleton/DetailsPanelToggle.tsx'
+import type { DetailsPanelToggleInjected } from './skeleton/DetailsPanelToggle.tsx'
 import { createSessionBoundSource, createSessionChatBindingSource, type SessionChatBindingActions } from './session-bound-source.ts'
 import { en, NS, zh, type ConversationKey } from './locales.ts'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
@@ -269,6 +271,17 @@ export function apply(ctx: Context): void {
       open: (id) => { sessions.open(id) },
     }),
   }, ConversationSessionHeader)
+
+  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+    name: 'conversation.session.header.utilities',
+    id: 'details-panel-toggle',
+    order: 10,
+    locale: NS,
+    inject: (): DetailsPanelToggleInjected => ({
+      toggleDetails: () => { layout.toggleDetails() },
+      hooks: { detailsOpen: layout.detailsOpen },
+    }),
+  }, DetailsPanelToggle))
 
   // The default composer body: its own single slot inside the composer
   // chain's fallback. Public machine surface arrives via the

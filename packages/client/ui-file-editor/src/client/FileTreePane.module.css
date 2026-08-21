@@ -7,6 +7,7 @@
   min-height: 0;
   overflow: hidden;
   background: var(--dsw-specific-sidebar-fill);
+  border-right: 1px solid var(--dsw-alias-border-l1);
 }
 
 .paneResized {
@@ -23,6 +24,7 @@
   overflow: hidden;
   pointer-events: none;
   visibility: hidden;
+  border-right: none;
 }
 
 .gitBar {

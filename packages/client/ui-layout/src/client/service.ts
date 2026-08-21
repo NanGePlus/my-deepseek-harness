@@ -14,6 +14,14 @@ import type { createLayoutStore } from './stores.ts'
 /** The layout store's bound action set (framework-baked, draft params peeled). */
 export type PanelActions = BoundActions<ReturnType<typeof createLayoutStore>>
 
+/** Read-only details-open observable for header toggle chrome. */
+export interface DetailsOpenSource {
+  /** @returns whether the details column is rendered open. */
+  getSnapshot: () => boolean
+  /** @param listener - invoked when rendered open state changes. */
+  subscribe: (listener: () => void) => () => void
+}
+
 /**
  * The outward layout face (`ctx.layout`): the panel transitions other
  * plugins may trigger — and exactly what a test fake must supply. The
@@ -27,11 +35,25 @@ export interface ILayout {
   openDetails(): void
   /** Close the details panel. */
   closeDetails(): void
+  /** Toggle the details panel (closed ⟷ contract default width). */
+  toggleDetails(): void
+  /** Observable rendered open state for the details header toggle. */
+  readonly detailsOpen: DetailsOpenSource
 }
 
 /** Cross-plugin panel-action face (ctx.layout). */
 export class LayoutController implements ILayout {
   #panels: PanelActions | undefined
+  #detailsOpen = false
+  readonly #listeners = new Set<() => void>()
+
+  readonly detailsOpen: DetailsOpenSource = {
+    getSnapshot: () => this.#detailsOpen,
+    subscribe: (listener) => {
+      this.#listeners.add(listener)
+      return () => { this.#listeners.delete(listener) }
+    },
+  }
 
   /**
    * Adopt the root entry's bound store actions. Called from the root
@@ -42,6 +64,16 @@ export class LayoutController implements ILayout {
    */
   attachPanels(actions: PanelActions): void {
     this.#panels = actions
+  }
+
+  /**
+   * Mirror the frame's rendered details width into the header toggle observable.
+   * @param open - true when the details column has non-zero width.
+   */
+  setDetailsOpen(open: boolean): void {
+    if (this.#detailsOpen === open) return
+    this.#detailsOpen = open
+    for (const listener of this.#listeners) listener()
   }
 
   /** Toggle the sidebar panel (closed ⟷ contract default width). */
@@ -57,6 +89,11 @@ export class LayoutController implements ILayout {
   /** Close the details panel. */
   closeDetails(): void {
     this.#require().closeDetails()
+  }
+
+  /** Toggle the details panel (closed ⟷ contract default width). */
+  toggleDetails(): void {
+    this.#require().toggleDetails()
   }
 
   #require(): PanelActions {

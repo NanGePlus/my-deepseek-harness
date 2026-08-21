@@ -17,11 +17,18 @@ import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './column
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 
+/** Root entry inject face: sync rendered panel state back to ctx.layout. */
+export interface AppFrameInjected {
+  /** @param open - true when the details column is visually open. */
+  syncDetailsOpen: (open: boolean) => void
+}
+
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
   & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
+  & AppFrameInjected
 
 /** Center column grid item (session-body building block). */
 function CenterColumn(props: { children?: ReactNode }) {
@@ -89,6 +96,7 @@ export function AppFrame({
   useSessions,
   actions,
   renderSlot,
+  syncDetailsOpen,
 }: AppFrameProps) {
   const panels = useStore(s => s)
   const detailsSession = useSessions((s) => {
@@ -133,6 +141,10 @@ export function AppFrame({
   const cols = computeColumns(viewport, sidebarPreference, detailsSession === undefined ? 0 : panels.details)
   const colsRef = useRef(cols)
   colsRef.current = cols
+
+  useEffect(() => {
+    syncDetailsOpen(cols.details > 0)
+  }, [cols.details, syncDetailsOpen])
 
   // The drag base is the rendered width captured at drag start (grabbing a
   // concession-clamped panel must not jump back to the stored preference);

@@ -23,17 +23,11 @@
 
 .splitHandle {
   flex: none;
-  width: 4px;
-  margin: 0 -1px;
+  width: 8px;
+  margin: 0 -4px;
   cursor: col-resize;
   touch-action: none;
-  background: var(--dsw-alias-border-l2);
   z-index: 1;
-}
-
-.splitHandle:hover,
-.splitHandle[data-dragging] {
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 35%, var(--dsw-alias-border-l2));
 }
 
 .editorRoot[data-tree-dragging] {

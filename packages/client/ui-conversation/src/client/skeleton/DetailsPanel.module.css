@@ -12,10 +12,9 @@
 .header {
   display: flex;
   align-items: stretch;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 12px 0 0;
+  padding: 0;
   border-bottom: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-specific-sidebar-fill);
 }
 
 .tabBar {
@@ -45,27 +44,8 @@
 }
 
 .tabActive {
-  background: var(--dsw-specific-sidebar-fill);
   border-bottom-color: var(--editor-tab-active-line);
   color: var(--dsw-alias-label-primary);
-}
-
-.close {
-  display: grid;
-  flex: none;
-  place-items: center;
-  align-self: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-}
-
-.close:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .body {

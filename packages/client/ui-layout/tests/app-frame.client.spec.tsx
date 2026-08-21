@@ -84,6 +84,7 @@ function mountFrame() {
     items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
     baselinesReady: baselinesReady.current, recentWorkspaceId: undefined,
   }
+  const syncDetailsOpen = vi.fn()
   const element = () => (
     <AppFrame
       useStore={hookOf(instance)}
@@ -91,11 +92,12 @@ function mountFrame() {
       renderSlot={renderSlot}
       useSessions={useSessions}
       useWorkspaces={((sel: (s: WorkspaceListState) => unknown) => sel(workspaceState)) as never}
+      syncDetailsOpen={syncDetailsOpen}
     />
   )
   const utils = render(element())
   const frame = utils.container.firstElementChild as HTMLElement
-  return { instance, frame, slotCalls, rerenderFrame: () => { utils.rerender(element()) }, ...utils }
+  return { instance, frame, slotCalls, syncDetailsOpen, rerenderFrame: () => { utils.rerender(element()) }, ...utils }
 }
 
 function tracks(frame: HTMLElement): number[] {
@@ -237,13 +239,13 @@ describe('AppFrame', () => {
   })
 
   it('drag base is the rendered (concession-clamped) width, not the preference', () => {
-    frameWidth = 1250 // step-2 squeeze: details renders 330 while preference is DETAILS_DEFAULT
+    frameWidth = 1250 // step-2 squeeze: details renders 550 while preference is DETAILS_DEFAULT
     const { frame, instance } = mountFrame()
     act(() => { instance.actions.openDetails() })
-    expect(tracks(frame)).toEqual([280, 640, 330])
+    expect(tracks(frame)).toEqual([280, 420, 550])
     const handles = frame.querySelectorAll('[class*="handle"]')
-    drag(handles[1]!, 920, 930) // shrink by 10 from the rendered width
-    expect(instance.getSnapshot().details).toBe(320)
+    drag(handles[1]!, 700, 710) // shrink by 10 from the rendered width
+    expect(instance.getSnapshot().details).toBe(540)
   })
 
   it('details column stays mounted at zero width', () => {
@@ -269,7 +271,7 @@ describe('AppFrame', () => {
     act(() => { instance.actions.openDetails() })
     frameWidth = 1250
     act(() => { fireResize?.(); vi.advanceTimersByTime(20) })
-    expect(tracks(frame)).toEqual([280, 640, 330])
+    expect(tracks(frame)).toEqual([280, 420, 550])
     frameWidth = 1920
     act(() => { fireResize?.(); vi.advanceTimersByTime(20) })
     expect(tracks(frame)).toEqual([280, 1920 - 280 - DETAILS_DEFAULT, DETAILS_DEFAULT])
@@ -291,7 +293,7 @@ describe('AppFrame — narrow-viewport auto-collapse', () => {
   it('mounts collapsed below the breakpoint with no sidebar handle', () => {
     frameWidth = 980
     const { frame, slotCalls } = mountFrame()
-    expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 924, 0])
+    expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 420, 504])
     expect(frame.hasAttribute('data-sidebar-collapsed')).toBe(true)
     expect(slotCalls.filter(c => c.key === 'sidebar').at(-1)!.props).toEqual({ collapsed: true, width: SIDEBAR_COLLAPSED })
     expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(1)
@@ -305,7 +307,7 @@ describe('AppFrame — narrow-viewport auto-collapse', () => {
     expect(frame.hasAttribute('data-sidebar-collapsed')).toBe(false)
     expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(2)
     act(() => { instance.actions.toggleSidebar() })
-    expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 924, 0])
+    expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 420, 504])
   })
 
   it('a wide-closed preference re-expands at the contract default while narrow', () => {
@@ -324,7 +326,7 @@ describe('AppFrame — narrow-viewport auto-collapse', () => {
     act(() => { instance.actions.setSidebar(400) })
     frameWidth = 980
     act(() => { fireResize?.(); vi.advanceTimersByTime(20) })
-    expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 924, 0])
+    expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 420, 504])
     frameWidth = 1920
     act(() => { fireResize?.(); vi.advanceTimersByTime(20) })
     expect(tracks(frame)).toEqual([400, 1920 - 400 - DETAILS_DEFAULT, DETAILS_DEFAULT])
@@ -396,6 +398,6 @@ describe('AppFrame — unmount with an in-flight resize frame', () => {
     act(() => { instance.actions.openDetails() })
     frameWidth = 1250
     act(() => { fireResize?.(); fireResize?.(); vi.advanceTimersByTime(20) })
-    expect(tracks(frame)).toEqual([280, 640, 330])
+    expect(tracks(frame)).toEqual([280, 420, 550])
   })
 })

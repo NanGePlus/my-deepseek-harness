@@ -74,6 +74,15 @@ describe('createLayoutStore', () => {
     expect(store.getSnapshot().narrowExpanded).toBe(false)
   })
 
+  it('toggleDetails flips between closed and the contract default', () => {
+    const { store, actions } = createLayoutStore().create()
+    actions.closeDetails()
+    actions.toggleDetails()
+    expect(store.getSnapshot().details).toBe(DETAILS_DEFAULT)
+    actions.toggleDetails()
+    expect(store.getSnapshot().details).toBe(0)
+  })
+
   it('openDetails uses the contract default, preserves an open width, and closeDetails zeroes', () => {
     const { store, actions } = createLayoutStore().create()
     actions.openDetails()

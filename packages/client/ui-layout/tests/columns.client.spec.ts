@@ -35,9 +35,9 @@ describe('computeColumns', () => {
   })
 
   it('step 2: details shrinks first, center pinned at CENTER_MIN', () => {
-    // 280 + DETAILS_DEFAULT + 640 > 1250; details concedes to 1250-280-640 = 330.
+    // 280 + DETAILS_DEFAULT + 420 > 1250; details concedes to 1250-280-420 = 550.
     const cols = computeColumns(1250, open(SIDEBAR_DEFAULT), open(DETAILS_DEFAULT))
-    expect(cols).toEqual({ sidebar: 280, center: CENTER_MIN, details: 330 })
+    expect(cols).toEqual({ sidebar: 280, center: CENTER_MIN, details: 550 })
   })
 
   it('boundary: exactly at the step-1/step-2 seam', () => {
@@ -57,13 +57,13 @@ describe('computeColumns', () => {
   })
 
   it('step 3: details auto-closes when its min still starves center — sidebar holds its preference', () => {
-    // 280 + 300 + 640 = 1220 > 1210 → details 0; sidebar untouched: center = 1210-280 = 930.
-    const cols = computeColumns(1210, open(SIDEBAR_DEFAULT), open(DETAILS_DEFAULT))
-    expect(cols).toEqual({ sidebar: 280, center: 930, details: 0 })
+    // 280 + 300 + 420 = 1000 > 999 → details 0; sidebar untouched: center = 999-280 = 719.
+    const cols = computeColumns(999, open(SIDEBAR_DEFAULT), open(DETAILS_DEFAULT))
+    expect(cols).toEqual({ sidebar: 280, center: 719, details: 0 })
   })
 
   it('the sidebar never concedes: center absorbs the deficit below CENTER_MIN', () => {
-    // 700 < 280+640: sidebar keeps 280, center takes 420 < CENTER_MIN.
+    // 700 < 280+420: sidebar keeps 280, center takes 420 = CENTER_MIN.
     const cols = computeColumns(700, open(SIDEBAR_DEFAULT), closed(DETAILS_DEFAULT))
     expect(cols).toEqual({ sidebar: SIDEBAR_DEFAULT, center: 420, details: 0 })
   })
@@ -87,7 +87,7 @@ describe('computeColumns', () => {
   })
 
   it('recovery is pure: re-widening restores preferred widths untouched', () => {
-    const squeezed = computeColumns(1100, open(SIDEBAR_DEFAULT), open(DETAILS_DEFAULT))
+    const squeezed = computeColumns(999, open(SIDEBAR_DEFAULT), open(DETAILS_DEFAULT))
     expect(squeezed.details).toBe(0)
     const restored = computeColumns(1920, open(SIDEBAR_DEFAULT), open(DETAILS_DEFAULT))
     expect(restored.details).toBe(DETAILS_DEFAULT)

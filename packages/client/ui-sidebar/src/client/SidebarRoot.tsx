@@ -142,7 +142,7 @@ export function SidebarRoot({
         )}
         {/* Rail resting state is the whale mark; hovering swaps in the panel
             icon (the expand affordance, figma sidebar-hover flow). */}
-        <Tooltip label={collapsed ? t('toggle.open') : t('toggle.collapse')} delayMs={500}>
+        <Tooltip label={collapsed ? t('toggle.open') : t('toggle.collapse')} side="bottom" delayMs={500}>
           <button
             type="button"
             className={clsx(css.iconButton, css.toggle)}

@@ -21,7 +21,7 @@ import { ThemePresenter } from './theme-presenter.ts'
 // OwnerShare contracts below are the render-side halves registrants compose
 // against; the frame components and the store factory are package-internal.
 export { LayoutController } from './service.ts'
-export type { ILayout } from './service.ts'
+export type { ILayout, DetailsOpenSource } from './service.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -132,7 +132,9 @@ export function apply(ctx: ClientContext): void {
       // conversation business actions belong to their registrants.
       inject: (actions: PanelActions) => {
         layout.attachPanels(actions)
-        return {}
+        return {
+          syncDetailsOpen: (open: boolean) => { layout.setDetailsOpen(open) },
+        }
       },
     }, AppFrame)
     return () => {

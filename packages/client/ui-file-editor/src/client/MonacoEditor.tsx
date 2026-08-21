@@ -1,6 +1,7 @@
 /** Monaco (or textarea fallback) for an editable-text tab. */
 
 import { useEffect, useRef, useState } from 'react'
+import clsx from 'clsx'
 import { loadMonacoEditor, type MonacoEditorModule, type MonacoStandaloneEditor } from './monaco-load.ts'
 import css from './MonacoEditor.module.css'
 
@@ -17,42 +18,57 @@ export interface MonacoEditorProps {
   /** Harness theme: dark when `body[data-ds-dark-theme]` is set. */
   dark: boolean
   /**
+   * Editor canvas background token family.
+   * `document` uses bg-base (white in light mode) for Markdown source editing.
+   */
+  surface?: 'sidebar' | 'document' | undefined
+  /**
    * Buffer change from the user.
    * @param value - the new buffer text.
    */
   onChange: (value: string) => void
 }
 
-let themesDefined = false
+const definedThemes = new Set<string>()
 
 /**
  * Derive Monaco themes from live `--dsw-alias-*` values so light/dark follow
  * the Harness document theme without a second palette.
  * @param monaco - loaded monaco-editor module.
  * @param dark - whether `body[data-ds-dark-theme]` is set.
+ * @param surface - sidebar chrome vs document (Markdown) canvas.
  * @returns the theme id to pass to `create`.
  */
-function themeIdFor(monaco: MonacoEditorModule, dark: boolean): string {
-  const custom = dark ? 'dsh-dark' : 'dsh-light'
+function themeIdFor(
+  monaco: MonacoEditorModule,
+  dark: boolean,
+  surface: 'sidebar' | 'document',
+): string {
+  const suffix = surface === 'document' ? '-document' : ''
+  const custom = dark ? `dsh-dark${suffix}` : `dsh-light${suffix}`
   const builtin = dark ? 'vs-dark' : 'vs'
-  if (themesDefined) return custom
-  const styles = getComputedStyle(document.documentElement)
-  const bg = styles.getPropertyValue('--dsw-specific-sidebar-fill').trim()
+  if (definedThemes.has(custom)) return custom
+  const styles = getComputedStyle(document.body)
+  const bgToken = surface === 'document' ? '--dsw-alias-bg-base' : '--dsw-specific-sidebar-fill'
+  const bg = styles.getPropertyValue(bgToken).trim()
   const fg = styles.getPropertyValue('--dsw-alias-label-primary').trim()
   if (bg !== '' && fg !== '') {
-    monaco.editor.defineTheme('dsh-light', {
+    monaco.editor.defineTheme(`dsh-light${suffix}`, {
       base: 'vs',
       inherit: true,
       rules: [],
       colors: { 'editor.background': bg, 'editor.foreground': fg },
     })
-    monaco.editor.defineTheme('dsh-dark', {
+    monaco.editor.defineTheme(`dsh-dark${suffix}`, {
       base: 'vs-dark',
       inherit: true,
       rules: [],
       colors: { 'editor.background': bg, 'editor.foreground': fg },
     })
-    themesDefined = true
+    definedThemes.add('dsh-light')
+    definedThemes.add('dsh-dark')
+    definedThemes.add('dsh-light-document')
+    definedThemes.add('dsh-dark-document')
     return custom
   }
   return builtin
@@ -64,7 +80,7 @@ function themeIdFor(monaco: MonacoEditorModule, dark: boolean): string {
  * @param props - buffer, language, theme, and change callback.
  */
 export function MonacoEditor({
-  path, value, language, ariaLabel, dark, onChange,
+  path, value, language, ariaLabel, dark, surface = 'sidebar', onChange,
 }: MonacoEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<{ setValue: (next: string) => void; dispose: () => void } | null>(null)
@@ -93,8 +109,8 @@ export function MonacoEditor({
           return new Worker('data:text/javascript,onmessage=function(){}')
         },
       }
-      const theme = themeIdFor(monaco, dark)
-      const fontFamily = getComputedStyle(document.documentElement)
+      const theme = themeIdFor(monaco, dark, surface)
+      const fontFamily = getComputedStyle(document.body)
         .getPropertyValue('--ds-font-family-code')
         .trim() || 'ui-monospace, SFMono-Regular, Menlo, Monaco, monospace'
       let editor: MonacoStandaloneEditor
@@ -139,17 +155,17 @@ export function MonacoEditor({
       editorRef.current = null
       setFallback(true)
     }
-  }, [path, language, dark])
+  }, [path, language, dark, surface])
 
   useEffect(() => {
     editorRef.current?.setValue(value)
   }, [value])
 
   return (
-    <div className={css.wrap}>
+    <div className={clsx(css.wrap, surface === 'document' && css.document)}>
       {fallback && (
         <textarea
-          className={css.fallback}
+          className={clsx(css.fallback, surface === 'document' && css.document)}
           aria-label={ariaLabel}
           value={value}
           spellCheck={false}

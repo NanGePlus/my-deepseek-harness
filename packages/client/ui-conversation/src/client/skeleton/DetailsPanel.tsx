@@ -9,9 +9,9 @@ import css from './DetailsPanel.module.css'
 /** Full props composed by reference from the contract (automatic shares & injected share). */
 export type DetailsPanelProps = DetailsSlotProps
 
-/** Renders the details column shell: segmented tabs, close control, and tab bodies. */
+/** Renders the details column shell: segmented tabs and tab bodies. */
 export function DetailsPanel({
-  useSessions, renderSlot, openDetails, closeDetails, t,
+  useSessions, renderSlot, openDetails, t,
   useChat, useConversation,
 }: DetailsPanelProps) {
   const detailsTab = useChat(binding => binding.state.detailsTab ?? 'editor')
@@ -46,14 +46,6 @@ export function DetailsPanel({
             {t('details.tab.tool')}
           </button>
         </div>
-        <button
-          type="button" className={css.close} aria-label={t('details.close')}
-          onClick={() => { closeDetails() }}
-        >
-          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
-            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-        </button>
       </div>
       <div className={clsx(css.body, detailsTab === 'editor' && css.bodyFlush)}>
         <div

@@ -39,5 +39,4 @@
   - img
 - button "Send message" [disabled]
 - text: Details
-- button "Close details"
 - text: Click a tool row in the message flow to view its details

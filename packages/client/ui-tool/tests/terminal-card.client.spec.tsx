@@ -613,25 +613,6 @@ describe('DetailsPanel Output section', () => {
     expect(view.getByText('点击消息流中的工具行查看详情')).toBeTruthy()
   })
 
-  it('the close button reaches closeDetails', () => {
-    localStorage.clear()
-    const chat = createChatStore().create()
-    const closeDetails = vi.fn()
-    const snap = snapshot()
-    const view = render(
-      <DetailsPanel {...{
-        ...detailsPanelTestProps({
-          snapshot: snap,
-          chat,
-          renderSlot: renderToolDetails(t),
-          t,
-        }),
-        closeDetails,
-      }} />,
-    )
-    fireEvent.click(view.getByRole('button', { name: '关闭详情' }))
-    expect(closeDetails).toHaveBeenCalledTimes(1)
-  })
 
   it('a non-text result block renders as JSON, and an empty result falls back to its error', () => {
     const nonText = mount(snapshot({

@@ -49,6 +49,7 @@ const VENDOR_PACKAGES: ReadonlySet<string> = new Set([
   'mdast-util-from-markdown',
   'mdast-util-gfm',
   'mdast-util-math',
+  'mermaid',
   'micromark-core-commonmark',
   'micromark-extension-gfm',
   'micromark-extension-math',
