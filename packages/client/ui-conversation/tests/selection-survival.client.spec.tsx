@@ -22,18 +22,22 @@ async function bench() {
     'conversation': { kind: 'single', scope: 'session-maybe' },
     'conversation.session': { kind: 'single', scope: 'session' },
     'conversation.session.header': { kind: 'single', scope: 'session' },
-    'details': { kind: 'single', scope: 'session' },
+    'details': { kind: 'single', scope: 'root' },
   }, (_p: { renderSlot?: unknown }) => null)
   runtime.slots.register({ name: 'conversation.session', store: chat }, () => null)
   runtime.slots.register({ name: 'conversation.session.header', store: chat }, () => null)
-  runtime.slots.register({ name: 'details', store: chat }, () => null)
   runtime.renderRoot() // materializes the host face storeOf resolves through
   return { runtime, chat }
 }
 
-/** Resolve the store instance the renderer would hand a slot's component for a session. */
-function storeFor(b: Awaited<ReturnType<typeof bench>>, slot: 'conversation.session' | 'details', sessionId: SessionId) {
+/** Resolve the store instance the renderer would hand a session-scoped slot. */
+function storeFor(b: Awaited<ReturnType<typeof bench>>, slot: 'conversation.session', sessionId: SessionId) {
   return b.runtime.storeOf(slot, sessionId) as ChatInstance
+}
+
+/** Resolve the shared chat-store instance the root details panel binds to. */
+function detailsChatFor(b: Awaited<ReturnType<typeof bench>>, sessionId: SessionId) {
+  return b.runtime.slots.sessionStore(b.chat, sessionId) as ChatInstance
 }
 
 beforeEach(() => {
@@ -41,14 +45,13 @@ beforeEach(() => {
 })
 
 describe('selection survives on the store seat', () => {
-  it('one session, two slots: conversation writes, details reads the SAME instance', async () => {
+  it('one session: conversation writes, details sessionStore reads the SAME instance', async () => {
     const b = await bench()
 
     const conv = storeFor(b, 'conversation.session', sid('s1'))
-    const details = storeFor(b, 'details', sid('s1'))
+    const details = detailsChatFor(b, sid('s1'))
     conv.actions.select({ turnSeq: 3, callId: 'c1' })
     expect(details.store.getSnapshot().selection).toEqual({ turnSeq: 3, callId: 'c1' })
-    // Identity, not just value: the shared handle resolves one instance per scope key.
     expect(details).toBe(conv)
     await b.runtime.dispose()
   })
@@ -104,7 +107,7 @@ describe('selection survives on the store seat', () => {
     // ...and a re-created same-id session starts from a FRESH instance.
     const reborn = storeFor(b, 'conversation.session', sid('s1'))
     expect(reborn).not.toBe(doomed)
-    expect(reborn.store.getSnapshot()).toEqual({ selection: null, draft: '', view: null, inspect: null, detailsTab: 'tool' })
+    expect(reborn.store.getSnapshot()).toEqual({ selection: null, draft: '', view: null, inspect: null, detailsTab: 'editor' })
     await b.runtime.dispose()
   })
 })

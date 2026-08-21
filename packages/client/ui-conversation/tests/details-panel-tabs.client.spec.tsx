@@ -6,12 +6,14 @@ import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react'
 import {
   createSnapshotStore, EMPTY_CHAT_SNAPSHOT, EMPTY_CONVERSATION_VIEWS,
 } from '@deepseek-ai/dsh-client-runtime/client'
-import type { UseSession } from '@deepseek-ai/dsh-client-web-react'
 import type { ConversationSnapshot, SessionId, SessionListState, WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionProviderComponent } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DetailsSlotProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
+import {
+  createSessionBoundSource,
+} from '../src/client/session-bound-source.ts'
 import { createChatStore } from '../src/client/stores.ts'
 import { DetailsPanel } from '../src/client/skeleton/DetailsPanel.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -45,44 +47,48 @@ function snapshotBase(): ConversationSnapshot {
 function bench(overrides?: Partial<Pick<DetailsSlotProps, 'renderSlot'>>) {
   localStorage.clear()
   const snap = snapshotBase()
-  const chat = createChatStore().create()
-  const emptyList = createSnapshotStore<SessionListState>(
-    { ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined })
+  const chat = createChatStore().create(SID)
+  const sessionList = createSnapshotStore<SessionListState>({
+    ids: [SID],
+    byId: {
+      [SID]: {
+        id: SID,
+        displayTitle: 's1',
+        cwd: '/tmp',
+        running: false,
+        blank: false,
+        updatedAt: 0,
+      },
+    },
+    current: SID, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined })
   const emptyWorkspaces = createSnapshotStore<WorkspaceListState>({
     items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
     baselinesReady: true, recentWorkspaceId: undefined,
   })
+  const conversation = createSnapshotStore(snap)
   const openDetails = vi.fn()
   const closeDetails = vi.fn()
   const renderSlot: DetailsSlotProps['renderSlot'] = overrides?.renderSlot ?? ((key) => {
     if (key === 'conversation.details.editor') return <div data-testid="editor-surface-seat" />
     return null
   })
-  const useSessionStub = bindSnapshotSelector({
-    getSnapshot: () => snap,
-    subscribe: () => () => {},
-  }) as unknown as UseSession<ConversationSnapshot>
   const view = render(
     <DetailsPanel
       SessionProvider={SessionProviderStub}
       renderSlot={renderSlot}
-      sessionId={SID}
-      useSession={useSessionStub}
-      useSessions={bindSnapshotSelector(emptyList)}
+      useSessions={bindSnapshotSelector(sessionList)}
       useWorkspaces={bindSnapshotSelector(emptyWorkspaces)}
-      useProjection={(() => undefined)}
-      useInput={(() => { throw new Error('unused') })}
-      inputActions={{
-        setDraft: () => {},
-        addImages: () => true,
-        removeImage: () => {},
-        pruneImages: () => {},
-        submit: () => {},
-      }}
-      useStore={bindSnapshotSelector(chat)}
-      actions={chat.actions}
       openDetails={openDetails}
       closeDetails={closeDetails}
+      useChat={bindSnapshotSelector({
+        getSnapshot: () => ({
+          sessionId: SID,
+          state: chat.getSnapshot(),
+          actions: chat.actions,
+        }),
+        subscribe: listener => chat.subscribe(listener),
+      })}
+      useConversation={bindSnapshotSelector(createSessionBoundSource(sessionList, () => conversation, snap))}
       t={t}
     />,
   )
@@ -90,28 +96,36 @@ function bench(overrides?: Partial<Pick<DetailsSlotProps, 'renderSlot'>>) {
 }
 
 describe('DetailsPanel segmented tabs', () => {
-  it('default: renders Tool 详情 and 文件编辑器 tab labels', () => {
+  function toolPanel(view: ReturnType<typeof bench>['view']) {
+    return view.getAllByRole('tabpanel', { hidden: true })[1]!
+  }
+
+  it('default: selects the file editor tab and renders its seat', () => {
     const { view } = bench()
     expect(view.getByRole('tab', { name: 'Tool 详情' })).toBeTruthy()
     expect(view.getByRole('tab', { name: '文件编辑器' })).toBeTruthy()
-    expect(view.getByRole('tab', { name: 'Tool 详情' }).getAttribute('aria-selected')).toBe('true')
+    expect(view.getByRole('tab', { name: '文件编辑器' }).getAttribute('aria-selected')).toBe('true')
+    expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
+    expect(toolPanel(view).getAttribute('aria-hidden')).toBe('true')
   })
 
-  it('tab-selected: selecting 文件编辑器 renders the editor surface seat and opens details', () => {
+  it('tab-selected: selecting 文件编辑器 keeps the editor surface visible', () => {
     const { view, chat, openDetails } = bench()
+    expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
     fireEvent.click(view.getByRole('tab', { name: '文件编辑器' }))
     expect(chat.store.getSnapshot().detailsTab).toBe('editor')
     expect(openDetails).toHaveBeenCalledTimes(1)
     expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
-    expect(view.queryByText('点击消息流中的工具行查看详情')).toBeNull()
+    expect(toolPanel(view).getAttribute('aria-hidden')).toBe('true')
   })
 
-  it('tab-selected: switching back to Tool 详情 closes the editor view', () => {
+  it('tab-selected: switching back to Tool 详情 hides the editor view without unmounting it', () => {
     const { view, chat } = bench()
     fireEvent.click(view.getByRole('tab', { name: '文件编辑器' }))
     fireEvent.click(view.getByRole('tab', { name: 'Tool 详情' }))
     expect(chat.store.getSnapshot().detailsTab).toBe('tool')
-    expect(view.queryByTestId('editor-surface-seat')).toBeNull()
+    expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
+    expect(view.getAllByRole('tabpanel', { hidden: true })[0]!.getAttribute('aria-hidden')).toBe('true')
     expect(view.getByText('点击消息流中的工具行查看详情')).toBeTruthy()
   })
 })

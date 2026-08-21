@@ -5,10 +5,10 @@ import { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
-  FileReadKind, FileReadResult, FileWriteResult, SessionId, WorkspaceId, WorkspaceListState, WorkspaceView,
+  FileReadKind, FileReadResult, FileWriteResult, SessionId, SessionListState, WorkspaceId, WorkspaceListState, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceEntry, WorkspaceEntriesListing } from '@deepseek-ai/dsh-client-runtime/client'
-import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { EditorSurface, editorDirtyGuard, type EditorSurfaceProps } from '../src/client/EditorSurface.tsx'
 import { resetDirtyGuardForTest } from '../src/client/dirty-guard.ts'
 import { createFileEditorStore } from '../src/client/stores.ts'
@@ -65,6 +65,10 @@ const DEFAULT_ROOT: WorkspaceEntry[] = [
 
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
+function saveShortcut(): void {
+  fireEvent.keyDown(window, { key: 's', metaKey: true })
+}
+
 function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapshot: () => T }) {
   return function useSelector<S>(sel: (s: T) => S): S {
     return sel(useSyncExternalStore(inst.subscribe, inst.getSnapshot))
@@ -103,6 +107,18 @@ function workspacesState(items: WorkspaceView[]): WorkspaceListState {
   }
 }
 
+function sessionsState(current: SessionId): SessionListState {
+  return {
+    ids: [current],
+    byId: {},
+    current,
+    phase: 'ready',
+    subagentsByParent: {},
+    jobsBySession: {},
+    currentAddress: undefined,
+  }
+}
+
 function mount(over: {
   items?: WorkspaceView[]
   sessionId?: SessionId
@@ -134,12 +150,13 @@ function mount(over: {
   })))
   const watchPath = vi.fn(over.watchPath ?? (() => {}))
   const items = over.items ?? [workspace()]
-  const state = workspacesState(items)
+  const workspacesStore = createSnapshotStore(workspacesState(items))
+  const sessionsStore = createSnapshotStore(sessionsState(over.sessionId ?? SID))
   const instance = createFileEditorStore().create()
   const props = {
     t: makeTranslate(zh),
-    sessionId: over.sessionId ?? SID,
-    useWorkspaces: ((select: (s: WorkspaceListState) => unknown) => select(state)) as EditorSurfaceProps['useWorkspaces'],
+    useSessions: hookOf(sessionsStore),
+    useWorkspaces: hookOf(workspacesStore),
     useStore: hookOf(instance),
     actions: instance.actions,
     listWorkspaceEntries,
@@ -154,8 +171,8 @@ function mount(over: {
   } as EditorSurfaceProps
   const view = render(<EditorSurface {...props} />)
   return {
-    view, props, listWorkspaceEntries, gitStatus, readFile, writeFile, deletePath, renamePath,
-    createWorkspaceDirectory, watchPath, state,
+    view, props, instance, sessionsStore, workspacesStore, listWorkspaceEntries, gitStatus, readFile, writeFile,
+    deletePath, renamePath, createWorkspaceDirectory, watchPath,
   }
 }
 
@@ -177,6 +194,49 @@ describe('EditorSurface file tree', () => {
     expect(b.listWorkspaceEntries.mock.calls.every(call => call[1] === ROOT)).toBe(true)
   })
 
+  it('collapses and expands the file tree from the hide and show controls', async () => {
+    mount()
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '隐藏文件树' }))
+    expect(screen.queryByRole('tree', { name: 'alpha' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '显示文件树' }))
+    await waitFor(() => { expect(screen.getByRole('tree', { name: 'alpha' })).toBeTruthy() })
+  })
+
+  it('shows a draggable split handle between the tree and editor', async () => {
+    mount()
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    expect(screen.getByRole('separator', { name: '调整文件树宽度' })).toBeTruthy()
+  })
+
+  it('does not reload the tree when switching Sessions within the same Workspace', async () => {
+    const otherSid = 's2' as SessionId
+    const shared = workspace({ sessionIds: [SID, otherSid] })
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => listingFor(path))
+    const b = mount({ items: [shared], list: listWorkspaceEntries })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    const callsAfterLoad = listWorkspaceEntries.mock.calls.length
+    fireEvent.click(screen.getByText('src').closest('[role="treeitem"]')!)
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    b.sessionsStore.update((s) => { s.current = otherSid })
+    b.view.rerender(<EditorSurface {...b.props} />)
+    expect(screen.getByText('src')).toBeTruthy()
+    expect(screen.getByText('app.ts')).toBeTruthy()
+    expect(listWorkspaceEntries.mock.calls.length).toBe(callsAfterLoad + 1)
+  })
+
+  it('keeps open editor tabs when switching Sessions within the same Workspace', async () => {
+    const otherSid = 's2' as SessionId
+    const shared = workspace({ sessionIds: [SID, otherSid] })
+    const b = mount({ items: [shared] })
+    const tree = await waitFor(() => screen.getByRole('tree', { name: 'alpha' }))
+    fireEvent.click(within(tree).getByText('README.md').closest('[role="treeitem"]')!)
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
+    b.sessionsStore.update((s) => { s.current = otherSid })
+    b.view.rerender(<EditorSurface {...b.props} />)
+    expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy()
+  })
+
   it('reloads the tree when the bound Workspace follows a new Session', async () => {
     const other = workspace({
       workspaceId: 'ws2' as WorkspaceId,
@@ -196,13 +256,10 @@ describe('EditorSurface file tree', () => {
     })
     const first = mount({ list: listWorkspaceEntries })
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
-    const nextState = workspacesState([workspace(), other])
+    const nextWorkspaces = createSnapshotStore(workspacesState([workspace(), other]))
+    first.sessionsStore.update((s) => { s.current = 's2' as SessionId })
     first.view.rerender(
-      <EditorSurface
-        {...first.props}
-        sessionId={'s2' as SessionId}
-        useWorkspaces={((select: (s: WorkspaceListState) => unknown) => select(nextState)) as EditorSurfaceProps['useWorkspaces']}
-      />,
+      <EditorSurface {...first.props} useWorkspaces={hookOf(nextWorkspaces)} />,
     )
     await waitFor(() => { expect(screen.getByText('only-beta.ts')).toBeTruthy() })
     expect(screen.queryByText('README.md')).toBeNull()
@@ -326,6 +383,15 @@ describe('EditorSurface file tree', () => {
     expect(screen.getByText('未打开文件')).toBeTruthy()
   })
 
+  it('expands and collapses a folder on a single row click', async () => {
+    mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    fireEvent.click(screen.getByText('src').closest('[role="treeitem"]')!)
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    fireEvent.click(screen.getByText('src').closest('[role="treeitem"]')!)
+    await waitFor(() => { expect(screen.queryByText('app.ts')).toBeNull() })
+  })
+
   it('does not fetch a file path on double-click', async () => {
     const b = mount()
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
@@ -423,7 +489,7 @@ describe('EditorSurface open / save', () => {
     fireEvent.click(within(tree).getByText(name).closest('[role="treeitem"]')!)
   }
 
-  it('default-editable: opening text shows a tab, language highlighting, and a disabled save', async () => {
+  it('default-editable: opening text shows a tab and language highlighting', async () => {
     const b = mount()
     await clickFile('README.md')
     await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
@@ -431,11 +497,11 @@ describe('EditorSurface open / save', () => {
     expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy()
     expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md.*Markdown/ }).value)
       .toBe('contents of /w/alpha/README.md\n')
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: '保存' })).toBeNull()
     expect(b.readFile).toHaveBeenCalledWith(WID, `${ROOT}/README.md`, 'text', expect.any(AbortSignal))
   })
 
-  it('default-preview: opening an image shows a read-only preview and a disabled save', async () => {
+  it('default-preview: opening an image shows a read-only preview', async () => {
     const b = mount()
     await clickFile('logo.png')
     await waitFor(() => { expect(screen.getByRole('tab', { name: /logo\.png/ })).toBeTruthy() })
@@ -443,7 +509,7 @@ describe('EditorSurface open / save', () => {
     expect(preview.src).toContain(`data:image/png;base64,${PNG_BASE64}`)
     expect(screen.queryByRole('textbox', { name: /logo\.png/ })).toBeNull()
     expect(screen.queryByLabelText('未保存')).toBeNull()
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: '保存' })).toBeNull()
     expect(b.readFile).toHaveBeenCalledWith(WID, `${ROOT}/logo.png`, 'bytes', expect.any(AbortSignal))
     expect(b.writeFile).not.toHaveBeenCalled()
   })
@@ -453,7 +519,7 @@ describe('EditorSurface open / save', () => {
     await clickFile('app.wasm')
     await waitFor(() => { expect(screen.getByText('不支持打开此文件类型')).toBeTruthy() })
     expect(screen.getByRole('tab', { name: /app\.wasm/ })).toBeTruthy()
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: '保存' })).toBeNull()
     expect(b.readFile).not.toHaveBeenCalled()
   })
 
@@ -466,40 +532,38 @@ describe('EditorSurface open / save', () => {
     fireEvent.keyDown(window, { key: 's', metaKey: true })
   })
 
-  it('dirty-unsaved: editing shows a dirty mark; Save and ⌘S write and clear it', async () => {
+  it('dirty-unsaved: editing shows a dirty mark; ⌘S writes and clears it', async () => {
     const b = mount()
     await clickFile('README.md')
     await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy() })
     const box = screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md.*Markdown/ })
     fireEvent.change(box, { target: { value: 'edited readme\n' } })
     await waitFor(() => { expect(screen.getByLabelText('未保存')).toBeTruthy() })
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(false)
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    saveShortcut()
     await waitFor(() => { expect(screen.queryByLabelText('未保存')).toBeNull() })
     expect(b.writeFile).toHaveBeenCalledWith(WID, `${ROOT}/README.md`, 'edited readme\n', expect.any(AbortSignal))
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
     const again = screen.getByRole<HTMLTextAreaElement>('textbox', { name: /README\.md.*Markdown/ })
     fireEvent.change(again, { target: { value: 'again\n' } })
     await waitFor(() => { expect(screen.getByLabelText('未保存')).toBeTruthy() })
-    fireEvent.keyDown(window, { key: 's', metaKey: true })
+    saveShortcut()
     await waitFor(() => { expect(screen.queryByLabelText('未保存')).toBeNull() })
     expect(b.writeFile).toHaveBeenCalledWith(WID, `${ROOT}/README.md`, 'again\n', expect.any(AbortSignal))
   })
 
-  it('save-disabled: a clean text tab, preview tab, and non-openable tab cannot save', async () => {
+  it('save-disabled: a clean text tab, preview tab, and non-openable tab ignore save shortcuts', async () => {
     const b = mount()
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('button', { name: '保存' })).toBeTruthy() })
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
+    saveShortcut()
     fireEvent.keyDown(window, { key: 's', ctrlKey: true })
     fireEvent.keyDown(window, { key: 's' })
     expect(b.writeFile).not.toHaveBeenCalled()
     await clickFile('logo.png')
     await waitFor(() => { expect(screen.getByRole('img', { name: 'logo.png' })).toBeTruthy() })
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    saveShortcut()
     await clickFile('app.wasm')
     await waitFor(() => { expect(screen.getByText('不支持打开此文件类型')).toBeTruthy() })
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    saveShortcut()
     expect(b.writeFile).not.toHaveBeenCalled()
   })
 
@@ -545,14 +609,9 @@ describe('EditorSurface open / save', () => {
     await clickFile('README.md')
     await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy() })
     fireEvent.change(screen.getByRole('textbox', { name: /README\.md/ }), { target: { value: 'x\n' } })
-    const empty = workspacesState([])
-    b.view.rerender(
-      <EditorSurface
-        {...b.props}
-        useWorkspaces={((select: (s: WorkspaceListState) => unknown) => select(empty)) as EditorSurfaceProps['useWorkspaces']}
-      />,
-    )
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    b.workspacesStore.update((draft) => { draft.items = [] })
+    b.view.rerender(<EditorSurface {...b.props} />)
+    saveShortcut()
     expect(b.writeFile).not.toHaveBeenCalled()
   })
 
@@ -576,7 +635,7 @@ describe('EditorSurface open / save', () => {
     await clickFile('README.md')
     await waitFor(() => { expect(screen.getByRole('textbox', { name: /README.md/ })).toBeTruthy() })
     fireEvent.change(screen.getByRole('textbox', { name: /README.md/ }), { target: { value: 'x\n' } })
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    saveShortcut()
     b.view.unmount()
     await act(async () => { release({ path: `${ROOT}/README.md` }) })
   })
@@ -589,7 +648,7 @@ describe('EditorSurface open / save', () => {
     await clickFile('README.md')
     await waitFor(() => { expect(screen.getByRole('textbox', { name: /README.md/ })).toBeTruthy() })
     fireEvent.change(screen.getByRole('textbox', { name: /README.md/ }), { target: { value: 'x\n' } })
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    saveShortcut()
     b.view.unmount()
     await act(async () => { fail(new Error('gone')) })
   })
@@ -610,7 +669,7 @@ describe('EditorSurface open / save', () => {
     })
     await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy() })
     fireEvent.change(screen.getByRole('textbox', { name: /README\.md.*Markdown/ }), { target: { value: 'dirty\n' } })
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    saveShortcut()
     await waitFor(() => { expect(screen.getByText('保存中…')).toBeTruthy() })
     expect(screen.getByPlaceholderText('按文件名过滤')).toBeTruthy()
     await act(async () => { releaseWrite({ path: `${ROOT}/README.md` }) })
@@ -638,7 +697,7 @@ describe('EditorSurface open / save', () => {
     fireEvent.click(screen.getByRole('button', { name: '重试' }))
     await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md.*Markdown/ })).toBeTruthy() })
     fireEvent.change(screen.getByRole('textbox', { name: /README\.md.*Markdown/ }), { target: { value: 'x\n' } })
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    saveShortcut()
     await waitFor(() => { expect(screen.getByText('无法保存此文件')).toBeTruthy() })
     writeFail = false
     fireEvent.click(screen.getByRole('button', { name: '重试' }))
@@ -712,18 +771,18 @@ describe('EditorSurface file operations', () => {
   it('toolbar-default: shows enabled new-file and new-folder toolbar controls', async () => {
     mount()
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
-    expect(toolbarButton('新建文件').disabled).toBe(false)
-    expect(toolbarButton('新建文件夹').disabled).toBe(false)
+    expect(toolbarButton('新建文件').getAttribute('aria-disabled')).toBeNull()
+    expect(toolbarButton('新建文件夹').getAttribute('aria-disabled')).toBeNull()
   })
 
   it('toolbar-disabled: keeps rename and delete disabled until a tree row is selected', async () => {
     mount()
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
-    expect(toolbarButton('重命名').disabled).toBe(true)
-    expect(toolbarButton('删除').disabled).toBe(true)
+    expect(toolbarButton('重命名').getAttribute('aria-disabled')).toBe('true')
+    expect(toolbarButton('删除').getAttribute('aria-disabled')).toBe('true')
     await selectRow('README.md')
-    expect(toolbarButton('重命名').disabled).toBe(false)
-    expect(toolbarButton('删除').disabled).toBe(false)
+    expect(toolbarButton('重命名').getAttribute('aria-disabled')).toBeNull()
+    expect(toolbarButton('删除').getAttribute('aria-disabled')).toBeNull()
   })
 
   it('creates a folder in the bound Workspace and reloads the parent layer', async () => {
@@ -1010,7 +1069,6 @@ describe('EditorSurface external change', () => {
 
 describe('EditorSurface dirty guard', () => {
   const README = `${ROOT}/README.md`
-  const OTHER_SID = 's2' as SessionId
 
   async function clickFile(name: string): Promise<void> {
     const tree = await waitFor(() => screen.getByRole('tree', { name: 'alpha' }))
@@ -1027,46 +1085,24 @@ describe('EditorSurface dirty guard', () => {
     expect(screen.getByLabelText('未保存')).toBeTruthy()
   }
 
-  it('session-switch-guard: dirty tabs show save, discard, and cancel; cancel keeps the session', async () => {
-    mount()
-    await dirtyReadme()
-    let switched = false
-    act(() => {
-      editorDirtyGuard.tryOpenSession(SID, OTHER_SID, () => { switched = true })
-    })
-    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '未保存的更改' }))
-    expect(within(dialog).getByText('README.md')).toBeTruthy()
-    expect(within(dialog).getByRole('button', { name: '保存' })).toBeTruthy()
-    expect(within(dialog).getByRole('button', { name: '丢弃' })).toBeTruthy()
-    expect(within(dialog).getByRole('button', { name: '取消' })).toBeTruthy()
-    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
-    await waitFor(() => { expect(screen.queryByRole('dialog', { name: '未保存的更改' })).toBeNull() })
-    expect(switched).toBe(false)
-    expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy()
-  })
-
-  it('save-fail-stay: a failed save keeps the guard open and does not switch sessions', async () => {
+  it('save-fail-stay: a failed save keeps the guard open', async () => {
     const writeFile = vi.fn(async () => { throw new Error('denied') })
     mount({ write: writeFile })
     await dirtyReadme()
-    let switched = false
-    act(() => {
-      editorDirtyGuard.tryOpenSession(SID, OTHER_SID, () => { switched = true })
-    })
+    fireEvent.click(screen.getByRole('button', { name: '关闭 README.md' }))
     const dialog = await waitFor(() => screen.getByRole('dialog', { name: '未保存的更改' }))
     fireEvent.click(within(dialog).getByRole('button', { name: '保存' }))
     await waitFor(() => { expect(screen.getByText('无法保存此文件')).toBeTruthy() })
-    expect(switched).toBe(false)
     expect(screen.getByRole('dialog', { name: '未保存的更改' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy()
   })
 
-  it('switch-success: after discard the tree follows the new Workspace and tabs close', async () => {
+  it('cross-workspace switch: preserves each Workspace editor partition independently', async () => {
     const other = workspace({
       workspaceId: 'ws2' as WorkspaceId,
       path: '/w/beta',
       title: 'beta',
-      sessionIds: [OTHER_SID],
+      sessionIds: ['s2' as SessionId],
     })
     const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
       if (path === '/w/beta') {
@@ -1080,44 +1116,19 @@ describe('EditorSurface dirty guard', () => {
     })
     const b = mount({ items: [workspace(), other], list: listWorkspaceEntries })
     await dirtyReadme()
-    act(() => {
-      editorDirtyGuard.tryOpenSession(SID, OTHER_SID, () => {
-        b.view.rerender(
-          <EditorSurface
-            {...b.props}
-            sessionId={OTHER_SID}
-            useWorkspaces={((select: (s: WorkspaceListState) => unknown) => select(workspacesState([workspace(), other]))) as EditorSurfaceProps['useWorkspaces']}
-          />,
-        )
-      })
-    })
-    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '未保存的更改' }))
-    fireEvent.click(within(dialog).getByRole('button', { name: '丢弃' }))
-    await waitFor(() => { expect(screen.queryByRole('dialog', { name: '未保存的更改' })).toBeNull() })
+    const nextWorkspaces = createSnapshotStore(workspacesState([workspace(), other]))
+    b.sessionsStore.update((s) => { s.current = 's2' as SessionId })
+    b.view.rerender(<EditorSurface {...b.props} useWorkspaces={hookOf(nextWorkspaces)} />)
     await waitFor(() => { expect(screen.getByText('only-beta.ts')).toBeTruthy() })
-    expect(screen.queryByText('README.md')).toBeNull()
     expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull()
     expect(screen.getByText('未打开文件')).toBeTruthy()
-    expect(listWorkspaceEntries).toHaveBeenCalledWith('ws2', '/w/beta', expect.any(AbortSignal))
+    b.sessionsStore.update((s) => { s.current = SID })
+    b.view.rerender(<EditorSurface {...b.props} useWorkspaces={hookOf(nextWorkspaces)} />)
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
+    expect(screen.getByLabelText('未保存')).toBeTruthy()
   })
 
-  it('session-switch-save: saving the dirty tab completes the switch', async () => {
-    const writeFile = vi.fn(async (_id: WorkspaceId, path: string, text: string) => ({ path, text }))
-    const b = mount({ write: writeFile })
-    await dirtyReadme()
-    act(() => {
-      editorDirtyGuard.tryOpenSession(SID, OTHER_SID, () => {
-        b.view.rerender(<EditorSurface {...b.props} sessionId={OTHER_SID} />)
-      })
-    })
-    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '未保存的更改' }))
-    fireEvent.click(within(dialog).getByRole('button', { name: '保存' }))
-    await waitFor(() => { expect(screen.queryByRole('dialog', { name: '未保存的更改' })).toBeNull() })
-    expect(writeFile).toHaveBeenCalledWith(WID, README, 'local edits\n')
-    expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull()
-  })
-
-  it('close-dirty-tab: closing one dirty tab uses the same three buttons without changing session', async () => {
+  it('close-dirty-tab: closing one dirty tab uses the same three buttons', async () => {
     mount()
     await dirtyReadme()
     fireEvent.click(screen.getByRole('button', { name: '关闭 README.md' }))
@@ -1132,11 +1143,19 @@ describe('EditorSurface dirty guard', () => {
     expect(screen.getByText('未打开文件')).toBeTruthy()
   })
 
-  it('does not show a guard dialog owned by another session', async () => {
-    const b = mount()
+  it('does not show a guard dialog owned by another Workspace', async () => {
+    const other = workspace({
+      workspaceId: 'ws2' as WorkspaceId,
+      path: '/w/beta',
+      title: 'beta',
+      sessionIds: ['s2' as SessionId],
+    })
+    const b = mount({ items: [workspace(), other] })
     await dirtyReadme()
-    act(() => { editorDirtyGuard.tryOpenSession(SID, OTHER_SID, () => {}) })
-    b.view.rerender(<EditorSurface {...b.props} sessionId={OTHER_SID} />)
+    act(() => { editorDirtyGuard.requestCloseTab(WID, README) })
+    const nextWorkspaces = createSnapshotStore(workspacesState([workspace(), other]))
+    b.sessionsStore.update((s) => { s.current = 's2' as SessionId })
+    b.view.rerender(<EditorSurface {...b.props} useWorkspaces={hookOf(nextWorkspaces)} />)
     expect(screen.queryByRole('dialog', { name: '未保存的更改' })).toBeNull()
   })
 

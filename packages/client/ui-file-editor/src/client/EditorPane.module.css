@@ -11,7 +11,9 @@
   display: flex;
   flex: none;
   min-width: 0;
-  align-items: stretch;
+  align-items: center;
+  gap: 4px;
+  padding-left: 4px;
   border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 40%, transparent);
 }
 
@@ -56,48 +58,12 @@
   white-space: nowrap;
 }
 
-.tabClose {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-}
-
-.tabClose:hover {
-  background: var(--editor-hover-tint);
-  color: var(--dsw-alias-label-primary);
-}
-
-.save {
-  flex: none;
-  margin: 4px 8px;
-  padding: 0 12px;
-  border: none;
-  border-radius: 6px;
-  background: var(--dsw-alias-button-primary-fill);
-  font-family: var(--dsw-font-family);
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-primary-foreground);
-  cursor: pointer;
-}
-
-.save:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 .body {
   display: flex;
   flex: 1;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   align-items: stretch;
   justify-content: stretch;
 }
@@ -162,40 +128,11 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.emptyCta {
-  margin-top: 4px;
-  padding: 6px 12px;
-  border: none;
-  border-radius: 6px;
-  background: var(--dsw-alias-button-primary-fill);
-  font-family: var(--dsw-font-family);
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-primary-foreground);
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 .errorCopy {
   font-family: var(--dsw-font-family);
   font-size: 13px;
   line-height: 18px;
   color: var(--dsw-alias-state-error-primary);
-}
-
-.retry {
-  margin-top: 4px;
-  padding: 6px 12px;
-  border: none;
-  border-radius: 6px;
-  background: var(--dsw-alias-button-primary-fill);
-  font-family: var(--dsw-font-family);
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-primary-foreground);
-  cursor: pointer;
 }
 
 .preview {

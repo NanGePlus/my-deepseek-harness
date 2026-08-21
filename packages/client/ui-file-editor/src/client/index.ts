@@ -19,8 +19,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Dictionary namespace owned by this plugin. */
 const NS = 'fileEditor'
 
-/** Required services for slot injection, Workspace Host RPC, locale, and session guard. */
-export const inject = ['slots', 'workspaces', 'locale', 'sessions']
+/** Required services for slot injection, Workspace Host RPC, and locale. */
+export const inject = ['slots', 'workspaces', 'locale']
 
 /**
  * Register the editor-surface occupant once the details child slot is declared.
@@ -28,12 +28,6 @@ export const inject = ['slots', 'workspaces', 'locale', 'sessions']
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-file-editor: dictionaries')
-
-  const commitOpen = ctx.sessions.open.bind(ctx.sessions)
-  ctx.sessions.open = (sessionId) => {
-    const current = ctx.sessions.list.getSnapshot().current
-    editorDirtyGuard.tryOpenSession(current, sessionId, () => { commitOpen(sessionId) })
-  }
 
   const injected = (): FileEditorInjected & { dirtyGuard: typeof editorDirtyGuard } => ({
     listWorkspaceEntries: (workspaceId, path, signal) =>

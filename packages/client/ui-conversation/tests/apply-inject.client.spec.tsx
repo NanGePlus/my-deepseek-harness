@@ -67,7 +67,7 @@ async function bench() {
   // live entry before apply can contribute into them.
   await runtime.root.declare({
     'conversation': { kind: 'single', scope: 'session-maybe' },
-    'details': { kind: 'single', scope: 'session' },
+    'details': { kind: 'single', scope: 'root' },
   }, (_p: { renderSlot?: unknown }) => null)
 
   const feature = await runtime.mount({ inject: [...inject], apply })
@@ -222,6 +222,7 @@ describe('conversation slot inject API', () => {
     const { instance, injected } = b.chatViewApi(ROOT)
     injected.openDetails({ turnSeq: 2, callId: 'c1' })
     expect(instance.store.getSnapshot().selection).toEqual({ turnSeq: 2, callId: 'c1' })
+    expect(instance.store.getSnapshot().detailsTab).toBe('tool')
     expect(b.layoutFake.openDetails).toHaveBeenCalledTimes(1)
     // The chat view shares the conversation entry's store instance: selection
     // writes land where the skeleton and details read.
@@ -340,12 +341,13 @@ describe('details inject API', () => {
     const b = await bench()
     const entry = b.entryOf('details')
     const injected = (entry.inject as unknown as () => DetailsInjected)()
-    expect(Object.keys(injected).sort()).toEqual(['closeDetails', 'openDetails'])
+    expect(Object.keys(injected).sort()).toEqual(['closeDetails', 'hooks', 'openDetails'])
+    expect(Object.keys(injected.hooks).sort()).toEqual(['chat', 'conversation'])
     injected.closeDetails()
     expect(b.layoutFake.closeDetails).toHaveBeenCalledTimes(1)
-    // The shared handle: details resolves the SAME instance conversation writes.
     const conv = b.runtime.storeOf('conversation.session', ROOT)
-    const details = b.runtime.storeOf('details', ROOT)
+    const chatHandle = b.entryOf('conversation.session').store!
+    const details = b.runtime.slots.sessionStore(chatHandle as never, ROOT)
     expect(details).toBe(conv)
     await b.runtime.dispose()
   })

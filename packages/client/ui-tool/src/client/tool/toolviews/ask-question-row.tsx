@@ -44,7 +44,7 @@ type AskQuestionRowProps = ToolCallViewProps & PropsLocale<'conversation'>
 
 /** One-line question-interaction row (the whole row toggles the call's
  *  Input/Output sections, ToolRow's unified expand). */
-export function AskQuestionRow({ toolName, block, inspect, t }: AskQuestionRowProps) {
+export function AskQuestionRow({ toolName, block, openDetails, inspect, t }: AskQuestionRowProps) {
   const model = toolRowModel(toolName, block)
   // Composer verdicts settle the call as specific UserQuestionErrors
   // (apiproxy ask_user_question handler): 'ASK_CANCELLED' is the user's own
@@ -77,6 +77,7 @@ export function AskQuestionRow({ toolName, block, inspect, t }: AskQuestionRowPr
       body={model.body}
       output={model.output}
       state={state}
+      onOpenDetails={openDetails}
       inspect={inspect}
     />
   )

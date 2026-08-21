@@ -94,6 +94,8 @@ export interface ToolRowProps {
   filePath?: string | undefined
   /** Open the path with the host OS default application (already cwd-resolved). */
   onOpenFile?: ((path: string) => void) | undefined
+  /** Open this call in the details column Tool tab. */
+  onOpenDetails?: (() => void) | undefined
   /**
    * Jump to this call in the trajectory view: a hover-revealed Inspect pill
    * over the expanded body. Absent = no affordance.
@@ -144,6 +146,7 @@ export function ToolRow({
   state,
   filePath,
   onOpenFile,
+  onOpenDetails,
   inspect,
 }: ToolRowProps) {
   const [expanded, setExpanded] = useState(false)
@@ -171,7 +174,11 @@ export function ToolRow({
   const suffix = failureLine === null ? summarySuffix ?? null : null
   // The failure line is error prose, not the path: no open-file affordance.
   const fileLink = filePath !== undefined && onOpenFile !== undefined && failureLine === null
+  const activateRow = () => {
+    onOpenDetails?.()
+  }
   const toggleExpand = () => {
+    activateRow()
     setExpanded(v => !v)
   }
   const openFile = (event: MouseEvent<HTMLButtonElement>) => {
@@ -192,7 +199,22 @@ export function ToolRow({
   // row keeps DisclosureRow's icon→chevron hover preview (its default) instead
   // of losing it with the icon.
   return (
-    <div className={css.root} data-variant={variant} data-tool={toolName} data-state={state}>
+    <div
+      className={css.root}
+      data-variant={variant}
+      data-tool={toolName}
+      data-state={state}
+      {...(!expandable && onOpenDetails !== undefined ? {
+        role: 'button',
+        tabIndex: 0,
+        onClick: activateRow,
+        onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          activateRow()
+        },
+      } : {})}
+    >
       {status !== null && <span className={css.visuallyHidden}>{status}</span>}
       <DisclosureRow
         rowClassName={css.row}

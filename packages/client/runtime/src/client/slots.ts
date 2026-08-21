@@ -419,6 +419,16 @@ export class SlotRegistry extends Service {
     return this._host
   }
 
+  /**
+   * Materialize or reuse a session-scoped store instance for a registered
+   * shared handle (the same cache {@link SlotRendererHost.storeOf} uses).
+   * @param handle - store handle already mounted under a session-scope slot.
+   * @param sessionId - owning session id.
+   */
+  sessionStore(handle: EngineStoreHandle, sessionId: string): EngineStoreInstance {
+    return this.resolveStore(handle, sessionId) as EngineStoreInstance
+  }
+
   /** Resolve (create or reuse) the store instance for a registered handle under a scope key. */
   private resolveStore(handle: EngineStoreHandle, sessionId: string | undefined): StoreInstanceLike {
     const record = this._stores.get(handle)

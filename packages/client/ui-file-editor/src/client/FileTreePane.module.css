@@ -1,10 +1,28 @@
 .pane {
   display: flex;
   flex-direction: column;
-  width: 36%;
-  min-width: 180px;
+  flex: 0 0 var(--file-tree-default-width, 180px);
+  width: var(--file-tree-default-width, 180px);
+  min-width: min(180px, 100%);
   min-height: 0;
+  overflow: hidden;
   background: var(--dsw-alias-bg-overlay);
+}
+
+.paneResized {
+  flex: none;
+  width: auto;
+  max-width: none;
+}
+
+.paneCollapsed {
+  flex: 0 0 0;
+  width: 0;
+  max-width: 0;
+  min-width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .gitBar {
@@ -27,20 +45,29 @@
 }
 
 .filterRow {
-  position: relative;
   display: flex;
   flex: none;
+  gap: 4px;
   align-items: center;
+  min-width: 0;
   padding: 4px 8px 0;
+}
+
+.filterField {
+  position: relative;
+  flex: 1;
+  min-width: 0;
 }
 
 .filterInput {
   display: flex;
   width: 100%;
+  min-width: 0;
   height: 28px;
   padding-right: 28px;
   border-radius: 6px;
   background: var(--dsw-alias-bg-base);
+  box-sizing: border-box;
 }
 
 .filterInput :global(input) {
@@ -52,22 +79,15 @@
   color: var(--dsw-alias-label-caption);
 }
 
-.filterIconClear {
-  position: absolute;
-  right: 12px;
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
+.treeToggleAnchor {
+  flex: none;
 }
 
-.filterIconClear:hover {
-  background: var(--editor-hover-tint);
+.filterIconClear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .toolbar {
@@ -75,27 +95,6 @@
   flex: none;
   gap: 4px;
   padding: 4px 8px;
-}
-
-.toolButton {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: not-allowed;
-}
-
-.toolButtonActive:not(:disabled) {
-  cursor: pointer;
-}
-
-.toolButtonActive:not(:disabled):hover {
-  background: var(--editor-hover-tint);
-  color: var(--dsw-alias-label-primary);
 }
 
 .treeScroll {
@@ -132,18 +131,10 @@
   background: var(--editor-selected-tint);
 }
 
-.disclosure,
 .disclosureSpacer {
-  display: grid;
   flex: none;
   width: 16px;
   height: 16px;
-  place-items: center;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
 }
 
 .chevron {
@@ -223,39 +214,5 @@
   font-size: 14px;
   line-height: 20px;
   font-weight: 600;
-  color: var(--dsw-alias-label-primary);
-}
-
-.emptyCta {
-  padding: 6px 12px;
-  border: none;
-  border-radius: 6px;
-  background: var(--dsw-alias-button-primary-fill);
-  font-family: var(--dsw-font-family);
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-primary-foreground);
-  cursor: pointer;
-}
-
-.emptyCta:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.textClear {
-  padding: 4px 8px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  font-family: var(--dsw-font-family);
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-}
-
-.textClear:hover {
   color: var(--dsw-alias-label-primary);
 }

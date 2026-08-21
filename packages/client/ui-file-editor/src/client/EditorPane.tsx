@@ -1,12 +1,15 @@
-/** Right-pane tabs, save, Monaco / preview / non-openable / empty / loading / error. */
+/** Right-pane tabs, Monaco / preview / non-openable / empty / loading / error. */
 
-import { IconCloseOutline16, IconLoadingOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconCloseOutline16, IconLoadingOutline16, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { MonacoEditor } from './MonacoEditor.tsx'
 import { languageLabel } from './open-kind.ts'
 import { tabIsDirty, type EditorTab } from './stores.ts'
 import css from './EditorPane.module.css'
+import iconCss from './IconButton.module.css'
+
+const TOOLTIP_DELAY_MS = 500
 
 /** Transient open/save status owned by EditorSurface, not the tab store. */
 export type EditorPaneStatus =
@@ -42,66 +45,80 @@ export interface EditorPaneProps {
    * @param value - new buffer text.
    */
   onBufferChange: (path: string, value: string) => void
-  /** Explicit save of the active dirty text tab. */
-  onSave: () => void
   /** Retry the failed open or save. */
   onRetry: () => void
   /** Open the new-file dialog in the tree toolbar. */
   onNewFile: () => void
+  /** True when the file tree pane is collapsed. */
+  treeCollapsed?: boolean
+  /** Expand the collapsed file tree pane. */
+  onShowTree?: () => void
 }
 
 /**
- * Editor pane: file tab bar, save, and the active tab body.
+ * Editor pane: file tab bar and the active tab body.
  * @param props - tabs, status, theme, and callbacks.
  */
 export function EditorPane({
-  tabs, activePath, status, dark, t, onFocus, onClose, onBufferChange, onSave, onRetry, onNewFile,
+  tabs, activePath, status, dark, t, onFocus, onClose, onBufferChange, onRetry, onNewFile,
+  treeCollapsed = false, onShowTree,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.path === activePath)
-  const canSave = active !== undefined && tabIsDirty(active)
   const themeLabel = dark ? t('editor.theme.dark') : t('editor.theme.light')
 
   return (
     <div className={css.pane}>
-      {tabs.length > 0 && (
+      {(tabs.length > 0 || treeCollapsed) && (
         <div className={css.chrome}>
-          <div className={css.tablist} role="tablist" aria-label={t('editor.tabs.label')}>
-            {tabs.map((tab) => {
-              const selected = tab.path === activePath
-              const dirty = tabIsDirty(tab)
-              return (
-                <div
-                  key={tab.path}
-                  role="tab"
-                  aria-selected={selected}
-                  className={clsx(css.tab, selected && css.tabActive)}
-                  onClick={() => { onFocus(tab.path) }}
-                >
-                  {dirty && <span className={css.dirty} aria-label={t('editor.tab.dirty')} />}
-                  <span className={css.tabTitle}>{tab.name}</span>
-                  <button
-                    type="button"
-                    className={css.tabClose}
-                    aria-label={t('editor.tab.close', { name: tab.name })}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onClose(tab.path)
-                    }}
+          {treeCollapsed && onShowTree !== undefined && (
+            <Tooltip label={t('editor.tree.show')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
+              <button
+                type="button"
+                className={iconCss.iconButton}
+                aria-label={t('editor.tree.show')}
+                onClick={onShowTree}
+              >
+                <IconPanelLeftOutline16 size={16} />
+              </button>
+            </Tooltip>
+          )}
+          {tabs.length > 0 && (
+            <div className={css.tablist} role="tablist" aria-label={t('editor.tabs.label')}>
+              {tabs.map((tab) => {
+                const selected = tab.path === activePath
+                const dirty = tabIsDirty(tab)
+                return (
+                  <div
+                    key={tab.path}
+                    role="tab"
+                    aria-selected={selected}
+                    className={clsx(css.tab, selected && css.tabActive)}
+                    onClick={() => { onFocus(tab.path) }}
                   >
-                    <IconCloseOutline16 size={16} />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-          <button
-            type="button"
-            className={css.save}
-            disabled={!canSave}
-            onClick={() => { onSave() }}
-          >
-            {t('editor.save')}
-          </button>
+                    {dirty && <span className={css.dirty} aria-label={t('editor.tab.dirty')} />}
+                    <span className={css.tabTitle}>{tab.name}</span>
+                    <Tooltip
+                      label={t('editor.tab.close', { name: tab.name })}
+                      side="bottom"
+                      delayMs={TOOLTIP_DELAY_MS}
+                    >
+                      <button
+                        type="button"
+                        className={iconCss.iconButton}
+                        aria-label={t('editor.tab.close', { name: tab.name })}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onClose(tab.path)
+                        }}
+                      >
+                        <IconCloseOutline16 size={16} />
+                      </button>
+                    </Tooltip>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
       <div className={css.body}>
@@ -118,9 +135,11 @@ export function EditorPane({
         {status.kind === 'error' && (
           <div className={css.emptyCard} role="alert">
             <div className={css.errorCopy}>{status.message}</div>
-            <button type="button" className={css.retry} onClick={() => { onRetry() }}>
-              {t('editor.retry')}
-            </button>
+            <Tooltip label={t('editor.retry')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
+              <button type="button" className={iconCss.primaryButton} onClick={() => { onRetry() }}>
+                {t('editor.retry')}
+              </button>
+            </Tooltip>
           </div>
         )}
         {status.kind === 'idle' && active === undefined && (
@@ -138,9 +157,11 @@ export function EditorPane({
             </span>
             <div className={css.emptyTitle}>{t('editor.empty.title')}</div>
             <div className={css.emptyBody}>{t('editor.empty.body')}</div>
-            <button type="button" className={css.emptyCta} onClick={() => { onNewFile() }}>
-              {t('editor.empty.cta')}
-            </button>
+            <Tooltip label={t('editor.empty.cta')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
+              <button type="button" className={iconCss.primaryButton} onClick={() => { onNewFile() }}>
+                {t('editor.empty.cta')}
+              </button>
+            </Tooltip>
           </div>
         )}
         {status.kind === 'idle' && active?.kind === 'text' && (

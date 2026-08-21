@@ -1,81 +1,50 @@
-import { describe, expect, it, vi } from 'vitest'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import { describe, expect, it } from 'vitest'
+import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import { createDirtyGuard, resetDirtyGuardForTest } from '../src/client/dirty-guard.ts'
 
-const S1 = 's1' as SessionId
-const S2 = 's2' as SessionId
+const W1 = 'ws1' as WorkspaceId
+const W2 = 'ws2' as WorkspaceId
 const TAB = { path: '/w/a.ts', name: 'a.ts' }
 
 describe('dirty guard', () => {
-  it('opens immediately when the session bridge is absent', () => {
+  it('does not guard a clean tab close', () => {
     const guard = createDirtyGuard()
-    const commit = vi.fn()
-    guard.tryOpenSession(S1, S2, commit)
-    expect(commit).toHaveBeenCalledTimes(1)
-  })
-
-  it('opens immediately when there is no current session or no dirty tabs', () => {
-    const guard = createDirtyGuard()
-    const commit = vi.fn()
-    guard.tryOpenSession(undefined, S1, commit)
-    expect(commit).toHaveBeenCalledTimes(1)
-    commit.mockClear()
-    guard.registerBridge(S1, {
+    guard.registerBridge(W1, {
       dirtyTabs: () => [],
       saveTab: async () => true,
       discardTab: () => {},
-      closeAllTabs: () => {},
     })
-    guard.tryOpenSession(S1, S2, commit)
-    expect(commit).toHaveBeenCalledTimes(1)
+    expect(guard.requestCloseTab(W1, '/w/clean.ts')).toBe(false)
   })
 
-  it('processes a multi-tab session switch queue one file at a time', async () => {
+  it('processes a dirty close queue one file at a time', async () => {
     const guard = createDirtyGuard()
-    const commit = vi.fn()
-    const closeAllTabs = vi.fn()
     const saved: string[] = []
-    guard.registerBridge(S1, {
+    guard.registerBridge(W1, {
       dirtyTabs: () => [TAB, { path: '/w/b.ts', name: 'b.ts' }],
       saveTab: async (path) => { saved.push(path); return true },
       discardTab: (path) => { saved.push(`discard:${path}`) },
-      closeAllTabs,
     })
-    guard.tryOpenSession(S1, S2, commit)
-    expect(guard.getSnapshot().mode.kind).toBe('session-switch')
+    expect(guard.requestCloseTab(W1, TAB.path)).toBe(true)
+    expect(guard.getSnapshot().mode.kind).toBe('close-tab')
     await guard.saveCurrent()
     expect(saved).toEqual(['/w/a.ts', 'discard:/w/a.ts'])
-    await guard.saveCurrent()
-    expect(saved).toEqual(['/w/a.ts', 'discard:/w/a.ts', '/w/b.ts', 'discard:/w/b.ts'])
-    expect(closeAllTabs).toHaveBeenCalledTimes(1)
-    expect(commit).toHaveBeenCalledTimes(1)
     expect(guard.getSnapshot().mode.kind).toBe('idle')
+    expect(guard.requestCloseTab(W1, '/w/b.ts')).toBe(true)
+    await guard.discardCurrent()
+    expect(saved).toEqual(['/w/a.ts', 'discard:/w/a.ts', 'discard:/w/b.ts'])
   })
 
-  it('does not close a clean tab through the guard', () => {
+  it('cancel clears an active guard', () => {
     const guard = createDirtyGuard()
-    guard.registerBridge(S1, {
-      dirtyTabs: () => [],
-      saveTab: async () => true,
-      discardTab: () => {},
-      closeAllTabs: () => {},
-    })
-    expect(guard.requestCloseTab(S1, '/w/clean.ts')).toBe(false)
-  })
-
-  it('cancel clears an active guard without committing', () => {
-    const guard = createDirtyGuard()
-    const commit = vi.fn()
-    guard.registerBridge(S1, {
+    guard.registerBridge(W1, {
       dirtyTabs: () => [TAB],
       saveTab: async () => true,
       discardTab: () => {},
-      closeAllTabs: () => {},
     })
-    guard.tryOpenSession(S1, S2, commit)
+    guard.requestCloseTab(W1, TAB.path)
     guard.cancel()
     expect(guard.getSnapshot().mode.kind).toBe('idle')
-    expect(commit).not.toHaveBeenCalled()
     guard.cancel()
   })
 
@@ -83,61 +52,44 @@ describe('dirty guard', () => {
     const guard = createDirtyGuard()
     const seen: string[] = []
     const unsub = guard.subscribe(() => { seen.push(guard.getSnapshot().mode.kind) })
-    guard.registerBridge(S1, {
+    guard.registerBridge(W1, {
       dirtyTabs: () => [TAB],
       saveTab: async () => true,
       discardTab: () => {},
-      closeAllTabs: () => {},
     })
-    guard.requestCloseTab(S1, TAB.path)
+    guard.requestCloseTab(W1, TAB.path)
     unsub()
     expect(seen).toContain('close-tab')
-  })
-
-  it('skips guard when switching to the same session', () => {
-    const guard = createDirtyGuard()
-    const commit = vi.fn()
-    guard.registerBridge(S1, {
-      dirtyTabs: () => [TAB],
-      saveTab: async () => true,
-      discardTab: () => {},
-      closeAllTabs: () => {},
-    })
-    guard.tryOpenSession(S1, S1, commit)
-    expect(commit).toHaveBeenCalledTimes(1)
-    expect(guard.getSnapshot().mode.kind).toBe('idle')
   })
 
   it('ignores save and discard when idle or the bridge is gone', async () => {
     const guard = createDirtyGuard()
     await guard.saveCurrent()
     guard.discardCurrent()
-    const dispose = guard.registerBridge(S1, {
+    const dispose = guard.registerBridge(W1, {
       dirtyTabs: () => [TAB],
       saveTab: async () => true,
       discardTab: () => {},
-      closeAllTabs: () => {},
     })
-    guard.requestCloseTab(S1, TAB.path)
+    guard.requestCloseTab(W1, TAB.path)
     dispose()
     await guard.saveCurrent()
     guard.discardCurrent()
   })
 
-  it('returns false when no session bridge is registered', () => {
+  it('returns false when no Workspace bridge is registered', () => {
     const guard = createDirtyGuard()
-    expect(guard.requestCloseTab(S1, TAB.path)).toBe(false)
+    expect(guard.requestCloseTab(W1, TAB.path)).toBe(false)
   })
 
   it('records save failure without finishing the queue', async () => {
     const guard = createDirtyGuard()
-    guard.registerBridge(S1, {
+    guard.registerBridge(W1, {
       dirtyTabs: () => [TAB],
       saveTab: async () => false,
       discardTab: () => {},
-      closeAllTabs: () => {},
     })
-    guard.requestCloseTab(S1, TAB.path)
+    guard.requestCloseTab(W1, TAB.path)
     await guard.saveCurrent()
     const mode = guard.getSnapshot().mode
     expect(mode.kind).toBe('close-tab')
@@ -148,14 +100,30 @@ describe('dirty guard', () => {
 
   it('resetDirtyGuardForTest clears an active guard', () => {
     const guard = createDirtyGuard()
-    guard.registerBridge(S1, {
+    guard.registerBridge(W1, {
       dirtyTabs: () => [TAB],
       saveTab: async () => true,
       discardTab: () => {},
-      closeAllTabs: () => {},
     })
-    guard.requestCloseTab(S1, TAB.path)
+    guard.requestCloseTab(W1, TAB.path)
     resetDirtyGuardForTest(guard)
     expect(guard.getSnapshot().mode.kind).toBe('idle')
+  })
+
+  it('scopes close-tab guards to the requesting Workspace', () => {
+    const guard = createDirtyGuard()
+    guard.registerBridge(W1, {
+      dirtyTabs: () => [TAB],
+      saveTab: async () => true,
+      discardTab: () => {},
+    })
+    guard.registerBridge(W2, {
+      dirtyTabs: () => [],
+      saveTab: async () => true,
+      discardTab: () => {},
+    })
+    guard.requestCloseTab(W1, TAB.path)
+    expect(guard.getSnapshot().mode).toMatchObject({ kind: 'close-tab', workspaceId: W1 })
+    expect(guard.requestCloseTab(W2, TAB.path)).toBe(false)
   })
 })

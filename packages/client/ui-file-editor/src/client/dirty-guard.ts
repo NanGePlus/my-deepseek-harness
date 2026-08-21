@@ -1,6 +1,6 @@
-/** Session switch and dirty-tab close guards for editor-surface (US-26 / US-27). */
+/** Dirty-tab close guards for editor-surface (US-27). */
 
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 
 /** One dirty text tab referenced by a guard dialog. */
 export interface DirtyTabRef {
@@ -10,8 +10,8 @@ export interface DirtyTabRef {
   name: string
 }
 
-/** Session-scoped editor callbacks the guard invokes during save / discard. */
-export interface SessionEditorBridge {
+/** Workspace-scoped editor callbacks the guard invokes during save / discard. */
+export interface WorkspaceEditorBridge {
   /** Dirty tabs in stable tab-bar order. */
   dirtyTabs: () => readonly DirtyTabRef[]
   /**
@@ -25,60 +25,43 @@ export interface SessionEditorBridge {
    * @param path - tab path.
    */
   discardTab: (path: string) => void
-  /** Close every open tab (session switch success). */
-  closeAllTabs: () => void
 }
 
 /** Active guard mode; idle when no dialog is shown. */
 export type DirtyGuardMode =
   | { kind: 'idle' }
-  | { kind: 'close-tab'; sessionId: SessionId; queue: readonly DirtyTabRef[]; saveError?: string }
-  | {
-    kind: 'session-switch'
-    sessionId: SessionId
-    targetSessionId: SessionId
-    queue: readonly DirtyTabRef[]
-    saveError?: string
-    commit: () => void
-  }
+  | { kind: 'close-tab'; workspaceId: WorkspaceId; queue: readonly DirtyTabRef[]; saveError?: string }
 
 /** Observable guard snapshot for React subscriptions. */
 export interface DirtyGuardSnapshot {
   mode: DirtyGuardMode
 }
 
-/** Per-session dirty guard coordinator (one instance per web client). */
+/** Per-Workspace dirty guard coordinator (one instance per web client). */
 export interface DirtyGuard {
   /** uSES-compatible subscription for guard dialog state. */
   subscribe(listener: () => void): () => void
   /** Current guard snapshot (stable reference until the mode moves). */
   getSnapshot(): DirtyGuardSnapshot
   /**
-   * Register editor callbacks for one session scope.
-   * @param sessionId - owning session.
-   * @param bridge - save/discard/close hooks.
+   * Register editor callbacks for one Workspace scope.
+   * @param workspaceId - owning Workspace.
+   * @param bridge - save/discard hooks.
    * @returns disposer removing the bridge.
    */
-  registerBridge(sessionId: SessionId, bridge: SessionEditorBridge): () => void
+  registerBridge(workspaceId: WorkspaceId, bridge: WorkspaceEditorBridge): () => void
   /**
    * Begin a dirty-tab close guard when needed.
-   * @param sessionId - current session.
+   * @param workspaceId - current Workspace.
    * @param path - tab path the user closed.
    * @returns true when a guard dialog opened (caller must not close directly).
    */
-  requestCloseTab(sessionId: SessionId, path: string): boolean
-  /**
-   * Intercept session selection when dirty tabs remain.
-   * @param fromSessionId - current session, if any.
-   * @param toSessionId - requested session.
-   * @param commit - invokes the real `sessions.open`.
-   */
-  tryOpenSession(fromSessionId: SessionId | undefined, toSessionId: SessionId, commit: () => void): void
+  requestCloseTab(workspaceId: WorkspaceId, path: string): boolean
   /** Save the head of the current guard queue. */
   saveCurrent(): Promise<void>
   /** Discard the head of the current guard queue. */
   discardCurrent(): void
-  /** Cancel the active guard (abort session switch or tab close). */
+  /** Cancel the active guard (abort tab close). */
   cancel(): void
 }
 
@@ -91,42 +74,23 @@ const IDLE: DirtyGuardSnapshot = { mode: { kind: 'idle' } }
 export function createDirtyGuard(): DirtyGuard {
   let snapshot: DirtyGuardSnapshot = IDLE
   const listeners = new Set<() => void>()
-  const bridges = new Map<SessionId, SessionEditorBridge>()
+  const bridges = new Map<WorkspaceId, WorkspaceEditorBridge>()
 
   const publish = (next: DirtyGuardSnapshot): void => {
     snapshot = next
     for (const listener of listeners) listener()
   }
 
-  const bridgeFor = (sessionId: SessionId): SessionEditorBridge | undefined => bridges.get(sessionId)
+  const bridgeFor = (workspaceId: WorkspaceId): WorkspaceEditorBridge | undefined => bridges.get(workspaceId)
 
   const head = (mode: Exclude<DirtyGuardMode, { kind: 'idle' }>): DirtyTabRef | undefined => mode.queue[0]
 
   const finishQueue = (mode: Exclude<DirtyGuardMode, { kind: 'idle' }>): void => {
     const rest = mode.queue.slice(1)
     if (rest.length > 0) {
-      if (mode.kind === 'close-tab') {
-        publish({ mode: { kind: 'close-tab', sessionId: mode.sessionId, queue: rest } })
-      } else {
-        publish({
-          mode: {
-            kind: 'session-switch',
-            sessionId: mode.sessionId,
-            targetSessionId: mode.targetSessionId,
-            queue: rest,
-            commit: mode.commit,
-          },
-        })
-      }
+      publish({ mode: { kind: 'close-tab', workspaceId: mode.workspaceId, queue: rest } })
       return
     }
-    if (mode.kind === 'close-tab') {
-      publish(IDLE)
-      return
-    }
-    const sessionBridge = bridgeFor(mode.sessionId)
-    sessionBridge?.closeAllTabs()
-    mode.commit()
     publish(IDLE)
   }
 
@@ -138,38 +102,17 @@ export function createDirtyGuard(): DirtyGuard {
     getSnapshot() {
       return snapshot
     },
-    registerBridge(sessionId, bridge) {
-      bridges.set(sessionId, bridge)
-      return () => { bridges.delete(sessionId) }
+    registerBridge(workspaceId, bridge) {
+      bridges.set(workspaceId, bridge)
+      return () => { bridges.delete(workspaceId) }
     },
-    requestCloseTab(sessionId, path) {
-      const bridge = bridgeFor(sessionId)
+    requestCloseTab(workspaceId, path) {
+      const bridge = bridgeFor(workspaceId)
       if (bridge === undefined) return false
       const tab = bridge.dirtyTabs().find(item => item.path === path)
       if (tab === undefined) return false
-      publish({ mode: { kind: 'close-tab', sessionId, queue: [tab] } })
+      publish({ mode: { kind: 'close-tab', workspaceId, queue: [tab] } })
       return true
-    },
-    tryOpenSession(fromSessionId, toSessionId, commit) {
-      if (fromSessionId === undefined || fromSessionId === toSessionId) {
-        commit()
-        return
-      }
-      const bridge = bridgeFor(fromSessionId)
-      const queue = bridge?.dirtyTabs() ?? []
-      if (queue.length === 0) {
-        commit()
-        return
-      }
-      publish({
-        mode: {
-          kind: 'session-switch',
-          sessionId: fromSessionId,
-          targetSessionId: toSessionId,
-          queue,
-          commit,
-        },
-      })
     },
     async saveCurrent() {
       const mode = snapshot.mode
@@ -177,7 +120,7 @@ export function createDirtyGuard(): DirtyGuard {
       const current = head(mode)
       /* v8 ignore next -- queue head is always defined while the guard is active */
       if (current === undefined) return
-      const bridge = bridgeFor(mode.sessionId)
+      const bridge = bridgeFor(mode.workspaceId)
       if (bridge === undefined) return
       const ok = await bridge.saveTab(current.path)
       if (!ok) {
@@ -193,7 +136,7 @@ export function createDirtyGuard(): DirtyGuard {
       const current = head(mode)
       /* v8 ignore next -- queue head is always defined while the guard is active */
       if (current === undefined) return
-      bridgeFor(mode.sessionId)?.discardTab(current.path)
+      bridgeFor(mode.workspaceId)?.discardTab(current.path)
       finishQueue(mode)
     },
     cancel() {

@@ -53,7 +53,7 @@ function stateStatus(state: ToolRowState, t: BashRowProps['t']): string | null {
  * whole row toggling the command's terminal or generic error card (ToolRow's unified
  * expand interaction, replicated locally per the registrant posture).
  */
-export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }: BashRowProps) {
+export function BashRow({ toolName, block, sessionId, useSessions, openDetails, inspect, t }: BashRowProps) {
   const model = toolRowModel(toolName, block)
   // Session workspace root: the terminal view's cwd resolves against it (an
   // omitted workdir IS the workspace), which the pure presenter cannot do.
@@ -75,13 +75,18 @@ export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }:
   const expandable = terminal !== null || genericError
   const open = expanded && expandable
   const failureLine = model.state === 'error' ? model.errorSummary : null
+  const activateRow = () => {
+    openDetails?.()
+  }
   const toggleExpand = () => {
+    activateRow()
     setExpanded(v => !v)
   }
   const toggleFromKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!expandable || (event.key !== 'Enter' && event.key !== ' ')) return
+    if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
-    toggleExpand()
+    if (expandable) toggleExpand()
+    else activateRow()
   }
   const leading = open
     ? <IconChevronDownOutline14 className={css.chevron} />
@@ -101,11 +106,11 @@ export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }:
         data-variant="bash"
         data-state={state}
         data-expandable={expandable || undefined}
-        role={expandable ? 'button' : undefined}
-        tabIndex={expandable ? 0 : undefined}
+        role={expandable || openDetails !== undefined ? 'button' : undefined}
+        tabIndex={expandable || openDetails !== undefined ? 0 : undefined}
         aria-expanded={expandable ? open : undefined}
-        onClick={expandable ? toggleExpand : undefined}
-        onKeyDown={expandable ? toggleFromKeyboard : undefined}
+        onClick={expandable ? toggleExpand : openDetails !== undefined ? activateRow : undefined}
+        onKeyDown={expandable || openDetails !== undefined ? toggleFromKeyboard : undefined}
       >
         <span className={css.leading}>{leading}</span>
         {status !== null && <span className={css.visuallyHidden}>{status}</span>}

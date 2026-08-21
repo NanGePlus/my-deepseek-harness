@@ -21,6 +21,7 @@ import type { createChatStore } from '../stores.ts'
 import type { ComposerSubmitGesture, InputSubmitMode } from './composer-submission.ts'
 import type { ChatNode, ChatNodeKind } from './chat-nodes.ts'
 import type { CallId, SelectionTarget, ViewTab } from './views.ts'
+import type { SessionChatBinding } from '../session-bound-source.ts'
 
 /** Browser-owned image that has not crossed the durable host boundary. */
 export interface ComposerAttachment {
@@ -126,7 +127,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * The file-editor surface rendered when the details segmented tab selects
      * 「文件编辑器」. One occupant; ui-file-editor injects here.
      */
-    'conversation.details.editor': { kind: 'single'; scope: 'session' }
+    'conversation.details.editor': { kind: 'single'; scope: 'root' }
     /**
      * The composer takeover chain: entries are selector-routed replacements
      * of the default InputBar. Declared by this package's 'conversation'
@@ -363,6 +364,8 @@ export interface ChatNodeOwnerProps {
   selectedCallId?: CallId | undefined
   /** Session workspace root; Tool summaries display paths relative to it. */
   cwd?: string | undefined
+  /** Selection write + details column open + Tool tab in one gesture. */
+  openDetails: (target: SelectionTarget) => void
   openFile: (path: string) => void
   inspectCall: (callId: CallId) => void
   forkAt: (seq: number) => void
@@ -718,19 +721,28 @@ export type ChatViewSlotProps =
   & PropsStore<ChatStore> & ChatViewInjected & PropsLocale<'conversation'>
 
 /**
- * Injected share of the details slot: the panel is otherwise a pure reader of
- * the shared chat store, but its close button is a layout orchestration call.
+ * Injected share of the details slot: the panel reads per-session chat state
+ * through the bound hooks below, and its close button is a layout call.
  */
 export interface DetailsInjected {
   /** Open the details panel (layout geometry stays with ctx.layout). */
   openDetails: () => void
   /** Close the details panel (layout geometry stays with ctx.layout). */
   closeDetails: () => void
+  hooks: {
+    /** Per-session chat store bound to `sessions.current`. */
+    chat: ObservableSnapshot<SessionChatBinding>
+    /** Per-session conversation snapshot bound to `sessions.current`. */
+    conversation: ObservableSnapshot<ConversationSnapshot>
+  }
 }
 
-/** Full details-slot props: selection store, Tool and editor seats, layout callbacks, and locale. */
+/** Full details-slot props: Tool and editor seats, session-bound hooks, layout callbacks, and locale. */
 export type DetailsSlotProps = PropsRuntime<'details'> & PropsRenderSlots<'conversation.details.tool' | 'conversation.details.editor'>
-  & PropsStore<ChatStore> & DetailsInjected & PropsLocale<'conversation'>
+  & Omit<DetailsInjected, 'hooks'> & {
+    useChat: SnapshotSelectorHook<SessionChatBinding>
+    useConversation: SnapshotSelectorHook<ConversationSnapshot>
+  } & PropsLocale<'conversation'>
 
 /** Owner share common to the hero / New-Session Workspace pickers. */
 export interface EmptyWorkspaceOwnerProps {

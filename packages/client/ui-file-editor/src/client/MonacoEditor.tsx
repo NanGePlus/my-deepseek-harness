@@ -109,6 +109,9 @@ export function MonacoEditor({
           minimap: { enabled: false },
           automaticLayout: true,
           scrollBeyondLastLine: false,
+          wordWrap: 'on',
+          wrappingStrategy: 'advanced',
+          scrollbar: { horizontal: 'auto', vertical: 'auto' },
           renderLineHighlight: 'none',
           overviewRulerLanes: 0,
         })

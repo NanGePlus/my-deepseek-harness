@@ -85,6 +85,17 @@
   overflow: hidden;
 }
 
+.tabPanel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.tabPanelHidden {
+  display: none;
+}
+
 .toolTitle {
   margin-bottom: 12px;
   overflow: hidden;

@@ -13,11 +13,11 @@
  * breakpoint-free.
  */
 
-/** Resolved widths for one frame; center may drop below CENTER_MIN only at the final fallback. */
+/** Resolved widths for one frame; center stays at or above CENTER_MIN while details is open. */
 export interface Columns { sidebar: number; center: number; details: number }
 
 // Contract-frozen geometry: the three-column concession chain's fixed points.
-/** Center column floor; only the final fallback may go below it. */
+/** Center column floor while details is open; conversation chrome needs this width. */
 export const CENTER_MIN = 640
 /** Sidebar drag clamp floor. */
 export const SIDEBAR_MIN = 264
@@ -33,10 +33,10 @@ export const SIDEBAR_COLLAPSED = 56
 export const SIDEBAR_AUTO_COLLAPSE = 1024
 /** Details drag clamp floor. */
 export const DETAILS_MIN = 300
-/** Details drag clamp ceiling. */
-export const DETAILS_MAX = 520
-/** Details width before any user drag. */
-export const DETAILS_DEFAULT = 360
+/** Details drag clamp ceiling (drag may store up to this; solver may render less). */
+export const DETAILS_MAX = 1600
+/** Details width before any user drag (~45% of a 1920px frame with default sidebar). */
+export const DETAILS_DEFAULT = 860
 
 /**
  * Clamp a panel width into its contract range.
@@ -64,12 +64,16 @@ export function computeColumns(viewport: number, sidebar: number, details: numbe
   const s = sidebar === 0 ? SIDEBAR_COLLAPSED : clampWidth(sidebar, SIDEBAR_MIN, SIDEBAR_MAX)
   const d0 = details === 0 ? 0 : clampWidth(details, DETAILS_MIN, DETAILS_MAX)
 
-  // Step 1: everything fits at preferred widths.
-  if (s + d0 + CENTER_MIN <= viewport) return { sidebar: s, center: viewport - s - d0, details: d0 }
+  // Step 1: everything fits at preferred widths with center >= CENTER_MIN.
+  if (s + d0 + CENTER_MIN <= viewport) {
+    return { sidebar: s, center: viewport - s - d0, details: d0 }
+  }
 
-  // Step 2: shrink details toward its minimum.
+  // Step 2: shrink details toward its minimum; center stays at CENTER_MIN.
   const d1 = d0 === 0 ? 0 : Math.max(DETAILS_MIN, viewport - s - CENTER_MIN)
-  if (s + d1 + CENTER_MIN <= viewport) return { sidebar: s, center: CENTER_MIN, details: d1 }
+  if (s + d1 + CENTER_MIN <= viewport) {
+    return { sidebar: s, center: CENTER_MIN, details: d1 }
+  }
 
   // Step 3: auto-close details (derived — preferences untouched); center
   // absorbs any remaining deficit (may drop below CENTER_MIN).
