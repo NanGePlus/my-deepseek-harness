@@ -108,6 +108,21 @@ export class WorkspaceFileWriteFailedError extends Error {
   }
 }
 
+/** Maximum bytes `host.readFile` will load for editor open or image preview. */
+export const WORKSPACE_FILE_READ_MAX_BYTES = 5 * 1024 * 1024
+
+/** A regular file inside a Workspace exceeds the editor read limit. */
+export class WorkspaceFileTooLargeError extends Error {
+  constructor(
+    readonly path: string,
+    readonly size: number,
+    readonly limit: number,
+  ) {
+    super(`file too large: ${path} (${String(size)} bytes, limit ${String(limit)})`)
+    this.name = 'WorkspaceFileTooLargeError'
+  }
+}
+
 /**
  * Ensure `path` exists and is a regular file before read.
  * @param path - absolute file path.
@@ -117,16 +132,21 @@ async function assertRegularFile(
   path: string,
   signal: AbortSignal | undefined,
   statFn: (path: string) => ReturnType<typeof stat>,
-): Promise<void> {
+  maxBytes: number = WORKSPACE_FILE_READ_MAX_BYTES,
+): Promise<{ size: number }> {
   try {
     const info = await statFn(path)
     if (!info.isFile()) throw new WorkspaceFileNotRegularError(path)
+    const size = Number(info.size)
+    if (size > maxBytes) throw new WorkspaceFileTooLargeError(path, size, maxBytes)
+    signal?.throwIfAborted()
+    return { size }
   } catch (error: unknown) {
+    if (error instanceof WorkspaceFileTooLargeError) throw error
     if (error instanceof WorkspaceFileNotRegularError) throw error
     if (isEnoent(error)) throw new WorkspaceFileNotFoundError(path)
     throw new WorkspaceFileUnreadableError(path, error instanceof Error ? error.message : String(error))
   }
-  signal?.throwIfAborted()
 }
 
 /**

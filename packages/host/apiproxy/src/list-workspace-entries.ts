@@ -9,6 +9,12 @@ import type { WorkspaceEntry, WorkspaceEntriesListing } from './api/host.ts'
 /** Complete-result bound for one workspace listing level (matches directory-picker browse). */
 export const WORKSPACE_LISTING_MAX_ENTRIES = 1000
 
+/** Stop reading dirents after this many names to cap worst-case scan time on huge folders. */
+export const WORKSPACE_LISTING_MAX_DIRENTS_SCAN = 10_000
+
+/** Parallel symlink/classification steps while materializing listing rows. */
+const LISTING_ROW_RESOLVE_CONCURRENCY = 32
+
 /** One streamed listing candidate retained only while building the name-sorted window. */
 interface ListingCandidate {
   name: string
@@ -134,6 +140,36 @@ async function workspaceEntryRow(
 }
 
 /**
+ * Materialize listing rows with bounded parallelism so symlink `stat` does not serialize.
+ * @param target - listed directory path.
+ * @param window - name-sorted candidates retained from the scan.
+ * @param signal - caller lifetime.
+ * @returns rows in the same order as `window`.
+ */
+async function materializeListingRows(
+  target: string,
+  window: readonly ListingCandidate[],
+  signal: AbortSignal | undefined,
+): Promise<(WorkspaceEntry | null)[]> {
+  const rows: (WorkspaceEntry | null)[] = []
+  for (let index = 0; index < window.length; index += LISTING_ROW_RESOLVE_CONCURRENCY) {
+    signal?.throwIfAborted()
+    const chunk = window.slice(index, index + LISTING_ROW_RESOLVE_CONCURRENCY)
+    const resolved = await Promise.all(chunk.map(candidate =>
+      workspaceEntryRow(
+        target,
+        candidate.name,
+        candidate.isDirectory,
+        candidate.isSymbolicLink,
+        signal,
+      ),
+    ))
+    rows.push(...resolved)
+  }
+  return rows
+}
+
+/**
  * List one directory level inside a Workspace root.
  * @param workspaceRoot - absolute Workspace directory.
  * @param path - absolute directory to list; must lie within the root.
@@ -160,9 +196,15 @@ export async function listWorkspaceEntriesLevel(
       throw error
     })
     try {
+      let direntCount = 0
       for (;;) {
         const dirent = await raceAbort(level.read(), signal)
         if (dirent === null) break
+        direntCount += 1
+        if (direntCount > WORKSPACE_LISTING_MAX_DIRENTS_SCAN) {
+          evicted = true
+          break
+        }
         const candidate: ListingCandidate = {
           name: dirent.name,
           isDirectory: dirent.isDirectory(),
@@ -186,11 +228,8 @@ export async function listWorkspaceEntriesLevel(
 
   const entries: WorkspaceEntry[] = []
   let truncated = evicted
-  for (const candidate of window) {
-    signal?.throwIfAborted()
-    const row = await workspaceEntryRow(
-      target, candidate.name, candidate.isDirectory, candidate.isSymbolicLink, signal,
-    )
+  const resolved = await materializeListingRows(target, window, signal)
+  for (const row of resolved) {
     if (row === null) continue
     if (entries.length === WORKSPACE_LISTING_MAX_ENTRIES) {
       truncated = true

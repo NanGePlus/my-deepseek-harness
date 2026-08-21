@@ -168,6 +168,9 @@ function mount(over: {
     path: `${parent}/${name}`,
   })))
   const watchPath = vi.fn(over.watchPath ?? (() => {}))
+  const lspSyncDocument = vi.fn(async () => ({ diagnostics: [] as const }))
+  const lspCloseDocument = vi.fn(async () => ({ closed: true as const }))
+  const lspHoverDocument = vi.fn(async () => ({ hover: null }))
   const items = over.items ?? [workspace()]
   const workspacesStore = createSnapshotStore(workspacesState(items))
   const sessionsStore = createSnapshotStore(sessionsState(over.sessionId ?? SID))
@@ -186,6 +189,9 @@ function mount(over: {
     renamePath,
     createWorkspaceDirectory,
     watchPath,
+    lspSyncDocument,
+    lspCloseDocument,
+    lspHoverDocument,
     dirtyGuard: editorDirtyGuard,
   } as EditorSurfaceProps
   const view = render(<EditorSurface {...props} />)
@@ -335,6 +341,27 @@ describe('EditorSurface file tree', () => {
     expect(screen.queryByText('README.md')).toBeNull()
   })
 
+  it('list-failure: keeps a failed folder expanded and shows a retry affordance', async () => {
+    let calls = 0
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === `${ROOT}/src`) {
+        calls += 1
+        if (calls === 1) throw new Error('denied')
+        return listingFor(path)
+      }
+      return listingFor(path)
+    })
+    mount({ list: listWorkspaceEntries })
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '展开 src' }))
+    await waitFor(() => { expect(screen.getByLabelText('无法加载此文件夹')).toBeTruthy() })
+    expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '折叠 src' }))
+    fireEvent.click(screen.getByRole('button', { name: '展开 src' }))
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === `${ROOT}/src`)).toHaveLength(2)
+  })
+
   it('loading-git: shows a tree-top progress bar without hiding rows', async () => {
     let release!: (listing: { entries: { path: string; letter: string }[] }) => void
     const gitStatus = vi.fn(() => new Promise<{ entries: { path: string; letter: string }[] }>((resolve) => {
@@ -418,7 +445,7 @@ describe('EditorSurface file tree', () => {
     expect(b.listWorkspaceEntries.mock.calls.every(call => call[1] === ROOT)).toBe(true)
   })
 
-  it('rolls back expansion when a folder listing rejects', async () => {
+  it('keeps a failed folder expanded and marks the row when listing rejects', async () => {
     const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
       if (path === ROOT) return listingFor(path)
       throw new Error('unreadable')
@@ -426,9 +453,8 @@ describe('EditorSurface file tree', () => {
     mount({ list: listWorkspaceEntries })
     await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
     fireEvent.click(screen.getByRole('button', { name: '展开 src' }))
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: '展开 src' })).toBeTruthy()
-    })
+    await waitFor(() => { expect(screen.getByLabelText('无法加载此文件夹')).toBeTruthy() })
+    expect(screen.getByRole('button', { name: '折叠 src' })).toBeTruthy()
     expect(screen.queryByText('app.ts')).toBeNull()
   })
 
@@ -837,6 +863,20 @@ describe('EditorSurface open / save', () => {
     })
     await clickFile('logo.png')
     await waitFor(() => { expect(screen.getByText('无法打开此文件')).toBeTruthy() })
+  })
+
+  it('shows a dedicated message when Host rejects an oversize file', async () => {
+    mount({
+      read: async (_id, path) => {
+        throw new DirectoryBrowseError({
+          code: 'file-too-large',
+          message: 'file too large',
+          details: { path, size: 6_000_000, limit: 5_242_880 },
+        })
+      },
+    })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByText(/文件过大/)).toBeTruthy() })
   })
 })
 

@@ -6,8 +6,10 @@ import {
   mediaTypeForImagePath,
   readWorkspaceFile,
   writeWorkspaceFile,
+  WORKSPACE_FILE_READ_MAX_BYTES,
   WorkspaceFileNotFoundError,
   WorkspaceFileNotRegularError,
+  WorkspaceFileTooLargeError,
   WorkspaceFileUnreadableError,
   WorkspaceFileWriteFailedError,
 } from '../src/read-write-file.ts'
@@ -76,6 +78,16 @@ describe('readWorkspaceFile', () => {
       stat: async () => { throw new Error('stat denied') },
     })).rejects.toMatchObject({ message: expect.stringContaining('stat denied') })
   })
+
+  it('rejects files larger than the read limit before reading', async () => {
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-read-file-')))
+    const file = join(root, 'huge.txt')
+    const overLimit = WORKSPACE_FILE_READ_MAX_BYTES + 1
+    await expect(readWorkspaceFile(root, file, 'text', undefined, {
+      stat: async () => ({ isFile: () => true, size: overLimit }) as never,
+      readFile: async () => { throw new Error('read should not run') },
+    })).rejects.toBeInstanceOf(WorkspaceFileTooLargeError)
+  })
 })
 
 describe('writeWorkspaceFile', () => {
@@ -113,6 +125,7 @@ describe('readWorkspaceFile error classes', () => {
   it('carry the target path on typed failures', () => {
     expect(new WorkspaceFileNotFoundError('/a').path).toBe('/a')
     expect(new WorkspaceFileNotRegularError('/b').path).toBe('/b')
+    expect(new WorkspaceFileTooLargeError('/big', 9, 5).limit).toBe(5)
     expect(new WorkspaceFileUnreadableError('/c', 'denied').path).toBe('/c')
     expect(new WorkspaceFileWriteFailedError('/d', 'denied').path).toBe('/d')
   })

@@ -223,6 +223,23 @@
   animation: spin 0.6s linear infinite;
 }
 
+.listError {
+  flex: none;
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.truncatedHint {
+  flex: none;
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-caption);
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }

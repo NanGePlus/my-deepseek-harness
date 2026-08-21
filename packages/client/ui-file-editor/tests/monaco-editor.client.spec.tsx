@@ -129,6 +129,7 @@ describe('MonacoEditor', () => {
         onChange={onChange}
       />,
     )
+    await act(async () => { await new Promise<void>((resolve) => { requestAnimationFrame(() => { resolve() }) }) })
     expect(model).toBe('from-store')
 
     view.rerender(

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult, WorkspaceId,
@@ -16,6 +17,7 @@ import { clampTreeWidth, TREE_WIDTH_DEFAULT } from './tree-layout.ts'
 import { languageForPath, openKindForPath } from './open-kind.ts'
 import { createFileEditorStore, tabIsDirty, workspaceEditorState, type EditorTab } from './stores.ts'
 import { createDirtyGuard, type DirtyGuard, type WorkspaceEditorBridge } from './dirty-guard.ts'
+import { shouldSkipLsp, yieldToMain } from './editor-file-policy.ts'
 import css from './EditorSurface.module.css'
 import dialogCss from './FileTreeDialogs.module.css'
 
@@ -294,6 +296,7 @@ export function EditorSurface({
 
   const syncLsp = useCallback((path: string, text: string): Promise<void> => {
     if (workspace === undefined) return Promise.resolve()
+    if (shouldSkipLsp(text)) return Promise.resolve()
     const tab = tabsRef.current.find(item => item.path === path)
     if (tab?.kind !== 'text') return Promise.resolve()
     const version = (lspVersions.current.get(path) ?? 0) + 1
@@ -318,6 +321,7 @@ export function EditorSurface({
   }, [workspace, lspSyncDocument])
 
   const scheduleLspSync = useCallback((path: string, text: string) => {
+    if (shouldSkipLsp(text)) return
     const pending = lspDebounce.current.get(path)
     if (pending !== undefined) clearTimeout(pending)
     lspDebounce.current.set(path, setTimeout(() => {
@@ -346,6 +350,7 @@ export function EditorSurface({
     if (workspace === undefined) return null
     const tab = tabsRef.current.find(item => item.path === path)
     if (tab?.kind !== 'text') return null
+    if (shouldSkipLsp(tab.buffer)) return null
     let pending = lspSyncPromises.current.get(path)
     if (pending === undefined && (lspVersions.current.get(path) ?? 0) === 0) {
       pending = syncLsp(path, tab.buffer)
@@ -418,6 +423,8 @@ export function EditorSurface({
           setStatus({ kind: 'error', op: 'open', message: t('editor.error.open') })
           return
         }
+        await yieldToMain()
+        if (ac.signal.aborted) return
         editorActions.openTab({
           kind: 'text',
           path: entry.path,
@@ -426,11 +433,15 @@ export function EditorSurface({
           buffer: result.text,
           saved: result.text,
         })
-        syncLsp(entry.path, result.text)
+        if (!shouldSkipLsp(result.text)) syncLsp(entry.path, result.text)
       }
       setStatus({ kind: 'idle' })
     } catch (error: unknown) {
       if (ac.signal.aborted) return
+      if (error instanceof DirectoryBrowseError && error.rpcError.code === 'file-too-large') {
+        setStatus({ kind: 'error', op: 'open', message: t('editor.error.openTooLarge') })
+        return
+      }
       void error
       setStatus({ kind: 'error', op: 'open', message: t('editor.error.open') })
     }
@@ -440,6 +451,7 @@ export function EditorSurface({
     if (workspace === undefined) return
     const tab = tabsRef.current.find(item => item.path === path)
     if (tab?.kind !== 'text') return
+    if (shouldSkipLsp(tab.buffer)) return
     try {
       const result = await readFile(workspace.workspaceId, path, 'text')
       if (result.kind !== 'text') return

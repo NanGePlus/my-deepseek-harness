@@ -19,6 +19,7 @@ import {
   directoryChainToFile, joinChildPath, parentDirectoryForCreate, siblingNameExists,
 } from './file-tree-parent.ts'
 import { flattenVisibleTree, paintVisibleRows } from './flatten-visible.ts'
+import { withDirectoryListingTimeout } from './directory-listing-timeout.ts'
 import css from './FileTreePane.module.css'
 import iconCss from './IconButton.module.css'
 import dialogCss from './FileTreeDialogs.module.css'
@@ -175,6 +176,8 @@ export function FileTreePane({
   )
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(() => new Set())
+  const [failedPaths, setFailedPaths] = useState<Set<string>>(() => new Set())
+  const [truncatedPaths, setTruncatedPaths] = useState<Set<string>>(() => new Set())
   const [gitByPath, setGitByPath] = useState<Map<string, string>>(() => new Map())
   const [gitLoading, setGitLoading] = useState(false)
   const [filter, setFilter] = useState('')
@@ -186,6 +189,11 @@ export function FileTreePane({
   const [opError, setOpError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const listingAbort = useRef<AbortController | null>(null)
+  const fetchAbortByPath = useRef<Map<string, AbortController>>(new Map())
+  const listWorkspaceEntriesRef = useRef(listWorkspaceEntries)
+  listWorkspaceEntriesRef.current = listWorkspaceEntries
+  const gitStatusRef = useRef(gitStatus)
+  gitStatusRef.current = gitStatus
   const gitAbort = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const composingRef = useRef(false)
@@ -201,32 +209,63 @@ export function FileTreePane({
 
   const fetchDirectory = useCallback(async (dirPath: string): Promise<boolean> => {
     if (workspace === undefined) return false
+    fetchAbortByPath.current.get(dirPath)?.abort()
+    const ac = new AbortController()
+    fetchAbortByPath.current.set(dirPath, ac)
     setLoadingPaths(current => new Set(current).add(dirPath))
+    setFailedPaths((current) => {
+      if (!current.has(dirPath)) return current
+      const next = new Set(current)
+      next.delete(dirPath)
+      return next
+    })
     try {
-      const listing = await listWorkspaceEntries(
-        workspace.workspaceId,
-        dirPath,
-        listingAbort.current?.signal,
+      const listing = await withDirectoryListingTimeout(
+        listWorkspaceEntriesRef.current(workspace.workspaceId, dirPath, ac.signal),
+        ac,
       )
-      if (listingAbort.current?.signal.aborted) return false
+      if (ac.signal.aborted) return false
       setChildrenByPath(current => new Map(current).set(dirPath, listing.entries))
+      setTruncatedPaths((current) => {
+        const next = new Set(current)
+        if (listing.truncated) next.add(dirPath)
+        else next.delete(dirPath)
+        return next
+      })
       return true
     } catch (error: unknown) {
-      if (listingAbort.current?.signal.aborted) return false
+      if (ac.signal.aborted) return false
       void error
+      setChildrenByPath(current => new Map(current).set(dirPath, []))
+      setFailedPaths(current => new Set(current).add(dirPath))
       return false
     } finally {
+      if (fetchAbortByPath.current.get(dirPath) === ac) {
+        fetchAbortByPath.current.delete(dirPath)
+      }
       setLoadingPaths((current) => {
         const next = new Set(current)
         next.delete(dirPath)
         return next
       })
     }
-  }, [workspace, listWorkspaceEntries])
+  }, [workspace])
 
   const invalidateDirectory = useCallback(async (dirPath: string) => {
     setChildrenByPath((current) => {
       const next = new Map(current)
+      next.delete(dirPath)
+      return next
+    })
+    setFailedPaths((current) => {
+      if (!current.has(dirPath)) return current
+      const next = new Set(current)
+      next.delete(dirPath)
+      return next
+    })
+    setTruncatedPaths((current) => {
+      if (!current.has(dirPath)) return current
+      const next = new Set(current)
       next.delete(dirPath)
       return next
     })
@@ -246,7 +285,7 @@ export function FileTreePane({
     gitAbort.current = ac
     setGitLoading(true)
     try {
-      const listing = await gitStatus(workspace.workspaceId, ac.signal)
+      const listing = await gitStatusRef.current(workspace.workspaceId, ac.signal)
       if (ac.signal.aborted) return
       setGitByPath(new Map(listing.entries.map(entry => [entry.path, entry.letter])))
     } catch (error: unknown) {
@@ -256,16 +295,22 @@ export function FileTreePane({
     } finally {
       if (!ac.signal.aborted) setGitLoading(false)
     }
-  }, [workspace, gitStatus])
+  }, [workspace])
 
   useEffect(() => {
     const ac = new AbortController()
     listingAbort.current = ac
+    for (const controller of fetchAbortByPath.current.values()) {
+      controller.abort()
+    }
+    fetchAbortByPath.current.clear()
     gitAbort.current?.abort()
     gitAbort.current = null
     setChildrenByPath(new Map())
     setExpanded(new Set())
     setLoadingPaths(new Set())
+    setFailedPaths(new Set())
+    setTruncatedPaths(new Set())
     setGitByPath(new Map())
     setSelectedPath(undefined)
     setFilter('')
@@ -279,22 +324,41 @@ export function FileTreePane({
       setGitLoading(false)
       return () => { ac.abort() }
     }
-    void listWorkspaceEntries(boundWorkspaceId, boundWorkspacePath, ac.signal)
+    void listWorkspaceEntriesRef.current(boundWorkspaceId, boundWorkspacePath, ac.signal)
       .then((listing) => {
         if (ac.signal.aborted) return
         setChildrenByPath(new Map([[boundWorkspacePath, listing.entries]]))
+        setTruncatedPaths(listing.truncated ? new Set([boundWorkspacePath]) : new Set())
       })
       .catch((error: unknown) => {
         if (ac.signal.aborted) return
         void error
         setChildrenByPath(new Map([[boundWorkspacePath, []]]))
+        setFailedPaths(new Set([boundWorkspacePath]))
       })
-    void refreshGitStatus()
+    void (async () => {
+      if (boundWorkspaceId === undefined) return
+      gitAbort.current?.abort()
+      const gitAc = new AbortController()
+      gitAbort.current = gitAc
+      setGitLoading(true)
+      try {
+        const listing = await gitStatusRef.current(boundWorkspaceId, gitAc.signal)
+        if (gitAc.signal.aborted) return
+        setGitByPath(new Map(listing.entries.map(entry => [entry.path, entry.letter])))
+      } catch (error: unknown) {
+        if (gitAc.signal.aborted) return
+        void error
+        setGitByPath(new Map())
+      } finally {
+        if (!gitAc.signal.aborted) setGitLoading(false)
+      }
+    })()
     return () => {
       ac.abort()
       gitAbort.current?.abort()
     }
-  }, [boundWorkspaceId, boundWorkspacePath, listWorkspaceEntries, refreshGitStatus])
+  }, [boundWorkspaceId, boundWorkspacePath])
 
   useEffect(() => {
     if (gitRefreshTrigger === 0) return
@@ -320,16 +384,9 @@ export function FileTreePane({
       return
     }
     setExpanded(current => new Set(current).add(entry.path))
-    if (childrenByPath.has(entry.path)) return
-    const loaded = await fetchDirectory(entry.path)
-    if (!loaded) {
-      setExpanded((current) => {
-        const next = new Set(current)
-        next.delete(entry.path)
-        return next
-      })
-    }
-  }, [workspace, expanded, childrenByPath, fetchDirectory])
+    if (childrenByPath.has(entry.path) && !failedPaths.has(entry.path)) return
+    await fetchDirectory(entry.path)
+  }, [workspace, expanded, childrenByPath, failedPaths, fetchDirectory])
 
   const workspaceBound = workspace !== undefined
   const rootEntries = workspace === undefined
@@ -710,6 +767,14 @@ export function FileTreePane({
                   )}
                   {row.loading && (
                     <span className={css.spinner} role="status" aria-label={t('editor.tree.loading')} />
+                  )}
+                  {!row.loading && failedPaths.has(row.entry.path) && (
+                    <span className={css.listError} role="status" aria-label={t('editor.tree.listError')}>
+                      !
+                    </span>
+                  )}
+                  {!row.loading && truncatedPaths.has(row.entry.path) && (
+                    <span className={css.truncatedHint} aria-label={t('editor.tree.truncated')}>…</span>
                   )}
                 </div>
               )

@@ -7,6 +7,7 @@ import {
   listWorkspaceEntriesLevel,
   pathWithinWorkspace,
   WORKSPACE_LISTING_MAX_ENTRIES,
+  WORKSPACE_LISTING_MAX_DIRENTS_SCAN,
   WorkspaceDirectoryUnreadableError,
   WorkspacePathOutOfBoundsError,
 } from '../src/list-workspace-entries.ts'
@@ -76,5 +77,17 @@ describe('listWorkspaceEntriesLevel', () => {
     const pending = listWorkspaceEntriesLevel(workspace, workspace, abort.signal)
     abort.abort()
     await expect(pending).rejects.toThrow()
+  })
+
+  it('marks truncated when dirent scan exceeds the scan cap', async () => {
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-list-level-cap-')))
+    const workspace = join(root, 'ws')
+    mkdirSync(workspace)
+    for (let index = 0; index < WORKSPACE_LISTING_MAX_DIRENTS_SCAN + 20; index += 1) {
+      writeFileSync(join(workspace, `entry-${String(index).padStart(5, '0')}.txt`), '')
+    }
+    const listed = await listWorkspaceEntriesLevel(workspace, workspace)
+    expect(listed.truncated).toBe(true)
+    expect(listed.entries.length).toBeLessThanOrEqual(WORKSPACE_LISTING_MAX_ENTRIES)
   })
 })
