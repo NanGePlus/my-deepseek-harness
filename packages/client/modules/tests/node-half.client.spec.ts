@@ -149,4 +149,36 @@ describe('client bundle activation', () => {
     })
     expect(body).toBe(map)
   })
+
+  it('serves monaco worker assets beside a registered client bundle', async () => {
+    const packageName = '@fixture/monaco-workers'
+    const clientPath = writePackage(packageName)
+    mkdirSync(dirname(clientPath), { recursive: true })
+    writeFileSync(clientPath, 'module.exports = {}\n')
+    const workerDir = join(dirname(clientPath), 'monaco')
+    mkdirSync(workerDir, { recursive: true })
+    const worker = 'self.onmessage = function(){};\n'
+    writeFileSync(join(workerDir, 'ts.worker.js'), worker)
+    const { route } = constructWithRoute([packageName])
+    let status = 0
+    let body = ''
+    const response = {
+      writeHead(nextStatus: number) {
+        status = nextStatus
+        return response
+      },
+      end(chunk?: Uint8Array) {
+        body = chunk === undefined ? '' : Buffer.from(chunk).toString('utf8')
+        return response
+      },
+    } as unknown as ServerResponse
+
+    await route.handler({
+      method: 'GET',
+      url: `/plugins/${packageName}/monaco/ts.worker.js`,
+    } as IncomingMessage, response)
+
+    expect(status).toBe(200)
+    expect(body).toBe(worker)
+  })
 })

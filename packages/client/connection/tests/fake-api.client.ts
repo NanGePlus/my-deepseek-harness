@@ -161,6 +161,9 @@ export class FakeApiClient implements IApiClient {
       Promise.resolve(ok({ path: '' })),
     ),
     openPath: payload => this.record('host.openPath', payload, this.onOpenPath(payload)),
+    lspSyncDocument: payload => this.record('host.lspSyncDocument', payload, Promise.resolve(ok({ diagnostics: [] }))),
+    lspCloseDocument: payload => this.record('host.lspCloseDocument', payload, Promise.resolve(ok({ closed: true as const }))),
+    lspHoverDocument: payload => this.record('host.lspHoverDocument', payload, Promise.resolve(ok({ hover: null }))),
     watchPath: (_payload, _signal, onOpen) => {
       onOpen?.()
       return (async function* () {})()

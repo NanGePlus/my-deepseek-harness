@@ -175,6 +175,22 @@
   white-space: nowrap;
 }
 
+.nameError {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.errorCount {
+  flex: none;
+  min-width: 14px;
+  padding: 0 3px;
+  font-family: var(--dsw-font-family);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  color: var(--dsw-alias-state-error-primary);
+  text-align: center;
+}
+
 .badge {
   flex: none;
   padding: 0 4px;

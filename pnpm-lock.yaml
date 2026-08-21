@@ -1405,6 +1405,15 @@ importers:
       '@deepseek-ai/dsh-host-webserver':
         specifier: workspace:^
         version: link:../../host/webserver
+      '@deepseek-ai/dsh-lsp':
+        specifier: workspace:^
+        version: link:../../lsp/lsp
+      '@deepseek-ai/dsh-lsp-editor':
+        specifier: workspace:^
+        version: link:../../lsp/lsp-editor
+      '@deepseek-ai/dsh-lsp-stdio':
+        specifier: workspace:^
+        version: link:../../lsp/lsp-stdio
       '@deepseek-ai/dsh-message-feedback':
         specifier: workspace:^
         version: link:../../feedback/message-feedback
@@ -4786,6 +4795,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@deepseek-ai/dsh-lsp-editor':
+        specifier: workspace:^
+        version: link:../../lsp/lsp-editor
       '@deepseek-ai/dsh-native-command':
         specifier: workspace:^
         version: link:../../util/native-command
@@ -5436,6 +5448,24 @@ importers:
         specifier: workspace:^
         version: link:../../llm/llm
 
+  packages/lsp/lsp-editor:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:^
+        version: link:../../util/brand
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-lsp':
+        specifier: workspace:^
+        version: link:../lsp
+
   packages/lsp/lsp-stdio:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -5463,6 +5493,9 @@ importers:
       '@deepseek-ai/dsh-lsp':
         specifier: workspace:^
         version: link:../lsp
+      '@deepseek-ai/dsh-lsp-editor':
+        specifier: workspace:^
+        version: link:../lsp-editor
       '@deepseek-ai/dsh-subprocess':
         specifier: workspace:^
         version: link:../../subprocess/subprocess

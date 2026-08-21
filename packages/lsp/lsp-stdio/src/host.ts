@@ -119,6 +119,38 @@ export async function readHostSource(
   }
 }
 
+/**
+ * Resolve a source path to the canonical file URI without reading bytes.
+ * @param fs - filesystem provider sharing the language server's execution world.
+ * @param filePath - absolute source path or path relative to `workspace`.
+ * @param workspace - already-canonical workspace.
+ * @param signal - optional cancellation.
+ * @returns canonical file URI sent to the language server.
+ */
+export async function resolveHostSourceUri(
+  fs: FileSystem,
+  filePath: string,
+  workspace: HostWorkspace,
+  signal?: AbortSignal,
+): Promise<string> {
+  throwIfAborted(signal)
+  let target: FsTarget
+  try {
+    target = await fs.resolve(filePath, {
+      cwd: workspace.canonicalPath,
+      ...signal === undefined ? {} : { signal },
+    })
+  } catch (error: unknown) {
+    throwIfAborted(signal)
+    throw new Error(`source "${filePath}" cannot be resolved: ${messageOf(error)}`, { cause: error })
+  }
+  throwIfAborted(signal)
+  if (!fs.contains(workspace.target, target)) {
+    throw new Error(`source "${filePath}" resolves outside the workspace`)
+  }
+  return fs.fileUrl(target)
+}
+
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }

@@ -73,6 +73,68 @@
     - id: workspace
       name: '@deepseek-ai/dsh-workspace'
 
+    - id: lsp
+      name: '@deepseek-ai/dsh-lsp'
+
+    - id: lsp-editor
+      name: '@deepseek-ai/dsh-lsp-editor'
+
+    - id: lsp-stdio
+      name: '@deepseek-ai/dsh-lsp-stdio'
+      config:
+        servers:
+          typescript:
+            command: npx
+            args: [--yes, typescript-language-server@5.0.0, --stdio]
+            extensionToLanguage:
+              .ts: typescript
+              .tsx: typescriptreact
+              .mts: typescript
+              .cts: typescript
+              .js: javascript
+              .jsx: javascriptreact
+              .mjs: javascript
+              .cjs: javascript
+          json:
+            command: npx
+            args: [--yes, -p, vscode-langservers-extracted, vscode-json-language-server, --stdio]
+            extensionToLanguage:
+              .json: json
+          html:
+            command: npx
+            args: [--yes, -p, vscode-langservers-extracted, vscode-html-language-server, --stdio]
+            extensionToLanguage:
+              .html: html
+              .htm: html
+          css:
+            command: npx
+            args: [--yes, -p, vscode-langservers-extracted, vscode-css-language-server, --stdio]
+            extensionToLanguage:
+              .css: css
+              .scss: scss
+              .less: less
+          yaml:
+            command: npx
+            args: [--yes, yaml-language-server, --stdio]
+            extensionToLanguage:
+              .yaml: yaml
+              .yml: yaml
+          python:
+            command: npx
+            args: [--yes, -p, pyright, pyright-langserver, --stdio]
+            extensionToLanguage:
+              .py: python
+          go:
+            command: gopls
+            optional: true
+            extensionToLanguage:
+              .go: go
+          java:
+            command: jdtls
+            optional: true
+            extensionToLanguage:
+              .java: java
+
     - id: session-projection-cache
       name: '@deepseek-ai/dsh-session-projection-cache'
       config:

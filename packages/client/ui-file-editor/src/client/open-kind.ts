@@ -86,9 +86,14 @@ const LANGUAGE_LABEL: Readonly<Record<string, string>> = {
   sql: 'SQL',
   lua: 'Lua',
   r: 'R',
-  dockerfile: 'Dockerfile',
+  dockerfile: 'dockerfile',
   plaintext: 'Plain Text',
 }
+
+/** Monaco language ids that receive the host LSP hover provider. */
+export const MONACO_HOVER_LANGUAGE_IDS: readonly string[] = [
+  ...new Set([...Object.values(LANGUAGE_BY_EXT), 'plaintext']),
+]
 
 /**
  * Last path segment of an absolute Host path.

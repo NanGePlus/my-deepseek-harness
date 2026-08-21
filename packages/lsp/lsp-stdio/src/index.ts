@@ -23,6 +23,16 @@ import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { abortable, abortError } from './abort.ts'
 import { canonicalizeWorkspace, readHostSource } from './host.ts'
 import type { HostWorkspace } from './host.ts'
+import type {
+  LspEditorDiagnostic,
+  LspEditorHover,
+  LspEditorProvider,
+  LspEditorProviderCloseRequest,
+  LspEditorProviderHoverRequest,
+  LspEditorProviderSyncRequest,
+} from '@deepseek-ai/dsh-lsp-editor'
+import { EditorLspInstance } from './editor-instance.ts'
+import type { EditorInstanceSpec } from './editor-instance.ts'
 import { LspInstance } from './instance.ts'
 import type { ConnectionSpawner } from './connection.ts'
 import type { InstanceSpec } from './instance.ts'
@@ -44,12 +54,13 @@ export { LspConnection } from './connection.ts'
 export const name = 'lsp-stdio'
 
 /** Services required by this plugin. */
-export const inject = ['fs', 'lsp', 'subprocess']
+export const inject = ['fs', 'lsp', 'lspEditor', 'subprocess']
 
 const DEFAULT_MAX_MESSAGE_BYTES = 16_000_000
 const DEFAULT_MAX_STDERR_BYTES = 1_000_000
 const DEFAULT_MAX_DOCUMENT_BYTES = 4_000_000
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5_000
+const DEFAULT_DIAGNOSTICS_WAIT_MS = 1_500
 const DEFAULT_KILL_GRACE_MS = 2_000
 
 /** One configured local language server and its host bounds. */
@@ -74,8 +85,12 @@ export interface LspLocalServerConfig {
   maxDocumentBytes?: number
   /** Graceful `shutdown`/`exit` budget before escalation (ms). Default 5000. */
   shutdownTimeoutMs?: number
+  /** Time to wait for publishDiagnostics after a sync (ms). Default 1500. */
+  diagnosticsWaitMs?: number
   /** Request-cancel and SIGTERM→SIGKILL grace (ms). Default 2000. */
   killGraceMs?: number
+  /** When true, an unresolvable executable skips this server instead of failing load. */
+  optional?: boolean
 }
 
 /** Plugin configuration: provider id → local language-server configuration. */
@@ -99,7 +114,9 @@ const LspLocalServerConfig: z<LspLocalServerConfig> = z.object({
   maxStderrBytes: z.number().default(DEFAULT_MAX_STDERR_BYTES),
   maxDocumentBytes: z.number().default(DEFAULT_MAX_DOCUMENT_BYTES),
   shutdownTimeoutMs: z.number().max(MAX_TIMER_DELAY_MS).default(DEFAULT_SHUTDOWN_TIMEOUT_MS),
+  diagnosticsWaitMs: z.number().max(MAX_TIMER_DELAY_MS).default(DEFAULT_DIAGNOSTICS_WAIT_MS),
   killGraceMs: z.number().max(MAX_TIMER_DELAY_MS).default(DEFAULT_KILL_GRACE_MS),
+  optional: z.boolean().default(false),
 })
 
 export const Config: z<Config> = z.object({
@@ -143,11 +160,20 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       if (providerId.trim() === '') throw new Error('lsp-stdio: server ids must be non-empty strings')
       const resolved = rawConfig as ResolvedServerConfig
       validateServerConfig(providerId, resolved)
-      const executable = await ctx.subprocess.resolveExecutable(
-        resolved.command,
-        resolved.env,
-        setupAbort.signal,
-      )
+      let executable: string
+      try {
+        executable = await ctx.subprocess.resolveExecutable(
+          resolved.command,
+          resolved.env,
+          setupAbort.signal,
+        )
+      } catch (error: unknown) {
+        if (resolved.optional) {
+          console.warn(`lsp-stdio: skipping optional server "${providerId}": ${error instanceof Error ? error.message : String(error)}`)
+          return undefined
+        }
+        throw error
+      }
       setupAbort.signal.throwIfAborted()
       return new LocalLspProvider(
         providerId,
@@ -158,7 +184,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       )
     })
     try {
-      return await Promise.all(lookups)
+      return (await Promise.all(lookups)).filter((provider): provider is LocalLspProvider => provider !== undefined)
     } catch (error: unknown) {
       setupAbort.abort(error)
       await Promise.allSettled(lookups)
@@ -170,13 +196,17 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
 
   ctx.effect(() => {
     const disposers: Array<() => void> = []
+    const editorDisposers: Array<() => void> = []
     try {
       for (const provider of providers) disposers.push(ctx.lsp.registerProvider(provider))
+      for (const provider of providers) editorDisposers.push(ctx.lspEditor.registerProvider(provider))
     } catch (error) {
+      for (const dispose of editorDisposers.reverse()) dispose()
       for (const dispose of disposers.reverse()) dispose()
       throw error
     }
     return async () => {
+      for (const dispose of editorDisposers.reverse()) dispose()
       // Remove every route before process teardown so no new query can enter a draining provider.
       for (const dispose of disposers.reverse()) dispose()
       const results = await Promise.allSettled(providers.map(provider => provider.disposeAll()))
@@ -190,6 +220,7 @@ function validateServerConfig(providerId: string, resolved: ResolvedServerConfig
   // Teardown budgets feed `deadline()`, whose `<= 0` is the internal no-timeout sentinel; a
   // nonpositive value would let a server that ignores shutdown hang disposal forever. Fail at load.
   assertTimer(providerId, 'shutdownTimeoutMs', resolved.shutdownTimeoutMs)
+  assertTimer(providerId, 'diagnosticsWaitMs', resolved.diagnosticsWaitMs)
   assertTimer(providerId, 'killGraceMs', resolved.killGraceMs)
   // Byte caps must be positive: a nonpositive stderr cap defeats the retained-tail bound
   // (`slice(-0)` keeps everything), `maxMessageBytes: 0` makes every response fatal, and a bad
@@ -214,13 +245,17 @@ function assertPositiveInteger(providerId: string, name: string, value: number):
 }
 
 /** A pooled generic provider: one server process per canonical workspace, created on demand. */
-class LocalLspProvider implements LspProvider {
+class LocalLspProvider implements LspProvider, LspEditorProvider {
   readonly id: LspProviderId
   readonly extensionToLanguage: Readonly<Record<string, string>>
-  /** One live instance per stable canonical workspace identity. */
+  /** One live navigation instance per stable canonical workspace identity. */
   private readonly instances = new Map<WorkspaceKey, LspInstance>()
+  /** One live editor instance per stable canonical workspace identity. */
+  private readonly editorInstances = new Map<WorkspaceKey, EditorLspInstance>()
   /** One complete source-read→open→query→close serialization tail per canonical workspace. */
   private readonly queues = new Map<WorkspaceKey, Promise<void>>()
+  /** Editor sync/close serialization tail per canonical workspace. */
+  private readonly editorQueues = new Map<WorkspaceKey, Promise<void>>()
   /** Workspace canonicalizations that have not entered a provider-owned queue yet. */
   private readonly workspaceLookups = new Set<Promise<void>>()
   private readonly lifetime = new AbortController()
@@ -302,6 +337,72 @@ class LocalLspProvider implements LspProvider {
     })
   }
 
+  async syncDocument(
+    request: LspEditorProviderSyncRequest,
+    signal?: AbortSignal,
+  ): Promise<readonly LspEditorDiagnostic[]> {
+    this.assertActive(signal)
+    const querySignal = this.querySignal(signal)
+    const workspace = await this.resolveWorkspace(request.workspaceRoot, querySignal)
+    const workspaceKey = workspace.target.targetKey
+    return this.enqueueEditor(workspaceKey, querySignal, async () => {
+      this.assertActive(querySignal)
+      const instance = this.editorInstanceFor(workspaceKey, workspace)
+      return instance.syncDocument(workspace, request, querySignal)
+    })
+  }
+
+  async closeDocument(request: LspEditorProviderCloseRequest, signal?: AbortSignal): Promise<void> {
+    this.assertActive(signal)
+    const querySignal = this.querySignal(signal)
+    const workspace = await this.resolveWorkspace(request.workspaceRoot, querySignal)
+    const workspaceKey = workspace.target.targetKey
+    await this.enqueueEditor(workspaceKey, querySignal, async () => {
+      this.assertActive(querySignal)
+      const instance = this.editorInstances.get(workspaceKey)
+      if (instance === undefined) return
+      await instance.closeDocument(workspace, request, querySignal)
+    })
+  }
+
+  async hoverDocument(
+    request: LspEditorProviderHoverRequest,
+    signal?: AbortSignal,
+  ): Promise<LspEditorHover | null> {
+    this.assertActive(signal)
+    const querySignal = this.querySignal(signal)
+    const workspace = await this.resolveWorkspace(request.workspaceRoot, querySignal)
+    const workspaceKey = workspace.target.targetKey
+    return this.enqueueEditor(workspaceKey, querySignal, async () => {
+      this.assertActive(querySignal)
+      const instance = this.editorInstanceFor(workspaceKey, workspace)
+      return instance.hoverDocument(workspace, request, querySignal)
+    })
+  }
+
+  private async resolveWorkspace(workspaceRoot: string, signal: AbortSignal): Promise<HostWorkspace> {
+    const workspaceResult = canonicalizeWorkspace(this.fs, workspaceRoot, signal)
+    const workspaceLookup = workspaceResult.then(() => undefined, () => undefined)
+    this.workspaceLookups.add(workspaceLookup)
+    try {
+      return await workspaceResult
+    } finally {
+      this.workspaceLookups.delete(workspaceLookup)
+    }
+  }
+
+  /** Serialize one editor lifecycle for a canonical workspace. */
+  private enqueueEditor<T>(workspace: WorkspaceKey, signal: AbortSignal | undefined, run: () => Promise<T>): Promise<T> {
+    const previous = this.editorQueues.get(workspace) ?? Promise.resolve()
+    const result = abortable(previous, signal).then(run)
+    const tail = previous.then(() => result).then(() => undefined, () => undefined)
+    this.editorQueues.set(workspace, tail)
+    void tail.then(() => {
+      if (this.editorQueues.get(workspace) === tail) this.editorQueues.delete(workspace)
+    })
+    return result
+  }
+
   /** Serialize one complete query lifecycle for a canonical workspace. */
   private enqueue<T>(workspace: WorkspaceKey, signal: AbortSignal | undefined, run: () => Promise<T>): Promise<T> {
     const previous = this.queues.get(workspace) ?? Promise.resolve()
@@ -349,20 +450,47 @@ class LocalLspProvider implements LspProvider {
     return new LspInstance(spec, this.spawner)
   }
 
+  private editorInstanceFor(workspaceKey: WorkspaceKey, workspace: HostWorkspace): EditorLspInstance {
+    this.assertActive()
+    const existing = this.editorInstances.get(workspaceKey)
+    if (existing !== undefined) return existing
+    const spec: EditorInstanceSpec = {
+      command: this.executable,
+      args: this.config.args,
+      cwd: workspace.canonicalPath,
+      workspaceUri: workspace.fileUrl,
+      env: this.config.env,
+      configuration: this.config.configuration,
+      initializationOptions: this.config.initializationOptions,
+      maxMessageBytes: this.config.maxMessageBytes,
+      maxStderrBytes: this.config.maxStderrBytes,
+      shutdownTimeoutMs: this.config.shutdownTimeoutMs,
+      killGraceMs: this.config.killGraceMs,
+      diagnosticsWaitMs: this.config.diagnosticsWaitMs,
+    }
+    const created = new EditorLspInstance(spec, this.fs, this.spawner)
+    this.editorInstances.set(workspaceKey, created)
+    return created
+  }
+
   /** Dispose every live instance and block further queries. */
   async disposeAll(): Promise<void> {
     this.disposed = true
     this.lifetime.abort(new LspError('lsp-stdio provider is disposed', 'LSP_DISPOSED'))
     const live = [...this.instances.values()]
-    const draining = [...this.queues.values()]
+    const liveEditor = [...this.editorInstances.values()]
+    const draining = [...this.queues.values(), ...this.editorQueues.values()]
     const resolving = [...this.workspaceLookups]
     this.instances.clear()
+    this.editorInstances.clear()
     const results = await Promise.allSettled([
       ...live.map(instance => instance.dispose()),
+      ...liveEditor.map(instance => instance.dispose()),
       ...draining,
       ...resolving,
     ])
     this.queues.clear()
+    this.editorQueues.clear()
     this.workspaceLookups.clear()
     throwTeardownFailures(results, 'lsp-stdio instance teardown failed')
   }

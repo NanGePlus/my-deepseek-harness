@@ -3,10 +3,12 @@
 import { IconCloseOutline16, IconLoadingOutline16, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
+import type { HostLspDiagnostic } from '@deepseek-ai/dsh-client-runtime/client'
 import { MonacoEditor } from './MonacoEditor.tsx'
 import { MarkdownEditorBody } from './MarkdownEditorBody.tsx'
 import { isMarkdownLanguage, languageLabel } from './open-kind.ts'
 import { tabIsDirty, type EditorTab } from './stores.ts'
+import { lspErrorCount } from './diagnostics-ui.ts'
 import css from './EditorPane.module.css'
 import iconCss from './IconButton.module.css'
 
@@ -54,6 +56,21 @@ export interface EditorPaneProps {
   onShowTree?: () => void
   /** Bound Workspace root for Markdown breadcrumbs. */
   workspaceRoot?: string | undefined
+  /** Language-server diagnostics keyed by tab path. */
+  diagnosticsByPath?: ReadonlyMap<string, readonly HostLspDiagnostic[]> | undefined
+  /**
+   * Language-server hover at a zero-based UTF-16 cursor position for the active text tab.
+   * @param path - tab path.
+   * @param line - zero-based line.
+   * @param character - zero-based character.
+   * @param signal - aborts a superseded hover request.
+   */
+  onHover?: (
+    path: string,
+    line: number,
+    character: number,
+    signal?: AbortSignal,
+  ) => Promise<{ contents: string; range?: HostLspDiagnostic['range'] } | null>
 }
 
 /**
@@ -62,7 +79,7 @@ export interface EditorPaneProps {
  */
 export function EditorPane({
   tabs, activePath, status, dark, t, onFocus, onClose, onBufferChange, onRetry,
-  treeCollapsed = false, onShowTree, workspaceRoot,
+  treeCollapsed = false, onShowTree, workspaceRoot, diagnosticsByPath, onHover,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.path === activePath)
   const themeLabel = dark ? t('editor.theme.dark') : t('editor.theme.light')
@@ -90,6 +107,8 @@ export function EditorPane({
               {tabs.map((tab) => {
                 const selected = tab.path === activePath
                 const dirty = tabIsDirty(tab)
+                const tabDiagnostics = diagnosticsByPath?.get(tab.path)
+                const errorCount = lspErrorCount(tabDiagnostics)
                 return (
                   <div
                     key={tab.path}
@@ -99,7 +118,14 @@ export function EditorPane({
                     onClick={() => { onFocus(tab.path) }}
                   >
                     {dirty && <span className={css.dirty} aria-label={t('editor.tab.dirty')} />}
-                    <span className={css.tabTitle}>{tab.name}</span>
+                    <span className={clsx(css.tabTitle, errorCount > 0 && css.tabTitleError)}>
+                      {tab.name}
+                    </span>
+                    {errorCount > 0 && (
+                      <span className={css.tabErrorCount} aria-label={t('editor.tab.errors', { count: errorCount })}>
+                        {errorCount}
+                      </span>
+                    )}
                     <Tooltip
                       label={t('editor.tab.close', { name: tab.name })}
                       side="bottom"
@@ -107,14 +133,14 @@ export function EditorPane({
                     >
                       <button
                         type="button"
-                        className={iconCss.iconButton}
+                        className={css.tabClose}
                         aria-label={t('editor.tab.close', { name: tab.name })}
                         onClick={(event) => {
                           event.stopPropagation()
                           onClose(tab.path)
                         }}
                       >
-                        <IconCloseOutline16 size={16} />
+                        <IconCloseOutline16 size={12} />
                       </button>
                     </Tooltip>
                   </div>
@@ -169,6 +195,9 @@ export function EditorPane({
                 dark={dark}
                 t={t}
                 onBufferChange={onBufferChange}
+                onHover={onHover === undefined
+                  ? undefined
+                  : (path, line, character, signal) => onHover(path, line, character, signal)}
               />
             )}
             {active?.kind === 'text' && !isMarkdownLanguage(active.language) && (
@@ -176,6 +205,10 @@ export function EditorPane({
                 path={active.path}
                 value={active.buffer}
                 language={active.language}
+                diagnostics={diagnosticsByPath?.get(active.path)}
+                onHover={onHover === undefined
+                  ? undefined
+                  : (line, character, signal) => onHover(active.path, line, character, signal)}
                 ariaLabel={t('editor.buffer.label', {
                   name: active.name,
                   language: languageLabel(active.language),

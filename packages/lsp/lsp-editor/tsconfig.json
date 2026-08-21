@@ -9,37 +9,19 @@
   ],
   "references": [
     {
-      "path": "../../../vendor/cosmokit"
-    },
-    {
       "path": "../../../vendor/cordis"
-    },
-    {
-      "path": "../../../vendor/schemastery"
     },
     {
       "path": "../../util/brand"
     },
     {
-      "path": "../../util/timeout"
-    },
-    {
       "path": "../../llm/llm"
     },
     {
-      "path": "../../fs/fs"
+      "path": "../../runtime-diagnostics/invariants"
     },
     {
       "path": "../lsp"
-    },
-    {
-      "path": "../lsp-editor"
-    },
-    {
-      "path": "../../subprocess/subprocess"
-    },
-    {
-      "path": "../../runtime-diagnostics/invariants"
     }
   ]
 }

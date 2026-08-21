@@ -10,10 +10,11 @@ import {
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
-  FileWriteResult, GitStatusListing, PathMutationResult, WorkspaceEntriesListing, WorkspaceEntry,
+  FileWriteResult, GitStatusListing, HostLspDiagnostic, PathMutationResult, WorkspaceEntriesListing, WorkspaceEntry,
   WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { FileTypeIcon } from './file-type-icon.tsx'
+import { lspErrorCount } from './diagnostics-ui.ts'
 import {
   joinChildPath, parentDirectoryForCreate, siblingNameExists,
 } from './file-tree-parent.ts'
@@ -119,6 +120,8 @@ export interface FileTreePaneProps extends FileTreeHost, FileTreeMutationHost {
   onOpenFile: (entry: WorkspaceEntry) => void
   /** Increment to open the new-file dialog from outside the toolbar. */
   newFileTrigger?: number
+  /** Increment after disk writes so Git badges refresh without rebinding the Workspace. */
+  gitRefreshTrigger?: number
   /** When true, the pane is visually collapsed (width 0). */
   collapsed?: boolean
   /** Hide the file tree pane. */
@@ -137,6 +140,8 @@ export interface FileTreePaneProps extends FileTreeHost, FileTreeMutationHost {
    * @param newName - new base name.
    */
   onPathRenamed?: (oldPath: string, newPath: string, newName: string) => void
+  /** Language-server diagnostics keyed by absolute file path. */
+  diagnosticsByPath?: ReadonlyMap<string, readonly HostLspDiagnostic[]> | undefined
 }
 
 const ROW_HEIGHT_PX = 22
@@ -159,8 +164,9 @@ function isNameConflict(error: unknown): boolean {
 export function FileTreePane({
   workspace, listWorkspaceEntries, gitStatus, deletePath, renamePath,
   createWorkspaceDirectory, writeFile, t, onOpenFile, newFileTrigger = 0,
+  gitRefreshTrigger = 0,
   collapsed = false, onHide, treeWidthPx = null,
-  onPathDeleted, onPathRenamed,
+  onPathDeleted, onPathRenamed, diagnosticsByPath,
 }: FileTreePaneProps) {
   const [childrenByPath, setChildrenByPath] = useState<Map<string, readonly WorkspaceEntry[]>>(
     () => new Map(),
@@ -178,6 +184,7 @@ export function FileTreePane({
   const [opError, setOpError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const listingAbort = useRef<AbortController | null>(null)
+  const gitAbort = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const composingRef = useRef(false)
 
@@ -230,9 +237,30 @@ export function FileTreePane({
   const boundWorkspaceId = workspace?.workspaceId
   const boundWorkspacePath = workspace?.path
 
+  const refreshGitStatus = useCallback(async () => {
+    if (workspace === undefined) return
+    gitAbort.current?.abort()
+    const ac = new AbortController()
+    gitAbort.current = ac
+    setGitLoading(true)
+    try {
+      const listing = await gitStatus(workspace.workspaceId, ac.signal)
+      if (ac.signal.aborted) return
+      setGitByPath(new Map(listing.entries.map(entry => [entry.path, entry.letter])))
+    } catch (error: unknown) {
+      if (ac.signal.aborted) return
+      void error
+      setGitByPath(new Map())
+    } finally {
+      if (!ac.signal.aborted) setGitLoading(false)
+    }
+  }, [workspace, gitStatus])
+
   useEffect(() => {
     const ac = new AbortController()
     listingAbort.current = ac
+    gitAbort.current?.abort()
+    gitAbort.current = null
     setChildrenByPath(new Map())
     setExpanded(new Set())
     setLoadingPaths(new Set())
@@ -249,7 +277,6 @@ export function FileTreePane({
       setGitLoading(false)
       return () => { ac.abort() }
     }
-    setGitLoading(true)
     void listWorkspaceEntries(boundWorkspaceId, boundWorkspacePath, ac.signal)
       .then((listing) => {
         if (ac.signal.aborted) return
@@ -260,23 +287,17 @@ export function FileTreePane({
         void error
         setChildrenByPath(new Map([[boundWorkspacePath, []]]))
       })
-    void gitStatus(boundWorkspaceId, ac.signal)
-      .then((listing) => {
-        if (ac.signal.aborted) return
-        setGitByPath(new Map(listing.entries.map(entry => [entry.path, entry.letter])))
-      })
-      .catch((error: unknown) => {
-        if (ac.signal.aborted) return
-        setGitByPath(new Map())
-        void error
-      })
-      .finally(() => {
-        if (!ac.signal.aborted) setGitLoading(false)
-      })
+    void refreshGitStatus()
     return () => {
       ac.abort()
+      gitAbort.current?.abort()
     }
-  }, [boundWorkspaceId, boundWorkspacePath, listWorkspaceEntries, gitStatus])
+  }, [boundWorkspaceId, boundWorkspacePath, listWorkspaceEntries, refreshGitStatus])
+
+  useEffect(() => {
+    if (gitRefreshTrigger === 0) return
+    void refreshGitStatus()
+  }, [gitRefreshTrigger, refreshGitStatus])
 
   useEffect(() => {
     if (newFileTrigger === 0 || workspace === undefined) return
@@ -390,6 +411,7 @@ export function FileTreePane({
         setSelectedPath(result.path)
         setNameDialog(null)
         setNameDraft('')
+        void refreshGitStatus()
         return
       }
       const parent = parentDirectoryForCreate(workspace.path, selectedEntry)
@@ -405,6 +427,7 @@ export function FileTreePane({
         setSelectedPath(result.path)
         setNameDialog(null)
         setNameDraft('')
+        void refreshGitStatus()
         return
       }
       await writeFile(workspace.workspaceId, childPath, '')
@@ -419,6 +442,7 @@ export function FileTreePane({
       onOpenFile(created)
       setNameDialog(null)
       setNameDraft('')
+      void refreshGitStatus()
     } catch (error: unknown) {
       if (isNameConflict(error)) {
         setNameError(t('editor.error.renameConflict'))
@@ -444,6 +468,7 @@ export function FileTreePane({
       if (selectedPath === deleteTarget.path) setSelectedPath(undefined)
       await invalidateDirectory(parent)
       setDeleteTarget(null)
+      void refreshGitStatus()
     } catch (error: unknown) {
       void error
       setOpError(t('editor.error.delete'))
@@ -598,6 +623,9 @@ export function FileTreePane({
             {paintedRows.map(({ row, start }) => {
               const letter = gitByPath.get(row.entry.path)
               const selected = selectedPath === row.entry.path
+              const errorCount = row.entry.isDirectory
+                ? 0
+                : lspErrorCount(diagnosticsByPath?.get(row.entry.path))
               return (
                 <div
                   key={row.entry.path}
@@ -643,7 +671,12 @@ export function FileTreePane({
                     )
                     : <span className={css.disclosureSpacer} />}
                   <FileTypeIcon entry={row.entry} expanded={row.expanded} t={t} />
-                  <span className={css.name}>{row.entry.name}</span>
+                  <span className={clsx(css.name, errorCount > 0 && css.nameError)}>{row.entry.name}</span>
+                  {errorCount > 0 && (
+                    <span className={css.errorCount} aria-label={t('editor.tab.errors', { count: errorCount })}>
+                      {errorCount}
+                    </span>
+                  )}
                   {letter !== undefined && (
                     <span className={clsx(css.badge, badgeClass(letter))} aria-label={t('editor.tree.git.badge', { letter })}>
                       {letter}

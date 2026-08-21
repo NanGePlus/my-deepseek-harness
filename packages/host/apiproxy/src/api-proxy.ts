@@ -7,6 +7,8 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-lsp-editor'
+import { LspError } from '@deepseek-ai/dsh-lsp-editor'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
@@ -111,6 +113,7 @@ import {
 import { canOpenNativePath, openNativePath, openNativeTextFile } from './native-path-opener.ts'
 import {
   listWorkspaceEntriesLevel,
+  pathWithinWorkspace,
   WorkspaceDirectoryUnreadableError,
   WorkspacePathOutOfBoundsError,
 } from './list-workspace-entries.ts'
@@ -3336,6 +3339,140 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             throw error
           }
         })()
+      },
+
+      async lspSyncDocument(request, signal) {
+        const lspEditor = ctx.get('lspEditor')
+        if (lspEditor === undefined) {
+          return err(request, {
+            code: 'lsp-unavailable',
+            message: 'editor language server is not configured on this host',
+            details: {},
+          })
+        }
+        const { workspaceId, path, text, version } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        if (!pathWithinWorkspace(workspace.path, path)) {
+          return err(request, {
+            code: 'workspace-path-out-of-bounds',
+            message: `path is outside workspace root: ${path}`,
+            details: { workspaceId, path },
+          })
+        }
+        try {
+          const diagnostics = await lspEditor.syncDocument({
+            workspaceRoot: workspace.path,
+            filePath: path,
+            text,
+            version,
+          }, signal)
+          return ok(request, { diagnostics: [...diagnostics] })
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'LSP sync was aborted', details: {} })
+          }
+          if (error instanceof LspError) {
+            return err(request, {
+              code: 'lsp-error',
+              message: error.message,
+              details: { lspCode: error.code },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async lspCloseDocument(request, signal) {
+        const lspEditor = ctx.get('lspEditor')
+        if (lspEditor === undefined) {
+          return err(request, {
+            code: 'lsp-unavailable',
+            message: 'editor language server is not configured on this host',
+            details: {},
+          })
+        }
+        const { workspaceId, path } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        if (!pathWithinWorkspace(workspace.path, path)) {
+          return err(request, {
+            code: 'workspace-path-out-of-bounds',
+            message: `path is outside workspace root: ${path}`,
+            details: { workspaceId, path },
+          })
+        }
+        try {
+          await lspEditor.closeDocument({ workspaceRoot: workspace.path, filePath: path }, signal)
+          return ok(request, { closed: true as const })
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'LSP close was aborted', details: {} })
+          }
+          if (error instanceof LspError) {
+            return err(request, {
+              code: 'lsp-error',
+              message: error.message,
+              details: { lspCode: error.code },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async lspHoverDocument(request, signal) {
+        const lspEditor = ctx.get('lspEditor')
+        if (lspEditor === undefined) {
+          return err(request, {
+            code: 'lsp-unavailable',
+            message: 'editor language server is not configured on this host',
+            details: {},
+          })
+        }
+        const { workspaceId, path, text, version, line, character } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        if (!pathWithinWorkspace(workspace.path, path)) {
+          return err(request, {
+            code: 'workspace-path-out-of-bounds',
+            message: `path is outside workspace root: ${path}`,
+            details: { workspaceId, path },
+          })
+        }
+        try {
+          const hover = await lspEditor.hoverDocument({
+            workspaceRoot: workspace.path,
+            filePath: path,
+            text,
+            version,
+            position: { line, character },
+          }, signal)
+          return ok(request, { hover })
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'LSP hover was aborted', details: {} })
+          }
+          if (error instanceof LspError) {
+            return err(request, {
+              code: 'lsp-error',
+              message: error.message,
+              details: { lspCode: error.code },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
       },
     },
 

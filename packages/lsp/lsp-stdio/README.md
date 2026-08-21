@@ -26,6 +26,7 @@ The `servers` record key is the stable provider id reserved on `ctx.lsp`; each v
 | `args` | `[]` | Arguments passed to the executable. |
 | `env` | `{}` | Extra env merged on top of the credential-scrubbed ambient env (vars matching `KEY`/`PASSWORD`/`SECRET`/`TOKEN` are not forwarded); an explicit `DSH_*` entry merges after the seam's scrub of ambient ones. |
 | `extensionToLanguage` | (required) | Lowercase leading-dot extension → LSP language id (e.g. `{ '.ts': 'typescript' }`). |
+| `optional` | `false` | When true, an unresolvable `command` skips this server instead of failing plugin load. |
 | `initializationOptions` | `null` | Static `initialize` options forwarded to the server. |
 | `configuration` | `null` | Static answer to every `workspace/configuration` item. |
 | `maxMessageBytes` | `16000000` | Largest single framed message accepted from the server. |

@@ -5,21 +5,46 @@ import { act, cleanup, render, waitFor } from '@testing-library/react'
 
 const listeners: Array<() => void> = []
 let model = 'hello'
+const textModel = { dispose: vi.fn() }
 const editor = {
   getValue: (): string => model,
+  getModel: (): typeof textModel => textModel,
   setValue: (next: string): void => { model = next },
   onDidChangeModelContent: (listener: () => void): void => { listeners.push(listener) },
   dispose: vi.fn(),
 }
-const defineTheme = vi.fn()
 const create = vi.fn(() => editor)
+const setModelMarkers = vi.fn()
+const monacoModule = {
+  MarkerSeverity: { Error: 8, Warning: 4, Info: 2, Hint: 1 },
+  Range: class {
+    constructor(
+      public startLineNumber: number,
+      public startColumn: number,
+      public endLineNumber: number,
+      public endColumn: number,
+    ) {}
+  },
+  Uri: { file: (path: string) => ({ path }) },
+  languages: {
+    registerHoverProvider: vi.fn(() => ({ dispose: vi.fn() })),
+  },
+  editor: {
+    create,
+    getModel: vi.fn(() => null),
+    createModel: vi.fn(() => textModel),
+    setModelMarkers,
+  },
+}
 
-let loadImpl: () => Promise<unknown> = () => Promise.resolve({
-  editor: { defineTheme, create },
-})
+let loadImpl: () => Promise<unknown> = () => Promise.resolve(monacoModule)
 
 vi.mock('../src/client/monaco-load.ts', () => ({
   loadMonacoEditor: () => loadImpl(),
+}))
+
+vi.mock('../src/client/monaco-environment.ts', () => ({
+  installMonacoEnvironment: vi.fn(),
 }))
 
 const { MonacoEditor } = await import('../src/client/MonacoEditor.tsx')
@@ -29,12 +54,9 @@ afterEach(cleanup)
 beforeEach(() => {
   listeners.length = 0
   model = 'hello'
-  defineTheme.mockClear()
   create.mockClear()
   editor.dispose.mockClear()
-  loadImpl = () => Promise.resolve({
-    editor: { defineTheme, create },
-  })
+  loadImpl = () => Promise.resolve(monacoModule)
   delete (globalThis as { MonacoEnvironment?: unknown }).MonacoEnvironment
   document.body.style.setProperty('--dsw-specific-sidebar-fill', '#F9FAFB')
   document.body.style.setProperty('--dsw-alias-bg-base', '#FFFFFF')
@@ -63,11 +85,10 @@ describe('MonacoEditor', () => {
       />,
     )
     await waitFor(() => { expect(create).toHaveBeenCalled() })
-    expect(defineTheme).toHaveBeenCalled()
     const host = view.container.querySelector('[role="textbox"]')
     expect(host?.getAttribute('aria-label')).toBe('a.ts，TypeScript，浅色')
-    const env = (globalThis as unknown as { MonacoEnvironment: { getWorker: () => Worker } }).MonacoEnvironment
-    expect(env.getWorker()).toBeInstanceOf(Worker)
+    const { installMonacoEnvironment } = await import('../src/client/monaco-environment.ts')
+    expect(installMonacoEnvironment).toHaveBeenCalled()
 
     model = 'hello'
     act(() => { listeners[0]!() })
@@ -128,7 +149,7 @@ describe('MonacoEditor', () => {
     await waitFor(() => { expect(missing.container.querySelector('textarea')).toBeTruthy() })
     missing.unmount()
 
-    loadImpl = () => Promise.resolve({ editor: { defineTheme, create: () => { throw new Error('fail') } } })
+    loadImpl = () => Promise.resolve({ ...monacoModule, editor: { ...monacoModule.editor, create: () => { throw new Error('fail') } } })
     const failed = render(
       <MonacoEditor
         path="/w/a.ts"
@@ -157,7 +178,7 @@ describe('MonacoEditor', () => {
     )
     view.unmount()
     await act(async () => {
-      release({ editor: { defineTheme, create } })
+      release({ ...monacoModule })
     })
     expect(create).not.toHaveBeenCalled()
   })

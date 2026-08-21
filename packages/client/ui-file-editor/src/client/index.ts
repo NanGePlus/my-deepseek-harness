@@ -45,6 +45,12 @@ export function apply(ctx: ClientContext): void {
       ctx.workspaces.createWorkspaceDirectory(workspaceId, path, name, signal),
     watchPath: (workspaceId, path, onChanged, signal) =>
       ctx.workspaces.watchPath(workspaceId, path, onChanged, signal),
+    lspSyncDocument: (workspaceId, path, text, version, signal) =>
+      ctx.workspaces.lspSyncDocument(workspaceId, path, text, version, signal),
+    lspCloseDocument: (workspaceId, path, signal) =>
+      ctx.workspaces.lspCloseDocument(workspaceId, path, signal),
+    lspHoverDocument: (workspaceId, path, text, version, line, character, signal) =>
+      ctx.workspaces.lspHoverDocument(workspaceId, path, text, version, line, character, signal),
     dirtyGuard: editorDirtyGuard,
   })
 

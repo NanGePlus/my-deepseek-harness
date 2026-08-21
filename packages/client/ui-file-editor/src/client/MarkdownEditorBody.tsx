@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import clsx from 'clsx'
+import type { HostLspHover } from '@deepseek-ai/dsh-client-runtime/client'
 import { MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { MonacoEditor } from './MonacoEditor.tsx'
@@ -28,6 +29,19 @@ export interface MarkdownEditorBodyProps {
    * @param value - new buffer text.
    */
   onBufferChange: (path: string, value: string) => void
+  /**
+   * Language-server hover at a zero-based UTF-16 cursor position.
+   * @param path - tab path.
+   * @param line - zero-based line.
+   * @param character - zero-based character.
+   * @param signal - aborts a superseded hover request.
+   */
+  onHover?: (
+    path: string,
+    line: number,
+    character: number,
+    signal?: AbortSignal,
+  ) => Promise<HostLspHover | null>
 }
 
 /**
@@ -35,7 +49,7 @@ export interface MarkdownEditorBodyProps {
  * @param props - tab, workspace root, theme, and buffer callback.
  */
 export function MarkdownEditorBody({
-  tab, workspaceRoot, dark, t, onBufferChange,
+  tab, workspaceRoot, dark, t, onBufferChange, onHover,
 }: MarkdownEditorBodyProps) {
   const [viewsByPath, setViewsByPath] = useState<Partial<Record<string, MarkdownViewMode>>>({})
   const view = viewsByPath[tab.path] ?? 'preview'
@@ -106,6 +120,9 @@ export function MarkdownEditorBody({
               theme: themeLabel,
             })}
             dark={dark}
+            onHover={onHover === undefined
+              ? undefined
+              : (line, character, signal) => onHover(tab.path, line, character, signal)}
             onChange={(value) => { onBufferChange(tab.path, value) }}
           />
         )}

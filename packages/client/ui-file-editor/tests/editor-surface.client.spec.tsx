@@ -600,6 +600,16 @@ describe('EditorSurface open / save', () => {
     expect(b.writeFile).toHaveBeenCalledWith(WID, `${ROOT}/README.md`, 'again\n', expect.any(AbortSignal))
   })
 
+  it('save-refreshes-git: saving re-fetches Git badges without rebinding the Workspace', async () => {
+    const b = mount()
+    await waitFor(() => { expect(b.gitStatus).toHaveBeenCalledTimes(1) })
+    await clickFile('README.md')
+    const box = await markdownEditor()
+    fireEvent.change(box, { target: { value: 'edited readme\n' } })
+    saveShortcut()
+    await waitFor(() => { expect(b.gitStatus.mock.calls.length).toBeGreaterThan(1) })
+  })
+
   it('save-disabled: a clean text tab, preview tab, and non-openable tab ignore save shortcuts', async () => {
     const b = mount()
     await clickFile('README.md')

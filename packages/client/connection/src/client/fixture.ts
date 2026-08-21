@@ -2609,6 +2609,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         path: `${request.payload.path}/${request.payload.name}`,
       }),
       openPath: request => ok(request, { opened: true as const }),
+      lspSyncDocument: request => ok(request, { diagnostics: [] }),
+      lspCloseDocument: request => ok(request, { closed: true as const }),
+      lspHoverDocument: request => ok(request, { hover: null }),
       watchPath: () => (async function* () {})(),
     },
     workspace: {
@@ -3153,6 +3156,9 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'host.renamePath': return this.api.host.renamePath(request, signal)
       case 'host.createWorkspaceDirectory': return this.api.host.createWorkspaceDirectory(request, signal)
       case 'host.openPath': return this.api.host.openPath(request, new AbortController().signal)
+      case 'host.lspSyncDocument': return this.api.host.lspSyncDocument(request, signal)
+      case 'host.lspCloseDocument': return this.api.host.lspCloseDocument(request, signal)
+      case 'host.lspHoverDocument': return this.api.host.lspHoverDocument(request, signal)
       case 'workspace.list': return this.api.workspace.list(request)
       case 'workspace.create': return this.api.workspace.create(request)
       case 'workspace.rename': return this.api.workspace.rename(request)
