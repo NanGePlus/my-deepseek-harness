@@ -85,6 +85,13 @@ describe('MonacoEditor', () => {
       />,
     )
     await waitFor(() => { expect(create).toHaveBeenCalled() })
+    expect(create.mock.calls[0]?.[1]).toMatchObject({
+      unicodeHighlight: {
+        invisibleCharacters: false,
+        ambiguousCharacters: false,
+        nonBasicASCII: false,
+      },
+    })
     const host = view.container.querySelector('[role="textbox"]')
     expect(host?.getAttribute('aria-label')).toBe('a.ts，TypeScript，浅色')
     const { installMonacoEnvironment } = await import('../src/client/monaco-environment.ts')

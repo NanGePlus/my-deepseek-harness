@@ -26,6 +26,7 @@ import { MermaidBlock } from './MermaidBlock.tsx'
 import type { MermaidSecurityLevel } from './mermaid-load.ts'
 import { renderTexToReact } from './katex.tsx'
 import type { PositionedBlock } from './incremental.ts'
+import { isBlankInlineCodeValue } from './inline-code-value.ts'
 import css from './MarkdownText.module.css'
 
 /** Copy-button labels forwarded to fence CodeBlocks (this package is cordis-free, so copy arrives via props). */
@@ -234,6 +235,9 @@ function renderNode(node: Md.RootContent, key: Key, context: MarkdownRenderConte
     case 'inlineCode': {
       // Parity with mdast-util-to-hast: inline code renders line endings as spaces.
       const value = node.value.replace(/\r?\n|\r/g, ' ')
+      // Whitespace- and format-only backtick pairs from model output render as
+      // misleading code chips; drop them instead of drawing a blank pill.
+      if (isBlankInlineCodeValue(value)) return null
       // An inline-code token that is entirely an absolute HTTP(S) URL keeps
       // its code chrome and gains the same safe external anchor as a link;
       // commands, partial URLs, and other schemes stay inert. The value is

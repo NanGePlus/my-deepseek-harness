@@ -68,6 +68,15 @@ describe('MarkdownText', () => {
     expect(screen.getByRole('link', { name: 'https://deepseek.com' })).toBeTruthy()
   })
 
+  it('drops empty inline-code tokens instead of rendering blank chips', () => {
+    const zwsp = '\u200B'
+    const { container } = render(<MarkdownText text={`**内容 (Content)**：\`\`\`\n\n**状态 (Status)**：\` \`\n\n**标题**：\`${zwsp}\``} />)
+    expect(container.querySelectorAll('code')).toHaveLength(0)
+    expect(container.textContent).toContain('内容 (Content)：')
+    expect(container.textContent).toContain('状态 (Status)：')
+    expect(container.textContent).toContain('标题：')
+  })
+
   it('closes punctuation-terminated strong emphasis before adjacent CJK text', () => {
     const cases = [
       ['**注意：**内容', '注意：'],
