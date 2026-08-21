@@ -241,6 +241,9 @@ export class FakeApiClient implements IApiClient {
       onOpen?.()
       return (async function* () {})()
     },
+    lspSyncDocument: (payload: unknown) => this.record('host.lspSyncDocument', payload, Promise.resolve(ok({ diagnostics: [] }))),
+    lspCloseDocument: (payload: unknown) => this.record('host.lspCloseDocument', payload, Promise.resolve(ok({ closed: true as const }))),
+    lspHoverDocument: (payload: unknown) => this.record('host.lspHoverDocument', payload, Promise.resolve(ok({ hover: null }))),
   }
 
   // The archive-set field defaults at the binding below so list stubs keep

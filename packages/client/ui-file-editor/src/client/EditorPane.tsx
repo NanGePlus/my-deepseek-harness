@@ -195,9 +195,9 @@ export function EditorPane({
                 dark={dark}
                 t={t}
                 onBufferChange={onBufferChange}
-                onHover={onHover === undefined
-                  ? undefined
-                  : (path, line, character, signal) => onHover(path, line, character, signal)}
+                {...(onHover === undefined
+                  ? {}
+                  : { onHover: (path, line, character, signal) => onHover(path, line, character, signal) })}
               />
             )}
             {active?.kind === 'text' && !isMarkdownLanguage(active.language) && (
@@ -206,9 +206,9 @@ export function EditorPane({
                 value={active.buffer}
                 language={active.language}
                 diagnostics={diagnosticsByPath?.get(active.path)}
-                onHover={onHover === undefined
-                  ? undefined
-                  : (line, character, signal) => onHover(active.path, line, character, signal)}
+                {...(onHover === undefined
+                  ? {}
+                  : { onHover: (line, character, signal) => onHover(active.path, line, character, signal) })}
                 ariaLabel={t('editor.buffer.label', {
                   name: active.name,
                   language: languageLabel(active.language),

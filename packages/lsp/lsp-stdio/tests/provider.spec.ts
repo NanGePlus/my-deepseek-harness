@@ -218,7 +218,6 @@ describe('lsp-stdio provider resolution', () => {
       filePath: `${process.cwd()}/a.py`,
       text: 'x = 1\n',
       version: 1,
-      languageId: 'python',
     })).rejects.toThrow(expect.objectContaining({ code: 'LSP_UNAVAILABLE' }))
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('skipping optional server "missing"'))
     warn.mockRestore()

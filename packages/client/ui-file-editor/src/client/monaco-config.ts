@@ -20,7 +20,10 @@ function disableWorkerLanguageFeatures(
   flags: Partial<Record<string, boolean>>,
 ): void {
   if (defaults === undefined) return
-  defaults.setModeConfiguration({ ...defaults.modeConfiguration, ...flags })
+  defaults.setModeConfiguration({
+    ...defaults.modeConfiguration,
+    ...Object.fromEntries(Object.entries(flags).filter((entry): entry is [string, boolean] => entry[1] !== undefined)),
+  })
 }
 
 /**

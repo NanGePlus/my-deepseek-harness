@@ -186,6 +186,15 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       watchPath() {
         return (async function* () {})()
       },
+      async lspSyncDocument(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { diagnostics: [] } } }
+      },
+      async lspCloseDocument(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { closed: true as const } } }
+      },
+      async lspHoverDocument(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { hover: null } } }
+      },
     },
     workspace: {
       async list(request) {

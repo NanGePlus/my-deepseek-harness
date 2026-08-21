@@ -27,7 +27,7 @@ describe('ensureLspHoverProviders', () => {
     ensureLspHoverProviders(monaco)
 
     expect(registerHoverProvider).toHaveBeenCalledTimes(MONACO_HOVER_LANGUAGE_IDS.length)
-    expect(registerHoverProvider.mock.calls.map(call => call[0])).toEqual(MONACO_HOVER_LANGUAGE_IDS)
+    expect(registerHoverProvider.mock.calls.map(call => (call as unknown as [string, unknown])[0])).toEqual(MONACO_HOVER_LANGUAGE_IDS)
   })
 
   it('delegates hover requests to the active handler', async () => {

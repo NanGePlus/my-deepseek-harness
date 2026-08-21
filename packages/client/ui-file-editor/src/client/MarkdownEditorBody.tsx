@@ -120,9 +120,9 @@ export function MarkdownEditorBody({
               theme: themeLabel,
             })}
             dark={dark}
-            onHover={onHover === undefined
-              ? undefined
-              : (line, character, signal) => onHover(tab.path, line, character, signal)}
+            {...(onHover === undefined
+              ? {}
+              : { onHover: (line, character, signal) => onHover(tab.path, line, character, signal) })}
             onChange={(value) => { onBufferChange(tab.path, value) }}
           />
         )}

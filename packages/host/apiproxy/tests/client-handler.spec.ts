@@ -86,6 +86,9 @@ function scriptedApi(overrides: {
       createDirectory: r => ok(r, { path: '/t/new' }),
       openPath: r => ok(r, { opened: true as const }),
       watchPath: () => (async function* () {})(),
+      lspSyncDocument: r => ok(r, { diagnostics: [] }),
+      lspCloseDocument: r => ok(r, { closed: true as const }),
+      lspHoverDocument: r => ok(r, { hover: null }),
       ...overrides.host,
     },
     workspace: {

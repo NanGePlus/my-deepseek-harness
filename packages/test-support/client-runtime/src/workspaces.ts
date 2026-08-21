@@ -4,6 +4,7 @@ import type {
   DirectoryListing, GitStatusListing, IWorkspaces, SessionId, SnapshotStore,
   WorkspaceEntriesListing, WorkspaceId, WorkspaceListState, WorkspaceView,
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
+  LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { workspaceListState } from './fixtures.ts'
 import type { Stabilizer } from './fixtures.ts'
@@ -289,6 +290,77 @@ export class TestWorkspaces implements IWorkspaces {
   ): void {
     this.calls.push({ method: 'watchPath', args: [workspaceId, path, onChanged, signal] })
     this.stubs.get('watchPath')?.(workspaceId, path, onChanged, signal)
+  }
+
+  /**
+   * Sync editor buffer to the host LSP (recorded). The default returns no diagnostics.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param text - current UTF-8 buffer.
+   * @param version - monotonic editor version.
+   * @param signal - optional abort signal.
+   * @returns normalized diagnostics for the path.
+   */
+  async lspSyncDocument(
+    workspaceId: WorkspaceId,
+    path: string,
+    text: string,
+    version: number,
+    signal?: AbortSignal,
+  ): Promise<LspSyncDocumentResult> {
+    this.calls.push({ method: 'lspSyncDocument', args: [workspaceId, path, text, version, signal] })
+    const stub = this.stubs.get('lspSyncDocument')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, path, text, version, signal) as Promise<LspSyncDocumentResult>)
+    }
+    return { diagnostics: [] }
+  }
+
+  /**
+   * Close an editor document in the host LSP (recorded). The default reports closed.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param signal - optional abort signal.
+   */
+  async lspCloseDocument(
+    workspaceId: WorkspaceId,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<LspCloseDocumentResult> {
+    this.calls.push({ method: 'lspCloseDocument', args: [workspaceId, path, signal] })
+    const stub = this.stubs.get('lspCloseDocument')
+    if (stub !== undefined) return await (stub(workspaceId, path, signal) as Promise<LspCloseDocumentResult>)
+    return { closed: true as const }
+  }
+
+  /**
+   * Fetch hover text from the host LSP (recorded). The default returns no hover.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute file path.
+   * @param text - current UTF-8 buffer.
+   * @param version - monotonic editor version.
+   * @param line - zero-based line index.
+   * @param character - zero-based character index.
+   * @param signal - optional abort signal.
+   */
+  async lspHoverDocument(
+    workspaceId: WorkspaceId,
+    path: string,
+    text: string,
+    version: number,
+    line: number,
+    character: number,
+    signal?: AbortSignal,
+  ): Promise<LspHoverDocumentResult> {
+    this.calls.push({
+      method: 'lspHoverDocument',
+      args: [workspaceId, path, text, version, line, character, signal],
+    })
+    const stub = this.stubs.get('lspHoverDocument')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, path, text, version, line, character, signal) as Promise<LspHoverDocumentResult>)
+    }
+    return { hover: null }
   }
 
   /**
