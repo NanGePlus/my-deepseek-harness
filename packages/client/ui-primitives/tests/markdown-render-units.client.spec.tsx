@@ -20,6 +20,7 @@ function makeContext(): MarkdownRenderContext {
   return {
     streaming: false,
     codeLabels: undefined,
+    mermaidLabels: undefined,
     fileMentions: undefined,
     targets: createReferenceTargets(),
     footnoteOrder: [],
