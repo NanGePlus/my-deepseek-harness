@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
+import { useScrollRevealScrollbar } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, InputZone } from '../contract/slots.ts'
 import { HeroGlow, HeroShell, WorkspaceChip, workspaceLabel } from './EmptyHero.tsx'
@@ -37,6 +38,7 @@ export function ConversationRoot({
   // it grows. Callback ref, not an effect; stable identity prevents observer
   // churn while the first blank session fills the resident body outlet.
   const seatObserver = useRef<ResizeObserver | null>(null)
+  const { ref: scrollRevealRef, active: scrollActive } = useScrollRevealScrollbar()
   const seatResizeRef = useCallback((seat: HTMLDivElement | null): void => {
     seatObserver.current?.disconnect()
     seatObserver.current = null
@@ -186,7 +188,11 @@ export function ConversationRoot({
   return (
     <div className={css.root} data-phase={phase}>
       {renderSlot('conversation.session.header', {})}
-      <div className={css.scrollBody} data-conversation-scroll="">
+      <div
+        ref={scrollRevealRef}
+        className={clsx(css.scrollBody, scrollActive && css.scrollBodyScrollActive)}
+        data-conversation-scroll=""
+      >
         {renderSlot('conversation.session', {})}
         {composerSeat}
       </div>

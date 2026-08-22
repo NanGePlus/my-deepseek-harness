@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import clsx from 'clsx'
 import {
-  Button, IconCloseOutline16, IconEditOutline16, IconFolderClose16, IconPlusOutline16,
+  Button, IconCloseFill14, IconEditOutline16, IconFolderClose16, IconPlusOutline16,
   IconSearchOutline16, IconTrashOutline16, IconChevronLeftOutline14, Input, Modal, Tooltip,
+  useScrollRevealScrollbar,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
@@ -195,7 +196,12 @@ export function FileTreePane({
   const gitStatusRef = useRef(gitStatus)
   gitStatusRef.current = gitStatus
   const gitAbort = useRef<AbortController | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const { ref: scrollRevealRef, active: scrollActive } = useScrollRevealScrollbar()
+  const treeScrollRef = useCallback((element: HTMLDivElement | null): void => {
+    scrollRef.current = element
+    scrollRevealRef(element)
+  }, [scrollRevealRef])
   const composingRef = useRef(false)
 
   const selectedEntry = useMemo(() => {
@@ -589,7 +595,7 @@ export function FileTreePane({
       <div className={css.filterRow}>
         <div className={css.filterField}>
           <Input
-            icon={<IconSearchOutline16 size={16} />}
+            icon={<IconSearchOutline16 size={14} />}
             className={css.filterInput as string}
             value={filter}
             placeholder={t('editor.tree.filter.placeholder')}
@@ -600,11 +606,11 @@ export function FileTreePane({
             <Tooltip label={t('editor.tree.filter.clear')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
               <button
                 type="button"
-                className={clsx(iconCss.iconButton, iconCss.iconButtonSm, css.filterIconClear)}
+                className={clsx(iconCss.disclosureButton, css.filterIconClear)}
                 aria-label={t('editor.tree.filter.clear')}
                 onClick={clearFilter}
               >
-                <IconCloseOutline16 size={16} />
+                <IconCloseFill14 size={12} />
               </button>
             </Tooltip>
           )}
@@ -676,8 +682,8 @@ export function FileTreePane({
         </Tooltip>
       </div>
       <div
-        className={css.treeScroll}
-        ref={scrollRef}
+        className={clsx(css.treeScroll, scrollActive && css.treeScrollActive)}
+        ref={treeScrollRef}
         data-tree-scroll="true"
         data-empty={showTreeEmpty || undefined}
       >
