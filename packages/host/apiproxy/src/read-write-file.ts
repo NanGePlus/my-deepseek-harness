@@ -207,11 +207,24 @@ export async function writeWorkspaceFile(
   signal?: AbortSignal,
   internals: ReadWriteFileInternals = {},
 ): Promise<FileWriteResult> {
+  const statFn = internals.stat ?? stat
   const writeFn = internals.writeFile ?? writeFile
   const target = resolve(path)
   if (!pathWithinWorkspace(workspaceRoot, target)) {
     throw new WorkspacePathOutOfBoundsError(workspaceRoot, target)
   }
+  try {
+    const info = await statFn(target)
+    if (info.isDirectory()) {
+      throw new WorkspaceFileWriteFailedError(target, 'a directory already exists at this path')
+    }
+  } catch (error: unknown) {
+    if (error instanceof WorkspaceFileWriteFailedError) throw error
+    if (!isEnoent(error)) {
+      throw new WorkspaceFileWriteFailedError(target, error instanceof Error ? error.message : String(error))
+    }
+  }
+  signal?.throwIfAborted()
   try {
     await writeFn(target, text, { encoding: 'utf8', signal })
     return { path: target }

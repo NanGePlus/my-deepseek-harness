@@ -208,6 +208,18 @@ describe('createWorkspaceDirectory', () => {
     )
   })
 
+  it('maps EEXIST on a file path to WorkspaceDirectoryCreateFailedError', async () => {
+    const mkdir = vi.fn(async () => {
+      const error = new Error('exists') as NodeJS.ErrnoException
+      error.code = 'EEXIST'
+      throw error
+    }) as NonNullable<WorkspacePathMutationInternals['mkdir']>
+    const stat = vi.fn(async () => ({ isDirectory: () => false })) as NonNullable<WorkspacePathMutationInternals['stat']>
+    await expect(createWorkspaceDirectory('/w', '/w', 'src', undefined, { mkdir, stat })).rejects.toMatchObject({
+      message: expect.stringContaining('file already exists'),
+    })
+  })
+
   it('creates a directory when absent', async () => {
     const mkdir = vi.fn(async () => undefined) as NonNullable<WorkspacePathMutationInternals['mkdir']>
     await expect(createWorkspaceDirectory('/w', '/w', 'src', undefined, { mkdir })).resolves.toEqual({

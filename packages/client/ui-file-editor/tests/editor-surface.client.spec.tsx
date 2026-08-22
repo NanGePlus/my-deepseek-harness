@@ -1234,6 +1234,21 @@ describe('EditorSurface file operations', () => {
     return within(bar as HTMLElement).getByRole('button', { name: label })
   }
 
+  function openTreeContextMenu(name: string, options: { directory?: boolean } = {}): void {
+    const tree = screen.getByRole('tree', { name: 'alpha' })
+    const matches = within(tree).getAllByText(name)
+    const row = (options.directory
+      ? matches
+        .map(node => node.closest('[role="treeitem"]'))
+        .find(item => item?.hasAttribute('aria-expanded'))
+      : matches[0]?.closest('[role="treeitem"]'))!
+    fireEvent.contextMenu(row)
+  }
+
+  async function chooseTreeMenuItem(label: string): Promise<void> {
+    fireEvent.click(await waitFor(() => screen.getByRole('menuitem', { name: label })))
+  }
+
   it('toolbar-default: shows enabled new-file and new-folder toolbar controls', async () => {
     mount()
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
@@ -1241,52 +1256,44 @@ describe('EditorSurface file operations', () => {
     expect(toolbarButton('新建文件夹').getAttribute('aria-disabled')).toBeNull()
   })
 
-  it('toolbar-disabled: keeps rename and delete disabled until a tree row is selected', async () => {
+  it('toolbar-header: shows the bound Workspace title beside tree actions', async () => {
     mount()
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
-    expect(toolbarButton('重命名').getAttribute('aria-disabled')).toBe('true')
-    expect(toolbarButton('删除').getAttribute('aria-disabled')).toBe('true')
-    await selectRow('README.md')
-    expect(toolbarButton('重命名').getAttribute('aria-disabled')).toBeNull()
-    expect(toolbarButton('删除').getAttribute('aria-disabled')).toBeNull()
+    const bar = document.querySelector('[data-file-tree-toolbar="true"]')
+    expect(bar).not.toBeNull()
+    expect(within(bar as HTMLElement).getByText('alpha')).toBeTruthy()
+    expect(toolbarButton('刷新').getAttribute('aria-disabled')).toBeNull()
+    expect(within(bar as HTMLElement).queryByRole('button', { name: '重命名' })).toBeNull()
+    expect(within(bar as HTMLElement).queryByRole('button', { name: '删除' })).toBeNull()
   })
 
-  it('creates a folder in the bound Workspace and reloads the parent layer', async () => {
-    let rootCalls = 0
-    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
-      if (path === ROOT) {
-        rootCalls += 1
-        return rootCalls === 1
-          ? listingFor(path)
-          : {
-            path,
-            entries: [...DEFAULT_ROOT, entry('notes', true)],
-            truncated: false,
-          }
-      }
-      return listingFor(path)
-    })
-    const b = mount({ list: listWorkspaceEntries })
+  it('tree-context-menu: files get rename/delete; folders also get create actions', async () => {
+    mount()
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
-    fireEvent.click(toolbarButton('新建文件夹'))
-    const folderDialog = await waitFor(() => screen.getByRole('dialog', { name: '新建文件夹' }))
-    fireEvent.change(within(folderDialog).getByLabelText('名称'), { target: { value: 'notes' } })
-    fireEvent.click(within(folderDialog).getByRole('button', { name: '创建' }))
-    await waitFor(() => { expect(screen.getByText('notes')).toBeTruthy() })
-    expect(b.createWorkspaceDirectory).toHaveBeenCalledWith(WID, ROOT, 'notes')
-    expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length).toBeGreaterThan(1)
+    openTreeContextMenu('README.md')
+    expect(await waitFor(() => screen.getByRole('menuitem', { name: '重命名' }))).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '删除' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: '新建文件' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: '新建子文件夹' })).toBeNull()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => { expect(screen.queryByRole('menuitem', { name: '重命名' })).toBeNull() })
+    openTreeContextMenu('src')
+    expect(await waitFor(() => screen.getByRole('menuitem', { name: '新建文件' }))).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '新建子文件夹' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '重命名' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '删除' })).toBeTruthy()
   })
 
-  it('creates a file, opens it for editing, and reloads the parent layer', async () => {
-    let rootCalls = 0
+  it('creates a file inside a folder from the tree context menu', async () => {
+    let srcCalls = 0
     const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
-      if (path === ROOT) {
-        rootCalls += 1
-        return rootCalls === 1
+      if (path === `${ROOT}/src`) {
+        srcCalls += 1
+        return srcCalls === 1
           ? listingFor(path)
           : {
             path,
-            entries: [...DEFAULT_ROOT, entry('draft.ts', false)],
+            entries: [...SRC_CHILDREN, entry('draft.ts', false)],
             truncated: false,
           }
       }
@@ -1299,6 +1306,95 @@ describe('EditorSurface file operations', () => {
       return defaultReadFile(_id, path, kind)
     })
     const b = mount({ list: listWorkspaceEntries, read: readFile })
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    openTreeContextMenu('src')
+    await chooseTreeMenuItem('新建文件')
+    const fileDialog = await waitFor(() => screen.getByRole('dialog', { name: '新建文件' }))
+    fireEvent.change(within(fileDialog).getByLabelText('名称'), { target: { value: 'draft.ts' } })
+    fireEvent.click(within(fileDialog).getByRole('button', { name: '创建' }))
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /draft\.ts/ })).toBeTruthy() })
+    expect(b.writeFile).toHaveBeenCalledWith(WID, `${ROOT}/src/draft.ts`, '')
+    expect(listWorkspaceEntries).toHaveBeenCalledWith(WID, `${ROOT}/src`, expect.anything())
+  })
+
+  it('creates a subfolder inside a folder from the tree context menu', async () => {
+    let createdInSrc = false
+    const createWorkspaceDirectory = vi.fn(async (_id: WorkspaceId, parent: string, name: string) => {
+      if (parent === `${ROOT}/src`) createdInSrc = true
+      return { path: `${parent}/${name}` }
+    })
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === `${ROOT}/src` && createdInSrc) {
+        return {
+          path,
+          entries: [...SRC_CHILDREN, entry('components', true)],
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    const b = mount({ list: listWorkspaceEntries, createWorkspaceDirectory })
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    openTreeContextMenu('src')
+    await chooseTreeMenuItem('新建子文件夹')
+    const folderDialog = await waitFor(() => screen.getByRole('dialog', { name: '新建文件夹' }))
+    fireEvent.change(within(folderDialog).getByLabelText('名称'), { target: { value: 'components' } })
+    fireEvent.click(within(folderDialog).getByRole('button', { name: '创建' }))
+    await waitFor(() => { expect(screen.getByText('components')).toBeTruthy() })
+    expect(b.createWorkspaceDirectory).toHaveBeenCalledWith(WID, `${ROOT}/src`, 'components')
+    expect(listWorkspaceEntries).toHaveBeenCalledWith(WID, `${ROOT}/src`, expect.anything())
+  })
+
+  it('creates a folder in the bound Workspace and reloads the parent layer', async () => {
+    let created = false
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === ROOT && created) {
+        return {
+          path,
+          entries: [...DEFAULT_ROOT, entry('notes', true)],
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    const createWorkspaceDirectory = vi.fn(async (_id: WorkspaceId, parent: string, name: string) => {
+      created = true
+      return { path: `${parent}/${name}` }
+    })
+    const b = mount({ list: listWorkspaceEntries, createWorkspaceDirectory })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(toolbarButton('新建文件夹'))
+    const folderDialog = await waitFor(() => screen.getByRole('dialog', { name: '新建文件夹' }))
+    fireEvent.change(within(folderDialog).getByLabelText('名称'), { target: { value: 'notes' } })
+    fireEvent.click(within(folderDialog).getByRole('button', { name: '创建' }))
+    await waitFor(() => { expect(screen.getByText('notes')).toBeTruthy() })
+    expect(b.createWorkspaceDirectory).toHaveBeenCalledWith(WID, ROOT, 'notes')
+    expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length).toBeGreaterThan(1)
+  })
+
+  it('creates a file, opens it for editing, and reloads the parent layer', async () => {
+    let created = false
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === ROOT && created) {
+        return {
+          path,
+          entries: [...DEFAULT_ROOT, entry('draft.ts', false)],
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    const readFile = vi.fn(async (_id: WorkspaceId, path: string, kind: FileReadKind) => {
+      if (path.endsWith('draft.ts') && kind === 'text') {
+        return { kind: 'text' as const, path, text: '' }
+      }
+      return defaultReadFile(_id, path, kind)
+    })
+    const writeFile = vi.fn(async (_id: WorkspaceId, path: string, _text: string) => {
+      created = true
+      return { path }
+    })
+    const b = mount({ list: listWorkspaceEntries, read: readFile, write: writeFile })
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
     fireEvent.click(toolbarButton('新建文件'))
     const fileDialog = await waitFor(() => screen.getByRole('dialog', { name: '新建文件' }))
@@ -1315,12 +1411,43 @@ describe('EditorSurface file operations', () => {
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
     fireEvent.click(within(screen.getByRole('tree', { name: 'alpha' })).getByText('README.md').closest('[role="treeitem"]')!)
     await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
-    fireEvent.click(toolbarButton('重命名'))
+    openTreeContextMenu('README.md')
+    await chooseTreeMenuItem('重命名')
     const renameDialog = await waitFor(() => screen.getByRole('dialog', { name: '重命名' }))
     fireEvent.change(within(renameDialog).getByLabelText('名称'), { target: { value: 'GUIDE.md' } })
     fireEvent.click(within(renameDialog).getByRole('button', { name: '重命名' }))
     await waitFor(() => { expect(screen.getByRole('tab', { name: /GUIDE\.md/ })).toBeTruthy() })
     expect(b.renamePath).toHaveBeenCalledWith(WID, `${ROOT}/README.md`, 'GUIDE.md')
+    expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length).toBeGreaterThan(1)
+  })
+
+  it('renames a folder from the tree context menu and reloads the parent layer', async () => {
+    let renamed = false
+    const renamePath = vi.fn(async (_id: WorkspaceId, path: string, newName: string) => {
+      renamed = true
+      return { path: path.replace(/[^/]+$/, newName) }
+    })
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === ROOT && renamed) {
+        return {
+          path,
+          entries: DEFAULT_ROOT.map(item => (
+            item.name === 'src' ? entry('lib', true) : item
+          )),
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    const b = mount({ list: listWorkspaceEntries, renamePath })
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    openTreeContextMenu('src')
+    await chooseTreeMenuItem('重命名')
+    const renameDialog = await waitFor(() => screen.getByRole('dialog', { name: '重命名' }))
+    fireEvent.change(within(renameDialog).getByLabelText('名称'), { target: { value: 'lib' } })
+    fireEvent.click(within(renameDialog).getByRole('button', { name: '重命名' }))
+    await waitFor(() => { expect(screen.getByText('lib')).toBeTruthy() })
+    expect(b.renamePath).toHaveBeenCalledWith(WID, `${ROOT}/src`, 'lib')
     expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length).toBeGreaterThan(1)
   })
 
@@ -1335,30 +1462,238 @@ describe('EditorSurface file operations', () => {
     const b = mount({ renamePath })
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
     await selectRow('untracked.ts')
-    fireEvent.click(toolbarButton('重命名'))
+    openTreeContextMenu('untracked.ts')
+    await chooseTreeMenuItem('重命名')
     const renameDialog = await waitFor(() => screen.getByRole('dialog', { name: '重命名' }))
     fireEvent.change(within(renameDialog).getByLabelText('名称'), { target: { value: 'README.md' } })
     fireEvent.click(within(renameDialog).getByRole('button', { name: '重命名' }))
-    await waitFor(() => { expect(screen.getByText('已存在同名路径')).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByText('已存在同名文件')).toBeTruthy() })
     expect(b.renamePath).not.toHaveBeenCalled()
   })
 
-  it('delete-confirm: requires explicit confirmation before deleting', async () => {
-    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => listingFor(path))
-    const b = mount({ list: listWorkspaceEntries })
+  it('new-file-after-subfolder: shows folder conflict copy when the name is taken by a directory', async () => {
+    const testPath = `${ROOT}/test`
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === ROOT) {
+        return {
+          path,
+          entries: [...DEFAULT_ROOT, entry('test', true)],
+          truncated: false,
+        }
+      }
+      if (path === testPath) {
+        return {
+          path,
+          entries: [entry('test01', true)],
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    const writeFile = vi.fn(async () => ({ path: `${testPath}/test01` }))
+    mount({ list: listWorkspaceEntries, write: writeFile })
+    await waitFor(() => { expect(screen.getByText('test')).toBeTruthy() })
+    openTreeContextMenu('test', { directory: true })
+    await chooseTreeMenuItem('新建文件')
+    const fileDialog = await waitFor(() => screen.getByRole('dialog', { name: '新建文件' }))
+    fireEvent.change(within(fileDialog).getByLabelText('名称'), { target: { value: 'test01' } })
+    fireEvent.click(within(fileDialog).getByRole('button', { name: '创建' }))
+    await waitFor(() => {
+      expect(screen.getByText('已存在同名文件夹')).toBeTruthy()
+    })
+    expect(writeFile).not.toHaveBeenCalled()
+  })
+
+  it('delete-open-tab: keeps tree visible after deleting the active editor file', async () => {
+    let deleted = false
+    const deletePath = vi.fn(async (_id: WorkspaceId, path: string) => {
+      deleted = true
+      return { path }
+    })
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path !== ROOT) return listingFor(path)
+      if (deleted) {
+        await new Promise<void>((resolve) => { setTimeout(resolve, 30) })
+        return {
+          path,
+          entries: DEFAULT_ROOT.filter(entry => entry.name !== 'untracked.ts'),
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    mount({ list: listWorkspaceEntries, deletePath })
     await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
     await selectRow('untracked.ts')
-    fireEvent.click(toolbarButton('删除'))
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /untracked\.ts/ })).toBeTruthy() })
+    openTreeContextMenu('untracked.ts')
+    await chooseTreeMenuItem('删除')
+    fireEvent.click(within(await waitFor(() => screen.getByRole('dialog', { name: '删除' })))
+      .getByRole('button', { name: '删除' }))
+    const tree = () => screen.getByRole('tree', { name: 'alpha' })
+    await waitFor(() => {
+      expect(within(tree()).getByText('README.md')).toBeTruthy()
+      expect(within(tree()).queryByText('untracked.ts')).toBeNull()
+    })
+  })
+
+  it('delete-confirm: requires explicit confirmation before deleting', async () => {
+    let deleted = false
+    const deletePath = vi.fn(async (_id: WorkspaceId, path: string) => {
+      deleted = true
+      return { path }
+    })
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === ROOT && deleted) {
+        return {
+          path,
+          entries: DEFAULT_ROOT.filter(entry => entry.name !== 'untracked.ts'),
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    const b = mount({ list: listWorkspaceEntries, deletePath })
+    await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
+    await selectRow('untracked.ts')
+    openTreeContextMenu('untracked.ts')
+    await chooseTreeMenuItem('删除')
     const deleteDialog = await waitFor(() => screen.getByRole('dialog', { name: '删除' }))
     expect(b.deletePath).not.toHaveBeenCalled()
     fireEvent.click(within(deleteDialog).getByRole('button', { name: '取消' }))
     expect(b.deletePath).not.toHaveBeenCalled()
-    fireEvent.click(toolbarButton('删除'))
+    openTreeContextMenu('untracked.ts')
+    await chooseTreeMenuItem('删除')
     const confirmDialog = await waitFor(() => screen.getByRole('dialog', { name: '删除' }))
     fireEvent.click(within(confirmDialog).getByRole('button', { name: '删除' }))
-    await waitFor(() => { expect(screen.queryByText('untracked.ts')).toBeNull() })
+    const tree = () => screen.getByRole('tree', { name: 'alpha' })
+    await waitFor(() => {
+      expect(within(tree()).queryByText('untracked.ts')).toBeNull()
+      expect(within(tree()).getByText('README.md')).toBeTruthy()
+    })
     expect(b.deletePath).toHaveBeenCalledWith(WID, `${ROOT}/untracked.ts`)
     expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length).toBeGreaterThan(1)
+  })
+
+  it('deletes a folder from the tree context menu and reloads the parent layer', async () => {
+    let deleted = false
+    const deletePath = vi.fn(async (_id: WorkspaceId, path: string) => {
+      deleted = true
+      return { path }
+    })
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === ROOT && deleted) {
+        return {
+          path,
+          entries: DEFAULT_ROOT.filter(entry => entry.name !== 'src'),
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    const b = mount({ list: listWorkspaceEntries, deletePath })
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    openTreeContextMenu('src')
+    await chooseTreeMenuItem('删除')
+    fireEvent.click(within(await waitFor(() => screen.getByRole('dialog', { name: '删除' })))
+      .getByRole('button', { name: '删除' }))
+    const tree = () => screen.getByRole('tree', { name: 'alpha' })
+    await waitFor(() => {
+      expect(within(tree()).queryByText('src')).toBeNull()
+      expect(within(tree()).getByText('README.md')).toBeTruthy()
+    })
+    expect(b.deletePath).toHaveBeenCalledWith(WID, `${ROOT}/src`)
+    expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length).toBeGreaterThan(1)
+  })
+
+  it('delete-folder: closes open tabs under the deleted directory', async () => {
+    let deleted = false
+    const deletePath = vi.fn(async (_id: WorkspaceId, path: string) => {
+      deleted = true
+      return { path }
+    })
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === ROOT && deleted) {
+        return {
+          path,
+          entries: DEFAULT_ROOT.filter(entry => entry.name !== 'src'),
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    mount({ list: listWorkspaceEntries, deletePath })
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    await selectRow('src')
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    await selectRow('app.ts')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /app\.ts/ })).toBeTruthy() })
+    await selectRow('README.md')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
+    openTreeContextMenu('src')
+    await chooseTreeMenuItem('删除')
+    fireEvent.click(within(await waitFor(() => screen.getByRole('dialog', { name: '删除' })))
+      .getByRole('button', { name: '删除' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('tab', { name: /app\.ts/ })).toBeNull()
+      expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy()
+    })
+  })
+
+  it('delete-folder-recreate: does not resurrect cached children for a reused folder name', async () => {
+    const TEST03 = `${ROOT}/test03`
+    let test03Present = true
+    let test03HadChildren = true
+    const deletePath = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === TEST03) {
+        test03Present = false
+        test03HadChildren = false
+      }
+      return { path }
+    })
+    const createWorkspaceDirectory = vi.fn(async (_id: WorkspaceId, parent: string, name: string) => {
+      if (parent === ROOT && name === 'test03') test03Present = true
+      return { path: `${parent}/${name}` }
+    })
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === ROOT) {
+        const entries = DEFAULT_ROOT.filter(entry => entry.name !== 'src')
+        if (test03Present) entries.push(entry('test03', true))
+        return { path, entries, truncated: false }
+      }
+      if (path === TEST03) {
+        if (!test03Present || !test03HadChildren) {
+          return { path, entries: [], truncated: false }
+        }
+        return {
+          path,
+          entries: [
+            entry('test03.md', false),
+            { name: 'test03', path: `${TEST03}/test03`, isDirectory: false, hidden: false },
+          ],
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    mount({ list: listWorkspaceEntries, deletePath, createWorkspaceDirectory })
+    await waitFor(() => { expect(within(screen.getByRole('tree', { name: 'alpha' })).getAllByText('test03').length).toBeGreaterThan(0) })
+    await selectRow('test03')
+    await waitFor(() => { expect(screen.getByText('test03.md')).toBeTruthy() })
+    openTreeContextMenu('test03', { directory: true })
+    await chooseTreeMenuItem('删除')
+    fireEvent.click(within(await waitFor(() => screen.getByRole('dialog', { name: '删除' })))
+      .getByRole('button', { name: '删除' }))
+    await waitFor(() => { expect(screen.queryByText('test03.md')).toBeNull() })
+    fireEvent.click(toolbarButton('新建文件夹'))
+    const folderDialog = await waitFor(() => screen.getByRole('dialog', { name: '新建文件夹' }))
+    fireEvent.change(within(folderDialog).getByLabelText('名称'), { target: { value: 'test03' } })
+    fireEvent.click(within(folderDialog).getByRole('button', { name: '创建' }))
+    await waitFor(() => {
+      expect(within(screen.getByRole('tree', { name: 'alpha' })).getAllByText('test03')).toHaveLength(1)
+    })
+    await selectRow('test03')
+    await waitFor(() => { expect(screen.queryByText('test03.md')).toBeNull() })
   })
 
   it('delete-submitting: disables the confirm button while deletion is in flight', async () => {
@@ -1369,7 +1704,8 @@ describe('EditorSurface file operations', () => {
     mount({ deletePath })
     await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
     await selectRow('untracked.ts')
-    fireEvent.click(toolbarButton('删除'))
+    openTreeContextMenu('untracked.ts')
+    await chooseTreeMenuItem('删除')
     const deleteDialog = await waitFor(() => screen.getByRole('dialog', { name: '删除' }))
     const confirm = within(deleteDialog).getByRole<HTMLButtonElement>('button', { name: '删除' })
     fireEvent.click(confirm)
@@ -1385,7 +1721,8 @@ describe('EditorSurface file operations', () => {
     mount({ deletePath })
     await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
     await selectRow('untracked.ts')
-    fireEvent.click(toolbarButton('删除'))
+    openTreeContextMenu('untracked.ts')
+    await chooseTreeMenuItem('删除')
     const deleteDialog = await waitFor(() => screen.getByRole('dialog', { name: '删除' }))
     fireEvent.click(within(deleteDialog).getByRole('button', { name: '删除' }))
     await waitFor(() => { expect(screen.getByText('无法删除此路径')).toBeTruthy() })

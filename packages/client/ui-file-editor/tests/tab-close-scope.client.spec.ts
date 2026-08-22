@@ -5,6 +5,7 @@ import {
   pathsForTabCloseScope,
   survivePathAfterTabClose,
   tabCloseMenuState,
+  tabPathsAffectedByDelete,
 } from '../src/client/tab-close-scope.ts'
 
 const tabs: EditorTab[] = [
@@ -52,5 +53,17 @@ describe('tab close scope', () => {
       closeLeftDisabled: true,
       closeRightDisabled: true,
     })
+  })
+
+  it('tabPathsAffectedByDelete closes exact paths and directory descendants', () => {
+    const open = [
+      '/w/README.md',
+      '/w/src/app.ts',
+      '/w/src-old/legacy.ts',
+      '/w/src',
+    ] as const
+    expect(tabPathsAffectedByDelete('/w/README.md', open)).toEqual(['/w/README.md'])
+    expect(tabPathsAffectedByDelete('/w/src', open)).toEqual(['/w/src/app.ts', '/w/src'])
+    expect(tabPathsAffectedByDelete('/w/src/', open)).toEqual(['/w/src/app.ts', '/w/src'])
   })
 })

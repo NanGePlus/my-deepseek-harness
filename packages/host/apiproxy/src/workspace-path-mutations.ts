@@ -147,24 +147,32 @@ export async function renameWorkspacePath(
   signal?: AbortSignal,
   internals: WorkspacePathMutationInternals = {},
 ): Promise<PathMutationResult> {
-  const renameFn = internals.rename ?? rename
   const statFn = internals.stat ?? stat
+  const renameFn = internals.rename ?? rename
   const source = resolveWithinWorkspace(workspaceRoot, path)
   if (!isSinglePathSegment(newName)) {
     throw new WorkspacePathRenameFailedError(source, `"${newName}" is not a single path segment`)
   }
   const target = resolveWithinWorkspace(workspaceRoot, join(dirname(source), newName))
+  let sourceIsDirectory: boolean
   try {
-    await statFn(source)
+    sourceIsDirectory = (await statFn(source)).isDirectory()
   } catch (error: unknown) {
     if (isEnoent(error)) throw new WorkspacePathNotFoundError(source)
     throw new WorkspacePathRenameFailedError(source, messageOf(error))
   }
   try {
-    await statFn(target)
-    throw new WorkspaceDirectoryExistsError(target)
+    const targetStat = await statFn(target)
+    if (targetStat.isDirectory() === sourceIsDirectory) {
+      throw new WorkspaceDirectoryExistsError(target)
+    }
+    throw new WorkspacePathRenameFailedError(
+      source,
+      'a file and folder cannot share the same path',
+    )
   } catch (error: unknown) {
     if (error instanceof WorkspaceDirectoryExistsError) throw error
+    if (error instanceof WorkspacePathRenameFailedError) throw error
     if (!isEnoent(error)) throw new WorkspacePathRenameFailedError(source, messageOf(error))
   }
   signal?.throwIfAborted()
@@ -195,6 +203,7 @@ export async function createWorkspaceDirectory(
   internals: WorkspacePathMutationInternals = {},
 ): Promise<PathMutationResult> {
   const mkdirFn = internals.mkdir ?? mkdir
+  const statFn = internals.stat ?? stat
   const parent = resolveWithinWorkspace(workspaceRoot, path)
   if (!isSinglePathSegment(name)) {
     throw new WorkspaceDirectoryCreateFailedError(join(parent, name), `"${name}" is not a single path segment`)
@@ -206,7 +215,17 @@ export async function createWorkspaceDirectory(
     return { path: target }
   } catch (error: unknown) {
     signal?.throwIfAborted()
-    if (isEexist(error)) throw new WorkspaceDirectoryExistsError(target)
+    if (isEexist(error)) {
+      try {
+        const existing = await statFn(target)
+        if (existing.isDirectory()) throw new WorkspaceDirectoryExistsError(target)
+        throw new WorkspaceDirectoryCreateFailedError(target, 'a file already exists at this path')
+      } catch (statError: unknown) {
+        if (statError instanceof WorkspaceDirectoryExistsError) throw statError
+        if (statError instanceof WorkspaceDirectoryCreateFailedError) throw statError
+        throw new WorkspaceDirectoryExistsError(target)
+      }
+    }
     throw new WorkspaceDirectoryCreateFailedError(target, messageOf(error))
   }
 }

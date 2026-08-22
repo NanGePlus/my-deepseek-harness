@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkspaceEntry } from '@deepseek-ai/dsh-client-runtime/client'
 import {
-  directoryChainToFile, joinChildPath, parentDirectoryForCreate, siblingNameExists,
+  directoryChainToFile, isPathInDirectorySubtree, joinChildPath, parentDirectoryForCreate,
+  parentDirectoryOfEntry, siblingKindNameExists, siblingNameConflictKey,
 } from '../src/client/file-tree-parent.ts'
 
 const ROOT = '/w/alpha'
@@ -23,14 +24,42 @@ describe('file-tree-parent helpers', () => {
     expect(parentDirectoryForCreate(ROOT, entry('README.md', false))).toBe(ROOT)
   })
 
+  it('uses the parent directory that lists an entry as a direct child', () => {
+    expect(parentDirectoryOfEntry(ROOT, entry('README.md', false))).toBe(ROOT)
+    expect(parentDirectoryOfEntry(ROOT, entry('src', true))).toBe(ROOT)
+    expect(parentDirectoryOfEntry(ROOT, {
+      name: 'app.ts',
+      path: `${ROOT}/src/app.ts`,
+      isDirectory: false,
+      hidden: false,
+    })).toBe(`${ROOT}/src`)
+  })
+
+  it('detects paths inside a deleted directory subtree', () => {
+    expect(isPathInDirectorySubtree(`${ROOT}/test03`, `${ROOT}/test03`)).toBe(true)
+    expect(isPathInDirectorySubtree(`${ROOT}/test03`, `${ROOT}/test03/a.md`)).toBe(true)
+    expect(isPathInDirectorySubtree(`${ROOT}/test03`, `${ROOT}/test03-old/a.md`)).toBe(false)
+  })
+
   it('joins a parent directory and child segment', () => {
     expect(joinChildPath(`${ROOT}/src`, 'app.ts')).toBe(`${ROOT}/src/app.ts`)
   })
 
-  it('detects sibling name collisions', () => {
+  it('detects same-kind sibling name collisions only', () => {
     const siblings = [entry('README.md', false), entry('src', true)]
-    expect(siblingNameExists(siblings, 'README.md')).toBe(true)
-    expect(siblingNameExists(siblings, 'notes.ts')).toBe(false)
+    expect(siblingKindNameExists(siblings, 'README.md', false)).toBe(true)
+    expect(siblingKindNameExists(siblings, 'README.md', true)).toBe(false)
+    expect(siblingKindNameExists(siblings, 'src', true)).toBe(true)
+    expect(siblingKindNameExists(siblings, 'src', false)).toBe(false)
+    expect(siblingKindNameExists(siblings, 'notes.ts', false)).toBe(false)
+  })
+
+  it('maps sibling conflicts to file or folder copy keys', () => {
+    const siblings = [entry('README.md', false), entry('src', true)]
+    expect(siblingNameConflictKey(siblings, 'README.md', false)).toBe('editor.error.fileNameConflict')
+    expect(siblingNameConflictKey(siblings, 'src', true)).toBe('editor.error.folderNameConflict')
+    expect(siblingNameConflictKey(siblings, 'src', false)).toBe('editor.error.folderNameConflict')
+    expect(siblingNameConflictKey(siblings, 'README.md', true)).toBe('editor.error.fileNameConflict')
   })
 
   it('lists workspace-root and intermediate directories for a nested file', () => {

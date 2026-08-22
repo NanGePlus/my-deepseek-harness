@@ -73,6 +73,20 @@ export interface TabCloseMenuState {
 }
 
 /**
+ * Open tab paths removed when a tree path is deleted.
+ * A deleted directory closes every tab under that directory prefix.
+ * @param deletedPath - Host-absolute deleted file or directory path.
+ * @param tabPaths - open tab paths.
+ */
+export function tabPathsAffectedByDelete(
+  deletedPath: string,
+  tabPaths: readonly string[],
+): readonly string[] {
+  const normalized = deletedPath.replace(/[/\\]+$/, '')
+  return tabPaths.filter(path => path === normalized || path.startsWith(`${normalized}/`))
+}
+
+/**
  * Disabled flags for the tab context menu anchored on one path.
  * @param tabs - open tabs in display order.
  * @param anchorPath - right-clicked tab path.

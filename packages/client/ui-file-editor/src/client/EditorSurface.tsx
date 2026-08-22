@@ -23,6 +23,7 @@ import {
   type TabCloseScope,
   pathsForTabCloseScope,
   survivePathAfterTabClose,
+  tabPathsAffectedByDelete,
 } from './tab-close-scope.ts'
 import css from './EditorSurface.module.css'
 import dialogCss from './FileTreeDialogs.module.css'
@@ -627,14 +628,21 @@ export function EditorSurface({
   }, [saveActive])
 
   const handlePathDeleted = useCallback((path: string) => {
+    const affected = tabPathsAffectedByDelete(path, tabs.map(tab => tab.path))
     setLspDiagnostics((prev) => {
-      if (!prev.has(path)) return prev
-      const next = new Map(prev)
-      next.delete(path)
-      return next
+      let next: Map<string, HostLspDiagnostic[]> | undefined
+      for (const tabPath of affected) {
+        if (!prev.has(tabPath)) continue
+        next ??= new Map(prev)
+        next.delete(tabPath)
+      }
+      return next ?? prev
     })
-    if (tabs.some(tab => tab.path === path)) editorActions?.closeTab(path)
-  }, [tabs, editorActions])
+    for (const tabPath of affected) {
+      closeLsp(tabPath)
+      editorActions?.closeTab(tabPath)
+    }
+  }, [tabs, editorActions, closeLsp])
 
   const handlePathRenamed = useCallback((oldPath: string, newPath: string, newName: string) => {
     setLspDiagnostics((prev) => {

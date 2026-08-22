@@ -119,6 +119,15 @@ describe('writeWorkspaceFile', () => {
     await expect(writeWorkspaceFile(root, file, 'hello')).resolves.toEqual({ path: file })
     expect(await readWorkspaceFile(root, file, 'text')).toEqual({ kind: 'text', path: file, text: 'hello' })
   })
+
+  it('rejects writes to an existing directory path', async () => {
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-write-file-')))
+    const dir = join(root, 'notes')
+    mkdirSync(dir)
+    await expect(writeWorkspaceFile(root, dir, 'hello')).rejects.toMatchObject({
+      message: expect.stringContaining('directory already exists'),
+    })
+  })
 })
 
 describe('readWorkspaceFile error classes', () => {
