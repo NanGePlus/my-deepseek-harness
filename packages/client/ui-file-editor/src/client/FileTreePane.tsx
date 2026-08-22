@@ -177,7 +177,7 @@ function isNameConflict(error: unknown): boolean {
  */
 function crossKindPathError(
   error: unknown,
-  t: TranslateNS,
+  t: TranslateNS<'fileEditor'>,
   kind: NameDialogKind,
 ): string | null {
   if (!(error instanceof DirectoryBrowseError)) return null
@@ -626,11 +626,10 @@ export function FileTreePane({
     kind: NameDialogKind,
     options: { entry?: WorkspaceEntry; createParent?: WorkspaceEntry } = {},
   ): void => {
-    setNameDialog({
-      kind,
-      entry: options.entry,
-      createParent: options.createParent,
-    })
+    const dialog: NameDialogState = { kind }
+    if (options.entry !== undefined) dialog.entry = options.entry
+    if (options.createParent !== undefined) dialog.createParent = options.createParent
+    setNameDialog(dialog)
     setNameDraft(options.entry?.name ?? '')
     setNameError(null)
     setOpError(null)

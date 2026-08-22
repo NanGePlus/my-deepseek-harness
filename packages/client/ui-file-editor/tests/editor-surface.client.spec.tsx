@@ -464,7 +464,7 @@ describe('EditorSurface file tree', () => {
     fireEvent.click(screen.getByRole('tab', { name: /postings\.bin/ }))
     await waitFor(() => { expect(within(tree).getByText('postings.bin')).toBeTruthy() })
     expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
-    const hooksRow = within(tree).getByText('hooks').closest('[role="treeitem"]')!
+    const hooksRow = within(tree).getByText('hooks').closest('[role="treeitem"]') as HTMLElement
     expect(within(hooksRow).queryByRole('status', { name: '加载中' })).toBeNull()
   })
 

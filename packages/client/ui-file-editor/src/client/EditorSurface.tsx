@@ -631,10 +631,10 @@ export function EditorSurface({
   const handlePathDeleted = useCallback((path: string) => {
     const affected = tabPathsAffectedByDelete(path, tabs.map(tab => tab.path))
     setLspDiagnostics((prev) => {
-      let next: Map<string, HostLspDiagnostic[]> | undefined
+      let next: Map<string, readonly HostLspDiagnostic[]> | undefined
       for (const tabPath of affected) {
         if (!prev.has(tabPath)) continue
-        next ??= new Map(prev)
+        if (next === undefined) next = new Map(prev)
         next.delete(tabPath)
       }
       return next ?? prev
@@ -652,11 +652,11 @@ export function EditorSurface({
       if (remapped !== tab.path) remappings.set(tab.path, remapped)
     }
     setLspDiagnostics((prev) => {
-      let next: Map<string, HostLspDiagnostic[]> | undefined
+      let next: Map<string, readonly HostLspDiagnostic[]> | undefined
       for (const [path, items] of prev) {
         const remapped = remapPathAfterRename(oldPath, newPath, path)
         if (remapped === path) continue
-        next ??= new Map(prev)
+        if (next === undefined) next = new Map(prev)
         next.delete(path)
         next.set(remapped, items)
       }
