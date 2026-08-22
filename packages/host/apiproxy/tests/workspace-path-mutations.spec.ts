@@ -214,7 +214,7 @@ describe('createWorkspaceDirectory', () => {
       error.code = 'EEXIST'
       throw error
     }) as NonNullable<WorkspacePathMutationInternals['mkdir']>
-    const stat = vi.fn(async () => ({ isDirectory: () => false })) as NonNullable<WorkspacePathMutationInternals['stat']>
+    const stat = vi.fn(fileStat) as NonNullable<WorkspacePathMutationInternals['stat']>
     await expect(createWorkspaceDirectory('/w', '/w', 'src', undefined, { mkdir, stat })).rejects.toMatchObject({
       message: expect.stringContaining('file already exists'),
     })
