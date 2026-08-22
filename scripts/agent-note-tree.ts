@@ -22,7 +22,7 @@ export const AGENT_NOTE_CLASSES = ['feature', 'bug-fix', 'simplification', 'arch
 const AGENT_NOTE_ARCHIVE = 'archived'
 
 /** Non-Agent Note Markdown allowed to sit directly at a lifecycle root. */
-const ROOT_ALLOWLIST = new Set(['AGENTS.md', 'CLAUDE.md'])
+const ROOT_ALLOWLIST = new Set(['AGENTS.md'])
 
 /** One Agent Note file, as discovered by the walker. */
 export interface AgentNote {

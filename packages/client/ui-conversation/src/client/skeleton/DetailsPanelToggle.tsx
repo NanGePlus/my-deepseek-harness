@@ -19,25 +19,26 @@ export type DetailsPanelToggleProps =
   & InjectFace<DetailsPanelToggleInjected>
 
 /**
- * Icon toggle in the session header utilities row.
+ * Labeled capsule toggle in the session header utilities row.
  * @param props - layout toggle action, open-state hook, and localized labels.
  */
 export function DetailsPanelToggle({
   toggleDetails, useDetailsOpen, t,
 }: DetailsPanelToggleProps) {
   const open = useDetailsOpen(open => open)
-  const label = open ? t('details.toggle.close') : t('details.toggle.open')
+  const actionLabel = open ? t('details.toggle.close') : t('details.toggle.open')
 
   return (
-    <Tooltip label={label} side="bottom" delayMs={500}>
+    <Tooltip label={actionLabel} side="bottom" delayMs={500}>
       <button
         type="button"
-        className={css.iconButton}
-        aria-label={label}
+        className={css.toolboxButton}
+        aria-label={actionLabel}
         aria-pressed={open}
         onClick={() => { toggleDetails() }}
       >
-        <IconPanelLeftOutline16 className={css.panelRight} size={16} />
+        <IconPanelLeftOutline16 className={css.panelRight} size={12} />
+        <span>{t('details.toggle.label')}</span>
       </button>
     </Tooltip>
   )

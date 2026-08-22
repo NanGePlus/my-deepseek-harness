@@ -6,46 +6,73 @@
   height: 100%;
   min-width: 0;
   background: var(--dsw-alias-bg-base);
-  --editor-tab-active-line: var(--dsw-alias-brand-primary);
 }
 
 .header {
-  display: flex;
-  align-items: stretch;
-  padding: 0;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-specific-sidebar-fill);
+  position: relative;
+  flex: none;
+  padding: 8px 16px 0 12px;
+  border-bottom: 1px solid transparent;
+  background: var(--dsw-alias-bg-base);
 }
 
+.header::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 1px;
+  left: 0;
+  z-index: 0;
+  height: 1px;
+  background: var(--dsw-alias-border-l2);
+  pointer-events: none;
+}
+
+/* Match conversation view tabs (ConversationRoot.module.css): left-aligned,
+   13/16 medium weight, business-blue selected state with a 2px bar. */
 .tabBar {
+  position: relative;
+  z-index: 1;
   display: flex;
-  flex: 1;
-  min-width: 0;
-  gap: 0;
+  gap: 36px;
+  padding-left: 8px;
 }
 
 .tab {
-  flex: 1;
+  position: relative;
+  flex: none;
   min-width: 0;
-  margin-bottom: -1px;
-  padding: 8px 12px 10px;
+  padding: 0 0 11px;
   border: none;
-  border-bottom: 2px solid transparent;
   background: transparent;
   font-family: var(--dsw-font-family);
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 600;
-  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow: hidden;
 }
 
+.tab::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 1px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: transparent;
+}
+
 .tabActive {
-  border-bottom-color: var(--editor-tab-active-line);
-  color: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.tabActive::after {
+  background: var(--dsw-alias-state-business-primary);
 }
 
 .body {
