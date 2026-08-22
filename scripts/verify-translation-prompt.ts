@@ -25,7 +25,6 @@ try {
   const document = read('docs/i18n/translation-prompt.md')
   const terminology = read('docs/i18n/terminology.md')
   const examplePaths = [
-    ['README.md', 'README.zh.md'],
     ['docs/development.md', 'docs/development.zh.md'],
     ['docs/i18n/README.md', 'docs/i18n/README.zh.md'],
     ['docs/i18n/translation-rules.md', 'docs/i18n/translation-rules.zh.md'],

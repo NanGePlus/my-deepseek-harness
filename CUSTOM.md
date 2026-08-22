@@ -83,6 +83,8 @@
 | `apps/web/` | Vite 构建含 Monaco workers / material icons 同步 | 2026-08 |
 | `CONTEXT.md`、`docs/adr/0001–0002`、`docs/prd/file-editor-v1.md` | 文件编辑器 V1 领域与 PRD | 2026-08 |
 | `AGENTS.md`（Agent skills 块） | Issue 跟踪 / triage / domain / wiki 工作流说明 | 2026-08 |
+| `scripts/translation-pairing.manifest.json`、`scripts/build-exe-for-python-sdk.ts`、`scripts/verify-translation-prompt.ts` | 根 README 排除 upstream 双语配对 / 部署文档列表 | 2026-08-22 |
+| `scripts/agent-note-tree.ts` | Agent Note 生命周期根 allowlist 仅保留 `AGENTS.md` | 2026-08-22 |
 
 ## 我故意不跟的上游行为
 | 点 | 原因 |
@@ -91,6 +93,8 @@
 | `custom/main` 长期领先 upstream `master` | 自研功能集成线，合并 upstream 时需手动 reconcile |
 | 文件树 listing 单层上限 1000 + dirent 扫描上限 10 000 | 防止 monorepo 大目录拖垮 Host / 浏览器 |
 | `readFile` 5 MB 硬上限 | 防止 minified bundle 等超大文件经 RPC + Monaco 卡死主线程 |
+| 根 `README.md` / `README_EN.md` 不走 upstream 双语配对（`README.zh.md`、`README.i18n.yaml` 已删） | fork 对外交付文档；中文主文档 + 独立英文版 |
+| 全仓库无 `CLAUDE.md` symlink（`packages/`、`examples/`、`vendor/`、`.agents/notes/implemented/` 已删） | 本 fork 以 Cursor 为主；规则真源为各目录 `AGENTS.md` |
 | CI：部分 push/PR 工作流已禁用（PR #25） | 定制开发阶段减少噪声；见 commit `a43e450eb9` |
 
 ## 合并官方记录
@@ -115,3 +119,5 @@
 | 2026-08-22 | 工具箱 Tab 条样式对齐对话区 Tab | `DetailsPanel.module.css`：左对齐、蓝色选中态、2px 下划线 |
 | 2026-08-22 | 新增 Cursor 规则 `.cursor/rules/custom-md-changelog.mdc` | 定制改动须同步更新 `CUSTOM.md` |
 | 2026-08-22 | 移除 `.claude/skills` symlink | 仅 Claude Code 用；本 fork 以 Cursor 为主，skills 见 `.agents/skills` |
+| 2026-08-22 | 删除根 `CLAUDE.md`、`README.i18n.yaml` | 根 README 改用 `README.md` + `README_EN.md`；配对 gate 排除见 `translation-pairing.manifest.json` |
+| 2026-08-22 | 删除全仓库 `CLAUDE.md` symlink | `examples/`、`packages/`、`vendor/`、`.agents/notes/implemented/`；与 `.claude/skills` 移除一致 |

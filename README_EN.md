@@ -1,59 +1,63 @@
-# dsh-web-file-editor
+# DSH AI Coding Workbench
 
-<p align="center">
-  <strong>A DeepSeek Harness distribution with a built-in Workspace file editor beside the chat</strong><br/>
-  <sub>File tree · Monaco multi-tab · Explicit save · Git badges · LSP · External change detection · Session guards</sub>
-</p>
+**A personal AI Coding workbench on DeepSeek Harness**
 
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-  <a href="https://github.com/NanGePlus/my-deepseek-harness"><img src="https://img.shields.io/badge/version-0.1.0--rc.5-orange" alt="version"></a>
-  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/upstream-DeepSeek%20Harness-0066FF" alt="upstream"></a>
-  <a href="https://github.com/NanGePlus/my-deepseek-harness/tree/custom/main"><img src="https://img.shields.io/badge/branch-custom%2Fmain-green" alt="branch"></a>
-</p>
+Agent · Workspace · Tools · Permissions · Toolbox · Resource manager · Extensible plugins
 
-<p align="center">
-  Fork of <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a> (<code>dsh</code>) · integration branch <code>custom/main</code> · Cordis plugin architecture<br/>
-  Details column tabs: <strong>Tool details | File editor</strong> — humans and the agent work on the same codebase in one Web UI
-</p>
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg) ![version](https://img.shields.io/badge/version-0.1.0--rc.5-orange) ![upstream](https://img.shields.io/badge/upstream-DeepSeek%20Harness-0066FF) ![branch](https://img.shields.io/badge/branch-custom%2Fmain-green)
 
-<p align="center">
-  <a href="README.md">中文</a> · 🌏 <strong>English</strong>
-</p>
+Custom fork of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) · integration branch [custom/main](https://github.com/NanGePlus/my-deepseek-harness/tree/custom/main)
+
+[中文](README.md) · 🌏 **English**
 
 ## 📑 Table of contents
 
-- [✨ Features](#-features)
+- [✨ Capabilities](#-capabilities)
 - [🚀 Install & run](#-install--run)
-- [🖼️ Feature tour](#-feature-tour)
-- [⌨️ Shortcuts](#-shortcuts)
-- [🏗️ Architecture](#-architecture)
-- [🛠️ Development](#-development)
-- [⚠️ Known limitations](#-known-limitations) · [🖥️ Platforms](#-platforms)
-- [🔗 Upstream & docs](#-upstream--docs)
+- [📖 Basic usage](#-basic-usage)
+- [🧩 Custom modules: Toolbox & Resource manager](#-custom-modules-toolbox--resource-manager)
+- [🏗️ Architecture & extension](#-architecture--extension)
+- [🛠️ Development & build](#-development--build)
+- [⚠️ Known limitations](#-known-limitations) · [🖥️ Platform support](#-platform-support)
+- [🔗 Docs & upstream](#-docs--upstream)
 
-## ✨ Features
 
-- **🤖 AI agent workspace** (from upstream): Web chat, workspace read/write, shell, subagents; DeepSeek and OpenAI-compatible endpoints
-- **🗂️ File tree**: bound to the active session workspace; lazy loading, virtual scroll, filename filter; Material file icons; read-only Git badges
-- **📝 Monaco multi-tab editing**: syntax highlighting, dirty state, **explicit save** (no auto-save); Markdown preview / source (source default)
-- **🖼️ Open policy**: editable text / read-only image preview / blocked known binaries
-- **📁 File ops**: create, rename, delete (with confirmation), context menu; VS Code–style batch tab close
-- **🔔 External changes**: reload disk or keep local buffer when the file changes on disk (`watchPath`)
-- **🛡️ Session guards**: save / discard / cancel when switching sessions or closing dirty tabs
-- **🔍 LSP**: diagnostics and hover in the editor
-- **🎨 Theming**: Monaco follows Harness light/dark; Mermaid and image lightbox in the conversation pane
-- **📐 Details column**: segmented tabs with Tool details; resizable; file links in chat open in the editor
 
-> 🔌 **Implementation**: Cordis client plugin `@deepseek-ai/dsh-client-ui-file-editor` injects `conversation.details.editor`; I/O goes through Host RPC (`apiproxy`). V1 extends `packages/` directly — see [CUSTOM.md](./CUSTOM.md).
+## ✨ Capabilities
+
+
+
+### Platform (inherited from DeepSeek Harness)
+
+
+| Capability | Description |
+| ---------- | ----------- |
+| **Web Agent chat** | Multiple sessions, streaming replies, visible context and token usage |
+| **Workspace** | Bind a local project directory; the agent reads, writes, and executes within it |
+| **Tool calling** | Files, shell, search, web, subagents, todo, plan, etc. |
+| **Permissions & approval** | Configurable confirmation for sensitive operations |
+| **Model configuration** | DeepSeek API; Settings supports OpenAI-compatible endpoints |
+| **Plugin architecture** | Cordis plugin tree; extend Host / Client capabilities as needed |
+
+
+
+
+### Customizations shipped in this fork
+
+
+| Module | Status | Notes |
+| ------ | ------ | ----- |
+| **Toolbox** | ✅ Shipped | Session header **icon + “Toolbox”** capsule to open/close; resizable |
+| **Resource manager** | ✅ Shipped | Resource manager inside the toolbox |
+| **Conversation preview** | ✅ Shipped | Mermaid charts with enlarged preview and zoom/pan; Markdown and images support zoom/pan viewing |
+| **More modules** | 🔜 Planned | Terminal, Git panel, built-in browser, etc. |
+
+
+
 
 ## 🚀 Install & run
 
-**Prerequisites**: Node.js `^22.19` or `>=24`; pnpm `11.7.0` (Corepack); DeepSeek API key (or OpenAI-compatible endpoint in Settings).
-
-> ⚠️ The public npm package `@deepseek-ai/dsh` does **not** include this file editor. Build from this fork, or use a custom tarball/registry release from the maintainer.
-
-### Option 1: From source (recommended)
+**Prerequisites**: Node.js `^22.19` or `>=24`; pnpm `11.7.0` (Corepack).
 
 ```sh
 git clone https://github.com/NanGePlus/my-deepseek-harness.git
@@ -63,111 +67,110 @@ git checkout custom/main
 corepack enable
 pnpm install
 pnpm run build
-pnpm dsh web          # or npm run web / npm start
+pnpm dsh web
 ```
 
-Open the printed URL (default `http://127.0.0.1:3080`). Configure a model under **Settings → Models**, choose a workspace, switch the details column to **File editor**.
+Open `http://127.0.0.1:3080` in your browser.
 
-<details>
-<summary><strong>API key via .env (optional)</strong></summary>
+**Update**:
 
 ```sh
-DEEPSEEK_API_KEY=sk-...
-# DEEPSEEK_BASE_URL=https://api.example.com/v1
+git pull && pnpm install && pnpm run build && pnpm dsh web
+# Hard-refresh the browser after Client plugin changes Cmd/Ctrl+Shift+R
 ```
 
-</details>
-
-<details>
-<summary><strong>Option 2: npx (after maintainer publishes to npm)</strong></summary>
-
-```sh
-npx @deepseek-ai/dsh@<custom-version> web
-```
-
-Offline delivery: `pnpm run build && pnpm run pack:dsh` → ship everything under `dist/npm/`.
-
-</details>
-
-<details>
-<summary><strong>FAQ</strong></summary>
 
 | Symptom | Fix |
-|---------|-----|
-| No “File editor” tab | On `custom/main`, ran `pnpm run build`, hard-refresh browser |
-| `npm run web` fails | Run `pnpm run build` first; install deps with pnpm, not npm |
-| “File too large” | 5 MB read cap per file |
-| `…` in tree | Directory listing capped at 1000 entries per level |
-| Official `npx @deepseek-ai/dsh web` has no editor | Use this fork’s build |
+| ------- | --- |
+| Official `npx @deepseek-ai/dsh web` lacks custom features | Build and run from this fork |
+| `npm run web` fails | Run `pnpm run build` first; install dependencies with pnpm |
+| “Toolbox” or “Resource manager” not visible | Confirm `custom/main` and a successful build; hard-refresh |
+| Client UI changes in `ui-conversation` etc. not showing | `pnpm --filter @deepseek-ai/dsh-client-ui-conversation run bundle`, then restart / hard-refresh |
+| Resource manager: file too large / directory “…” | 5 MB per file; 1000 entries per directory level |
 
-</details>
 
-## 🖼️ Feature tour
 
-### 🗂️ File tree
 
-Root follows the bound workspace of the selected session; lazy per-directory loading; filename filter; Git badges on each row.
+## 📖 Basic usage
 
-### 📝 Monaco editor
+1. **Configure model**: Settings → Models, enter API key.
+2. **Choose workspace**: Add and select your project root directory.
+3. **Start AI Coding**: Describe tasks in a session (with AI Coding Skills).
+4. **Open toolbox**: Click the **Toolbox** capsule at the far right of the session header.
+5. **View agent tool output**: Switch to **Tool details** in the toolbox, or click a tool row in the message stream.
+6. **View and edit files / code yourself**: **Resource manager** tab in the toolbox — browse the file tree, open files, explicit save with ⌘S / Ctrl+S.
 
-Multi-tab editing with explicit save; image preview; binary blocked with a clear message; batch tab close; path updates on folder rename/delete.
 
-### 🔔 Guards
 
-External disk changes prompt reload vs keep buffer; session switch and dirty tab close use save / discard / cancel dialogs.
+## 🧩 Custom modules: Toolbox & Resource manager
 
-## ⌨️ Shortcuts
 
-| Action | Keys |
-|--------|------|
-| Save | Ctrl/Cmd + S |
-| Close tab | Tab close button (dirty guard first) |
 
-## 🏗️ Architecture
+### Toolbox
+
+In this fork, the upstream **details column** is product-named **Toolbox** (open / close toolbox).
+
+- Entry: session header **Toolbox** capsule, same height as the session log
+- Layout: beside the chat pane, resizable
+- Tabs: **Resource manager** | **Tool details**
+
+
+
+### Resource manager
+
+Human-facing module inside the toolbox: when the agent edits the repo, browse directories, edit, and save explicitly without switching to an external IDE.
+
+- File tree bound to the current session workspace (lazy loading, filtering, read-only Git badges)
+- Monaco multi-tab, read-only image preview, create / rename / delete
+- External change prompts, session switch guards, LSP diagnostics and hover
+
+Implemented by plugin `@deepseek-ai/dsh-client-ui-file-editor` (Host RPC via `apiproxy`).
+
+## 🏗️ Architecture & extension
 
 ```text
-Browser
-  └─ ui-conversation (details tabs)
-       └─ ui-file-editor (FileTreePane + EditorPane)
-            └─ WorkspaceRuntime → Host RPC (apiproxy)
-                 └─ ctx.fs / git / watchPath / LSP
+dsh web (web-app bundle)
+  ├─ Agent runtime (sessions · tools · LLM · subagents …)
+  └─ Web Client
+       ├─ Chat pane (ui-conversation)
+       ├─ Toolbox shell + tool details (ui-conversation / ui-tool)
+       └─ Resource manager (ui-file-editor → Host RPC / apiproxy)
 ```
 
-Decisions: [ADR-0001](./docs/adr/0001-file-editor-host-rpc.md) · [ADR-0002](./docs/adr/0002-file-editor-details-tab.md) · [PRD V1](./docs/prd/file-editor-v1.md)
 
-## 🛠️ Development
+
+## 🛠️ Development & build
 
 ```sh
 pnpm install
 pnpm run build
-pnpm dsh web
-pnpm run test:gui
-pnpm run pack:dsh
+pnpm dsh web            # or npm run web (build first)
+pnpm run test:gui       # day-to-day changes
+pnpm run test:web       # Web replay (build first)
+pnpm run pack:dsh       # offline npm package → dist/npm/
 ```
 
-See [CUSTOM.md](./CUSTOM.md) and [docs/repo-wiki/README.md](./docs/repo-wiki/README.md).
+When only Client plugin UI changes, **bundle** the affected package before `dsh web`, for example:
+
+```sh
+pnpm --filter @deepseek-ai/dsh-client-ui-conversation run bundle
+pnpm --filter @deepseek-ai/dsh-client-ui-file-editor run bundle
+```
+
+
 
 ## ⚠️ Known limitations
 
-- 5 MB read cap; no auto-save; not yet a standalone `dsh plugin add` npm package
-- Listing caps: 1000 entries/level, 10000 dirent scan
-- `custom/main` must be reconciled manually when merging upstream
+- Personal fork; merging upstream requires manual alignment
+- Resource manager has no auto-save; hard limits on large files and very large directories
+- Terminal, Git commit, and other IDE features are not built in yet (planned)
 
-## 🖥️ Platforms
 
-macOS / Linux primary; Windows not fully validated. Node `^22.19` or `>=24`.
 
-## 🔗 Upstream & docs
+## 🖥️ Platform support
 
-| Link | |
-|------|---|
-| [Upstream Harness](https://github.com/deepseek-ai/deepseek-harness) | Official repo |
-| [This fork](https://github.com/NanGePlus/my-deepseek-harness) | `custom/main` |
-| [DSH-better-sidebar](https://github.com/omdsh-dev/DSH-better-sidebar) | Ecosystem reference (sidebar plugin via npm) |
-| [Web UI guide](./docs/user/guide/index.md) | Usage |
+Windows / Linux / macOS (macOS validated day to day; others covered by unit tests). Node `^22.19` or `>=24`.
 
 ---
 
-<p align="center">
-  MIT License · Based on <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a>
-</p>
+MIT License · Based on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · maintained by [my-deepseek-harness](https://github.com/NanGePlus/my-deepseek-harness)
