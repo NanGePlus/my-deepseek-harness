@@ -1,5 +1,6 @@
 /** Right-pane tabs, Monaco / preview / non-openable / empty / loading / error. */
 
+import { useEffect, useRef } from 'react'
 import { IconCloseOutline16, IconLoadingOutline16, IconPanelLeftOutline16, Tooltip, ZoomableImage } from '@deepseek-ai/dsh-client-ui-primitives'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
@@ -82,9 +83,19 @@ export function EditorPane({
   treeCollapsed = false, onShowTree, workspaceRoot, diagnosticsByPath, onHover,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.path === activePath)
+  const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const themeLabel = dark ? t('editor.theme.dark') : t('editor.theme.light')
-  const openBlocked = (status.kind === 'loading' && status.op === 'open')
-    || (status.kind === 'error' && status.op === 'open')
+  const openPending = status.kind === 'loading' && status.op === 'open'
+  const openFailed = status.kind === 'error' && status.op === 'open'
+  const showOpenFeedback = (openPending || openFailed) && active === undefined
+
+  useEffect(() => {
+    if (activePath === undefined) return
+    const tab = tabRefs.current.get(activePath)
+    if (typeof tab?.scrollIntoView === 'function') {
+      tab.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    }
+  }, [activePath, tabs])
 
   return (
     <div className={css.pane}>
@@ -112,6 +123,10 @@ export function EditorPane({
                 return (
                   <div
                     key={tab.path}
+                    ref={(element) => {
+                      if (element === null) tabRefs.current.delete(tab.path)
+                      else tabRefs.current.set(tab.path, element)
+                    }}
                     role="tab"
                     aria-selected={selected}
                     className={clsx(css.tab, selected && css.tabActive)}
@@ -151,7 +166,7 @@ export function EditorPane({
         </div>
       )}
       <div className={css.body}>
-        {status.kind === 'loading' && status.op === 'open' && (
+        {showOpenFeedback && openPending && (
           <div className={css.feedback} role="status" aria-live="polite">
             <span className={css.spinner} aria-hidden="true">
               <IconLoadingOutline16 size={24} />
@@ -159,7 +174,7 @@ export function EditorPane({
             <span className={css.feedbackCopy}>{t('editor.loading.open')}</span>
           </div>
         )}
-        {status.kind === 'error' && status.op === 'open' && (
+        {showOpenFeedback && openFailed && (
           <div className={css.emptyCard} role="alert">
             <div className={css.errorCopy}>{status.message}</div>
             <Tooltip label={t('editor.retry')} side="bottom" delayMs={TOOLTIP_DELAY_MS}>
@@ -169,70 +184,66 @@ export function EditorPane({
             </Tooltip>
           </div>
         )}
-        {!openBlocked && (
-          <>
-            {active === undefined && status.kind === 'idle' && (
-              <div className={css.emptyCard}>
-                <span className={css.emptyIcon} aria-hidden="true">
-                  <svg width={48} height={48} viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M4.2 1.5h5.1L12.8 5v9.5H4.2V1.5Z"
-                      stroke="currentColor"
-                      strokeWidth="1.2"
-                      strokeLinejoin="round"
-                    />
-                    <path d="M9.2 1.6V5h3.5" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-                  </svg>
-                </span>
-                <div className={css.emptyTitle}>{t('editor.empty.title')}</div>
-                <div className={css.emptyBody}>{t('editor.empty.body')}</div>
-              </div>
-            )}
-            {active?.kind === 'text' && isMarkdownLanguage(active.language) && (
-              <MarkdownEditorBody
-                tab={active}
-                workspaceRoot={workspaceRoot}
-                dark={dark}
-                t={t}
-                onBufferChange={onBufferChange}
-                {...(onHover === undefined
-                  ? {}
-                  : { onHover: (path, line, character, signal) => onHover(path, line, character, signal) })}
-              />
-            )}
-            {active?.kind === 'text' && !isMarkdownLanguage(active.language) && (
-              <MonacoEditor
-                path={active.path}
-                value={active.buffer}
-                language={active.language}
-                diagnostics={diagnosticsByPath?.get(active.path)}
-                {...(onHover === undefined
-                  ? {}
-                  : { onHover: (line, character, signal) => onHover(active.path, line, character, signal) })}
-                ariaLabel={t('editor.buffer.label', {
-                  name: active.name,
-                  language: languageLabel(active.language),
-                  theme: themeLabel,
-                })}
-                dark={dark}
-                onChange={(value) => { onBufferChange(active.path, value) }}
-              />
-            )}
-            {active?.kind === 'preview' && (
-              <div className={css.preview}>
-                <ZoomableImage
-                  className={css.previewImage ?? ''}
-                  alt={active.name}
-                  src={`data:${active.mediaType};base64,${active.data}`}
+        {active === undefined && status.kind === 'idle' && (
+          <div className={css.emptyCard}>
+            <span className={css.emptyIcon} aria-hidden="true">
+              <svg width={48} height={48} viewBox="0 0 16 16" fill="none">
+                <path
+                  d="M4.2 1.5h5.1L12.8 5v9.5H4.2V1.5Z"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinejoin="round"
                 />
-              </div>
-            )}
-            {active?.kind === 'non-openable' && (
-              <div className={css.emptyCard}>
-                <div className={css.emptyTitle}>{t('editor.nonOpenable')}</div>
-              </div>
-            )}
-          </>
+                <path d="M9.2 1.6V5h3.5" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <div className={css.emptyTitle}>{t('editor.empty.title')}</div>
+            <div className={css.emptyBody}>{t('editor.empty.body')}</div>
+          </div>
+        )}
+        {active?.kind === 'text' && isMarkdownLanguage(active.language) && (
+          <MarkdownEditorBody
+            tab={active}
+            workspaceRoot={workspaceRoot}
+            dark={dark}
+            t={t}
+            onBufferChange={onBufferChange}
+            {...(onHover === undefined
+              ? {}
+              : { onHover: (path, line, character, signal) => onHover(path, line, character, signal) })}
+          />
+        )}
+        {active?.kind === 'text' && !isMarkdownLanguage(active.language) && (
+          <MonacoEditor
+            path={active.path}
+            value={active.buffer}
+            language={active.language}
+            diagnostics={diagnosticsByPath?.get(active.path)}
+            {...(onHover === undefined
+              ? {}
+              : { onHover: (line, character, signal) => onHover(active.path, line, character, signal) })}
+            ariaLabel={t('editor.buffer.label', {
+              name: active.name,
+              language: languageLabel(active.language),
+              theme: themeLabel,
+            })}
+            dark={dark}
+            onChange={(value) => { onBufferChange(active.path, value) }}
+          />
+        )}
+        {active?.kind === 'preview' && (
+          <div className={css.preview}>
+            <ZoomableImage
+              className={css.previewImage ?? ''}
+              alt={active.name}
+              src={`data:${active.mediaType};base64,${active.data}`}
+            />
+          </div>
+        )}
+        {active?.kind === 'non-openable' && (
+          <div className={css.emptyCard}>
+            <div className={css.emptyTitle}>{t('editor.nonOpenable')}</div>
+          </div>
         )}
         {status.kind === 'error' && status.op === 'save' && (
           <div className={css.bodyOverlay} role="alert">

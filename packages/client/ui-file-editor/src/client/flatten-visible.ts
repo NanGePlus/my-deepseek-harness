@@ -68,7 +68,7 @@ function walk(
       entry,
       depth,
       expanded: isExpanded,
-      loading: loading.has(entry.path),
+      loading: loading.has(entry.path) && !childrenByPath.has(entry.path),
     })
     rows.push(...childRows)
   }

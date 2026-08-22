@@ -54,6 +54,7 @@ function entry(
 const DEFAULT_ROOT: WorkspaceEntry[] = [
   entry('.git', true),
   entry('.gitignore', false),
+  entry('.DS_Store', false),
   entry('app.wasm', false),
   entry('logo.png', false),
   entry('node_modules', true),
@@ -105,10 +106,42 @@ const SRC_CHILDREN: WorkspaceEntry[] = [
   { name: 'app.ts', path: `${ROOT}/src/app.ts`, isDirectory: false, hidden: false },
 ]
 
+const GIT = `${ROOT}/.git`
+const GIT_HOOKS = `${GIT}/hooks`
+const GIT_CURSOR = `${GIT}/cursor`
+const GIT_CREPE = `${GIT_CURSOR}/crepe`
+const GIT_HASH = `${GIT_CREPE}/1099fc`
+const DEEP_FILE = `${GIT_HASH}/postings.bin`
+
+const GIT_CHILDREN: WorkspaceEntry[] = [
+  { name: 'hooks', path: GIT_HOOKS, isDirectory: true, hidden: true },
+  { name: 'index', path: `${GIT}/index`, isDirectory: false, hidden: true },
+  { name: 'cursor', path: GIT_CURSOR, isDirectory: true, hidden: true },
+  { name: 'objects', path: `${GIT}/objects`, isDirectory: true, hidden: true },
+]
+
+const CREPE_CHILDREN: WorkspaceEntry[] = [
+  { name: '1099fc', path: GIT_HASH, isDirectory: true, hidden: true },
+]
+
+const HASH_CHILDREN: WorkspaceEntry[] = [
+  { name: 'postings.bin', path: DEEP_FILE, isDirectory: false, hidden: true },
+]
+
 function listingFor(path: string): WorkspaceEntriesListing {
   if (path === ROOT) return { path, entries: DEFAULT_ROOT, truncated: false }
   if (path === `${ROOT}/src`) return { path, entries: SRC_CHILDREN, truncated: false }
-  if (path === `${ROOT}/.git` || path === `${ROOT}/node_modules`) {
+  if (path === GIT) return { path, entries: GIT_CHILDREN, truncated: false }
+  if (path === GIT_CURSOR) {
+    return {
+      path,
+      entries: [{ name: 'crepe', path: GIT_CREPE, isDirectory: true, hidden: true }],
+      truncated: false,
+    }
+  }
+  if (path === GIT_CREPE) return { path, entries: CREPE_CHILDREN, truncated: false }
+  if (path === GIT_HASH) return { path, entries: HASH_CHILDREN, truncated: false }
+  if (path === `${ROOT}/node_modules`) {
     return { path, entries: [], truncated: false }
   }
   return { path, entries: [], truncated: false }
@@ -202,11 +235,17 @@ function mount(over: {
 }
 
 describe('EditorSurface file tree', () => {
+  async function clickFile(name: string): Promise<void> {
+    const tree = await waitFor(() => screen.getByRole('tree', { name: 'alpha' }))
+    fireEvent.click(within(tree).getByText(name).closest('[role="treeitem"]')!)
+  }
+
   it('default: binds the Session Workspace, shows hidden paths, type icons, and Git letters', async () => {
     const b = mount()
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
     expect(screen.getByText('.git')).toBeTruthy()
     expect(screen.getByText('.gitignore')).toBeTruthy()
+    expect(screen.queryByText('.DS_Store')).toBeNull()
     expect(screen.getByText('node_modules')).toBeTruthy()
     expect(screen.getByRole('tree', { name: 'alpha' })).toBeTruthy()
     expect(screen.getAllByRole('img', { name: '文件夹' }).length).toBeGreaterThan(0)
@@ -341,6 +380,143 @@ describe('EditorSurface file tree', () => {
     expect(screen.queryByText('README.md')).toBeNull()
   })
 
+  it('open-file: does not refetch a cached folder or leave its spinner running', async () => {
+    let srcCalls = 0
+    let releaseSrc!: (listing: WorkspaceEntriesListing) => void
+    const listWorkspaceEntries = vi.fn((_id: WorkspaceId, path: string) => {
+      if (path === `${ROOT}/src`) {
+        srcCalls += 1
+        if (srcCalls === 1) {
+          return new Promise<WorkspaceEntriesListing>((resolve) => { releaseSrc = resolve })
+        }
+        return new Promise<WorkspaceEntriesListing>(() => {
+          // A redundant refetch would hang here without the cache short-circuit.
+        })
+      }
+      return Promise.resolve(listingFor(path))
+    })
+    mount({ list: listWorkspaceEntries })
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '展开 src' }))
+    await waitFor(() => { expect(screen.getByRole('status', { name: '加载中' })).toBeTruthy() })
+    await act(async () => { releaseSrc(listingFor(`${ROOT}/src`)) })
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+
+    const tree = screen.getByRole('tree', { name: 'alpha' })
+    fireEvent.click(within(tree).getByText('app.ts').closest('[role="treeitem"]')!)
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /app\.ts/ })).toBeTruthy() })
+    expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+    expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === `${ROOT}/src`)).toHaveLength(1)
+  })
+
+  it('reveal-chain: deep open clears every row spinner and skips sibling folders', async () => {
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      await new Promise<void>((resolve) => { setTimeout(resolve, 5) })
+      return listingFor(path)
+    })
+    mount({ list: listWorkspaceEntries })
+    await waitFor(() => { expect(screen.getByText('.git')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '展开 .git' }))
+    await waitFor(() => { expect(screen.getByText('cursor')).toBeTruthy() })
+    expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '展开 cursor' }))
+    await waitFor(() => { expect(screen.getByText('crepe')).toBeTruthy() })
+    expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '展开 crepe' }))
+    await waitFor(() => { expect(screen.getByText('1099fc')).toBeTruthy() })
+    expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '展开 1099fc' }))
+    await waitFor(() => { expect(screen.getByText('postings.bin')).toBeTruthy() })
+    expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+
+    const tree = screen.getByRole('tree', { name: 'alpha' })
+    fireEvent.click(within(tree).getByText('postings.bin').closest('[role="treeitem"]')!)
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /postings\.bin/ })).toBeTruthy() })
+    expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+    expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === GIT_HOOKS)).toHaveLength(0)
+    expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === `${GIT}/objects`)).toHaveLength(0)
+  })
+
+  it('reveal-chain: refocusing a deep tab re-expands without stuck spinners', async () => {
+    mount()
+    await waitFor(() => { expect(screen.getByText('.git')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '展开 .git' }))
+    await waitFor(() => { expect(screen.getByText('cursor')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '展开 cursor' }))
+    await waitFor(() => { expect(screen.getByText('crepe')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '展开 crepe' }))
+    await waitFor(() => { expect(screen.getByText('1099fc')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '展开 1099fc' }))
+    await waitFor(() => { expect(screen.getByText('postings.bin')).toBeTruthy() })
+
+    const tree = screen.getByRole('tree', { name: 'alpha' })
+    fireEvent.click(within(tree).getByText('postings.bin').closest('[role="treeitem"]')!)
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /postings\.bin/ })).toBeTruthy() })
+
+    fireEvent.click(screen.getByRole('button', { name: '折叠 .git' }))
+    expect(within(tree).queryByText('postings.bin')).toBeNull()
+    fireEvent.click(within(tree).getByText('README.md').closest('[role="treeitem"]')!)
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('tab', { name: /postings\.bin/ }))
+    await waitFor(() => { expect(within(tree).getByText('postings.bin')).toBeTruthy() })
+    expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+    const hooksRow = within(tree).getByText('hooks').closest('[role="treeitem"]')!
+    expect(within(hooksRow).queryByRole('status', { name: '加载中' })).toBeNull()
+  })
+
+  it('collapse-expand: aborts an in-flight listing and does not leave a stale spinner', async () => {
+    let srcCalls = 0
+    let release!: (listing: WorkspaceEntriesListing) => void
+    const listWorkspaceEntries = vi.fn((_id: WorkspaceId, path: string) => {
+      if (path === `${ROOT}/src`) {
+        srcCalls += 1
+        if (srcCalls === 1) {
+          return new Promise<WorkspaceEntriesListing>((resolve) => { release = resolve })
+        }
+        return Promise.resolve(listingFor(path))
+      }
+      return Promise.resolve(listingFor(path))
+    })
+    mount({ list: listWorkspaceEntries })
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '展开 src' }))
+    await waitFor(() => { expect(screen.getByRole('status', { name: '加载中' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '折叠 src' }))
+    expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+    await act(async () => { release(listingFor(`${ROOT}/src`)) })
+    expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '展开 src' }))
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+    expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === `${ROOT}/src`)).toHaveLength(2)
+  })
+
+  it('loading-expand: clears the folder spinner after listing data lands', async () => {
+    let srcCalls = 0
+    let release!: (listing: WorkspaceEntriesListing) => void
+    const listWorkspaceEntries = vi.fn((_id: WorkspaceId, path: string) => {
+      if (path === `${ROOT}/src`) {
+        srcCalls += 1
+        if (srcCalls === 1) {
+          return new Promise<WorkspaceEntriesListing>((resolve) => { release = resolve })
+        }
+        return Promise.resolve(listingFor(path))
+      }
+      return Promise.resolve(listingFor(path))
+    })
+    mount({ list: listWorkspaceEntries })
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '展开 src' }))
+    await waitFor(() => { expect(screen.getByRole('status', { name: '加载中' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '折叠 src' }))
+    fireEvent.click(screen.getByRole('button', { name: '展开 src' }))
+    await waitFor(() => { expect(screen.getByRole('status', { name: '加载中' })).toBeTruthy() })
+    await act(async () => { release(listingFor(`${ROOT}/src`)) })
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+  })
+
   it('list-failure: keeps a failed folder expanded and shows a retry affordance', async () => {
     let calls = 0
     const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
@@ -464,6 +640,40 @@ describe('EditorSurface file tree', () => {
     const row = screen.getByText('README.md').closest('[role="treeitem"]')
     fireEvent.click(row!)
     expect(row!.getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('tree-focus: clicking an already-open file focuses its editor tab and body', async () => {
+    mount()
+    await clickFile('README.md')
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /README\.md/ }).getAttribute('aria-selected')).toBe('true')
+    })
+    await clickFile('untracked.ts')
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /untracked\.ts/ }).getAttribute('aria-selected')).toBe('true')
+      expect(screen.getByRole('textbox', { name: /untracked\.ts.*TypeScript/ })).toBeTruthy()
+    })
+    await clickFile('README.md')
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /README\.md/ }).getAttribute('aria-selected')).toBe('true')
+    })
+    await switchMarkdownToSource()
+    expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy()
+  })
+
+  it('tab-reveal: scrolls the active editor tab into view when activePath changes', async () => {
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      writable: true,
+      value: scrollIntoView,
+    })
+    mount()
+    await clickFile('README.md')
+    await waitFor(() => { expect(scrollIntoView).toHaveBeenCalled() })
+    scrollIntoView.mockClear()
+    await clickFile('untracked.ts')
+    await waitFor(() => { expect(scrollIntoView).toHaveBeenCalled() })
   })
 
   it('reveals and selects the active editor tab path in the tree', async () => {
@@ -683,8 +893,9 @@ describe('EditorSurface open / save', () => {
     expect(b.readFile).toHaveBeenCalledTimes(2)
     fireEvent.click(screen.getByRole('tab', { name: /README\.md/ }))
     await markdownEditor()
+    expect(b.readFile).toHaveBeenCalledTimes(3)
     await clickFile('README.md')
-    expect(b.readFile).toHaveBeenCalledTimes(2)
+    expect(b.readFile).toHaveBeenCalledTimes(3)
     fireEvent.click(screen.getByRole('button', { name: '关闭 README.md' }))
     await waitFor(() => { expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull() })
     expect(screen.getByRole('textbox', { name: /untracked\.ts.*TypeScript/ })).toBeTruthy()
@@ -812,6 +1023,108 @@ describe('EditorSurface open / save', () => {
     await waitFor(() => { expect(screen.queryByText('无法保存此文件')).toBeNull() })
     expect(b.writeFile).toHaveBeenCalled()
     expect(screen.queryByLabelText('未保存')).toBeNull()
+  })
+
+  it('open-error: a failed background open keeps the focused tab visible', async () => {
+    mount({
+      read: async (_id, path, kind) => {
+        if (path.endsWith('gone.ts')) throw new Error('denied')
+        return defaultReadFile(_id, path, kind)
+      },
+    })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy() })
+    await clickFile('gone.ts')
+    expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
+    expect(screen.queryByText('无法打开此文件')).toBeNull()
+    expect(screen.queryByRole('tab', { name: /gone\.ts/ })).toBeNull()
+  })
+
+  it('open-loading: focusing another tab aborts a pending background open', async () => {
+    const b = mount({
+      read: (_id, path, kind) => {
+        if (path.endsWith('gone.ts')) {
+          return new Promise<FileReadResult>(() => {
+            // Never resolves until the test switches away.
+          })
+        }
+        return defaultReadFile(_id, path, kind)
+      },
+    })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy() })
+    await clickFile('gone.ts')
+    expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
+    expect(screen.queryByText('加载中…')).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: /README\.md/ }))
+    expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
+    expect(b.readFile.mock.calls.filter(call => call[1]?.endsWith('gone.ts'))).toHaveLength(1)
+  })
+
+  it('open-loading: opening another file from the tree replaces the spinner with the new buffer', async () => {
+    let releaseGone!: (result: FileReadResult) => void
+    mount({
+      read: (_id, path, kind) => {
+        if (path.endsWith('gone.ts')) {
+          return new Promise<FileReadResult>((resolve) => { releaseGone = resolve })
+        }
+        return defaultReadFile(_id, path, kind)
+      },
+    })
+    await clickFile('gone.ts')
+    await waitFor(() => { expect(screen.getByText('加载中…')).toBeTruthy() })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy() })
+    expect(screen.queryByText('加载中…')).toBeNull()
+    await act(async () => {
+      releaseGone!({ kind: 'text', path: `${ROOT}/gone.ts`, text: 'late\n' })
+    })
+    expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: /gone\.ts/ })).toBeNull()
+  })
+
+  it('open-loading: keeps the active tab visible while another file opens', async () => {
+    mount({
+      read: (_id, path, kind) => {
+        if (path.endsWith('gone.ts')) {
+          return new Promise<FileReadResult>(() => {})
+        }
+        return defaultReadFile(_id, path, kind)
+      },
+    })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy() })
+    await clickFile('gone.ts')
+    expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
+    expect(screen.queryByText('加载中…')).toBeNull()
+  })
+
+  it('open-error: clicking a directory dismisses the open error overlay', async () => {
+    mount({
+      read: async (_id, path, kind) => {
+        if (path.endsWith('gone.ts')) throw new Error('denied')
+        return defaultReadFile(_id, path, kind)
+      },
+    })
+    await clickFile('gone.ts')
+    await waitFor(() => { expect(screen.getByText('无法打开此文件')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '展开 .git' }))
+    await waitFor(() => { expect(screen.queryByText('无法打开此文件')).toBeNull() })
+  })
+
+  it('open-loading: clicking a directory dismisses the open spinner', async () => {
+    mount({
+      read: (_id, path, kind) => {
+        if (path.endsWith('gone.ts')) {
+          return new Promise<FileReadResult>(() => {})
+        }
+        return defaultReadFile(_id, path, kind)
+      },
+    })
+    await clickFile('gone.ts')
+    await waitFor(() => { expect(screen.getByText('加载中…')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '展开 .git' }))
+    await waitFor(() => { expect(screen.queryByText('加载中…')).toBeNull() })
   })
 
   it('theme-follow: the buffer accessible name tracks body[data-ds-dark-theme]', async () => {
@@ -1159,6 +1472,54 @@ describe('EditorSurface external change', () => {
     await waitFor(() => { expect(screen.queryByRole('dialog', { name: '文件已在磁盘上更改' })).toBeNull() })
     expect((await markdownEditor()).value).toBe('local edits\n')
     expect(screen.getByLabelText('未保存')).toBeTruthy()
+  })
+
+  it('watch-active-only: only the focused text tab holds a watch subscription', async () => {
+    const watch = createWatchHarness()
+    const gone = `${ROOT}/gone.ts`
+    mount({ watchPath: watch.watchPath })
+    await clickFile('README.md')
+    await markdownEditor()
+    expect(watch.isWatching(README)).toBe(true)
+    expect(watch.watchPath).toHaveBeenCalledTimes(1)
+    await clickFile('gone.ts')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /gone\.ts/ })).toBeTruthy() })
+    expect(watch.isWatching(README)).toBe(false)
+    expect(watch.isWatching(gone)).toBe(true)
+    expect(watch.watchPath).toHaveBeenCalledTimes(2)
+    fireEvent.click(screen.getByRole('tab', { name: /README\.md/ }))
+    await waitFor(() => { expect(watch.isWatching(README)).toBe(true) })
+    expect(watch.isWatching(gone)).toBe(false)
+  })
+
+  it('many-tabs: a sixth text tab opens and directory listing still works', async () => {
+    const extra = entry('extra.ts', false)
+    const watch = createWatchHarness()
+    const list = vi.fn(async (_id: WorkspaceId, path: string) => {
+      const base = listingFor(path)
+      if (path === ROOT) {
+        return { ...base, entries: [...base.entries, extra] }
+      }
+      return base
+    })
+    const { listWorkspaceEntries } = mount({ watchPath: watch.watchPath, list })
+    for (const name of ['README.md', 'gone.ts', 'untracked.ts', '.gitignore', 'extra.ts']) {
+      await clickFile(name)
+      if (name.endsWith('.md')) await markdownEditor(name)
+      else await waitFor(() => { expect(screen.getByRole('tab', { name: new RegExp(name.replace('.', '\\.')) })).toBeTruthy() })
+    }
+    const tree = screen.getByRole('tree', { name: 'alpha' })
+    fireEvent.click(within(tree).getByText('src').closest('[role="treeitem"]')!)
+    await waitFor(() => {
+      expect(listWorkspaceEntries).toHaveBeenCalledWith(WID, `${ROOT}/src`, expect.any(AbortSignal))
+    })
+    fireEvent.click(within(tree).getByText('app.ts').closest('[role="treeitem"]')!)
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /app\.ts/ })).toBeTruthy() })
+    expect(watch.isWatching(`${ROOT}/src/app.ts`)).toBe(true)
+    fireEvent.click(within(tree).getByText('node_modules').closest('[role="treeitem"]')!)
+    await waitFor(() => {
+      expect(listWorkspaceEntries).toHaveBeenCalledWith(WID, `${ROOT}/node_modules`, expect.any(AbortSignal))
+    })
   })
 
   it('watch-released: closing a tab stops delivering watch events for that path', async () => {

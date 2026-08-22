@@ -102,27 +102,27 @@ describe('DetailsPanel segmented tabs', () => {
 
   it('default: selects the file editor tab and renders its seat', () => {
     const { view } = bench()
-    expect(view.getByRole('tab', { name: 'Tool 详情' })).toBeTruthy()
-    expect(view.getByRole('tab', { name: '文件编辑器' })).toBeTruthy()
-    expect(view.getByRole('tab', { name: '文件编辑器' }).getAttribute('aria-selected')).toBe('true')
+    expect(view.getByRole('tab', { name: '工具详情' })).toBeTruthy()
+    expect(view.getByRole('tab', { name: '资源管理器' })).toBeTruthy()
+    expect(view.getByRole('tab', { name: '资源管理器' }).getAttribute('aria-selected')).toBe('true')
     expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
     expect(toolPanel(view).getAttribute('aria-hidden')).toBe('true')
   })
 
-  it('tab-selected: selecting 文件编辑器 keeps the editor surface visible', () => {
+  it('tab-selected: selecting 资源管理器 keeps the editor surface visible', () => {
     const { view, chat, openDetails } = bench()
     expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
-    fireEvent.click(view.getByRole('tab', { name: '文件编辑器' }))
+    fireEvent.click(view.getByRole('tab', { name: '资源管理器' }))
     expect(chat.store.getSnapshot().detailsTab).toBe('editor')
     expect(openDetails).toHaveBeenCalledTimes(1)
     expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
     expect(toolPanel(view).getAttribute('aria-hidden')).toBe('true')
   })
 
-  it('tab-selected: switching back to Tool 详情 hides the editor view without unmounting it', () => {
+  it('tab-selected: switching back to 工具详情 hides the editor view without unmounting it', () => {
     const { view, chat } = bench()
-    fireEvent.click(view.getByRole('tab', { name: '文件编辑器' }))
-    fireEvent.click(view.getByRole('tab', { name: 'Tool 详情' }))
+    fireEvent.click(view.getByRole('tab', { name: '资源管理器' }))
+    fireEvent.click(view.getByRole('tab', { name: '工具详情' }))
     expect(chat.store.getSnapshot().detailsTab).toBe('tool')
     expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
     expect(view.getAllByRole('tabpanel', { hidden: true })[0]!.getAttribute('aria-hidden')).toBe('true')

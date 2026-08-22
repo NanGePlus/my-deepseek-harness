@@ -18,6 +18,7 @@ import { languageForPath, openKindForPath } from './open-kind.ts'
 import { createFileEditorStore, tabIsDirty, workspaceEditorState, type EditorTab } from './stores.ts'
 import { createDirtyGuard, type DirtyGuard, type WorkspaceEditorBridge } from './dirty-guard.ts'
 import { shouldSkipLsp, yieldToMain } from './editor-file-policy.ts'
+import { FILE_READ_TIMEOUT_MS, withHostIoTimeout } from './host-io-timeout.ts'
 import css from './EditorSurface.module.css'
 import dialogCss from './FileTreeDialogs.module.css'
 
@@ -236,8 +237,10 @@ export function EditorSurface({
   const rootRef = useRef<HTMLDivElement>(null)
   const treeDragBase = useRef(0)
   const ioAbort = useRef<AbortController | null>(null)
+  const openGeneration = useRef(0)
   const retryRef = useRef<(() => void) | null>(null)
   const watchAbort = useRef<Map<string, AbortController>>(new Map())
+  const unwatchedPaths = useRef<Set<string>>(new Set())
   const lspVersions = useRef<Map<string, number>>(new Map())
   const lspSyncAbort = useRef<Map<string, AbortController>>(new Map())
   const lspDebounce = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -248,6 +251,10 @@ export function EditorSurface({
 
   useEffect(() => {
     setLspDiagnostics(new Map())
+    openGeneration.current += 1
+    ioAbort.current?.abort()
+    ioAbort.current = null
+    setStatus({ kind: 'idle' })
   }, [workspaceId])
 
   const guardMode = useSyncExternalStore(dirtyGuard.subscribe, dirtyGuard.getSnapshot)
@@ -380,33 +387,74 @@ export function EditorSurface({
     }
   }, [workspace, lspHoverDocument, syncLsp])
 
+  const focusEditorTab = useCallback((path: string): void => {
+    openGeneration.current += 1
+    ioAbort.current?.abort()
+    ioAbort.current = null
+    setStatus({ kind: 'idle' })
+    editorActions?.focusTab(path)
+  }, [editorActions])
+
+  const dismissOpenFeedback = useCallback((): void => {
+    openGeneration.current += 1
+    ioAbort.current?.abort()
+    ioAbort.current = null
+    setStatus(current => (
+      current.kind === 'loading' && current.op === 'open'
+        ? { kind: 'idle' }
+        : current.kind === 'error' && current.op === 'open'
+          ? { kind: 'idle' }
+          : current
+    ))
+  }, [])
+
+  const readFileWithTimeout = useCallback(async (
+    workspaceId: WorkspaceId,
+    path: string,
+    kind: FileReadKind,
+    controller: AbortController,
+  ): Promise<FileReadResult> => withHostIoTimeout(
+    readFile(workspaceId, path, kind, controller.signal),
+    controller,
+    FILE_READ_TIMEOUT_MS,
+    'file read timed out',
+  ), [readFile])
+
   const openEntry = useCallback(async (entry: WorkspaceEntry) => {
     if (editorActions === undefined) return
-    const existing = tabs.find(tab => tab.path === entry.path)
+    const existing = tabsRef.current.find(tab => tab.path === entry.path)
     if (existing !== undefined) {
-      editorActions.focusTab(entry.path)
-      setStatus({ kind: 'idle' })
+      focusEditorTab(entry.path)
       return
     }
     const kind = openKindForPath(entry.path)
     if (kind === 'non-openable') {
+      openGeneration.current += 1
+      ioAbort.current?.abort()
+      ioAbort.current = null
       editorActions.openTab({ kind: 'non-openable', path: entry.path, name: entry.name })
       setStatus({ kind: 'idle' })
       return
     }
     /* v8 ignore next -- FileTreePane only lists files when a Workspace is bound */
     if (workspace === undefined) return
+    openGeneration.current += 1
+    const generation = openGeneration.current
     ioAbort.current?.abort()
     const ac = new AbortController()
     ioAbort.current = ac
     setStatus({ kind: 'loading', op: 'open' })
     retryRef.current = () => { void openEntry(entry) }
+    const applyOpenStatus = (next: EditorPaneStatus): void => {
+      if (openGeneration.current !== generation) return
+      setStatus(next)
+    }
     try {
       if (kind === 'preview') {
-        const result = await readFile(workspace.workspaceId, entry.path, 'bytes', ac.signal)
-        if (ac.signal.aborted) return
+        const result = await readFileWithTimeout(workspace.workspaceId, entry.path, 'bytes', ac)
+        if (ac.signal.aborted || openGeneration.current !== generation) return
         if (result.kind !== 'bytes') {
-          setStatus({ kind: 'error', op: 'open', message: t('editor.error.open') })
+          applyOpenStatus({ kind: 'error', op: 'open', message: t('editor.error.open') })
           return
         }
         editorActions.openTab({
@@ -417,14 +465,14 @@ export function EditorSurface({
           data: result.data,
         })
       } else {
-        const result = await readFile(workspace.workspaceId, entry.path, 'text', ac.signal)
-        if (ac.signal.aborted) return
+        const result = await readFileWithTimeout(workspace.workspaceId, entry.path, 'text', ac)
+        if (ac.signal.aborted || openGeneration.current !== generation) return
         if (result.kind !== 'text') {
-          setStatus({ kind: 'error', op: 'open', message: t('editor.error.open') })
+          applyOpenStatus({ kind: 'error', op: 'open', message: t('editor.error.open') })
           return
         }
         await yieldToMain()
-        if (ac.signal.aborted) return
+        if (ac.signal.aborted || openGeneration.current !== generation) return
         editorActions.openTab({
           kind: 'text',
           path: entry.path,
@@ -435,17 +483,17 @@ export function EditorSurface({
         })
         if (!shouldSkipLsp(result.text)) syncLsp(entry.path, result.text)
       }
-      setStatus({ kind: 'idle' })
+      applyOpenStatus({ kind: 'idle' })
     } catch (error: unknown) {
-      if (ac.signal.aborted) return
+      if (ac.signal.aborted || openGeneration.current !== generation) return
       if (error instanceof DirectoryBrowseError && error.rpcError.code === 'file-too-large') {
-        setStatus({ kind: 'error', op: 'open', message: t('editor.error.openTooLarge') })
+        applyOpenStatus({ kind: 'error', op: 'open', message: t('editor.error.openTooLarge') })
         return
       }
       void error
-      setStatus({ kind: 'error', op: 'open', message: t('editor.error.open') })
+      applyOpenStatus({ kind: 'error', op: 'open', message: t('editor.error.open') })
     }
-  }, [tabs, editorActions, workspace, readFile, t, syncLsp])
+  }, [editorActions, workspace, readFileWithTimeout, t, syncLsp, focusEditorTab])
 
   const checkExternalChange = useCallback(async (path: string): Promise<void> => {
     if (workspace === undefined) return
@@ -464,31 +512,34 @@ export function EditorSurface({
 
   useEffect(() => {
     if (workspace === undefined) return
-    const textPaths = new Set(
-      tabs.filter(tab => tab.kind === 'text').map(tab => tab.path),
-    )
+    const active = tabs.find(tab => tab.path === activePath)
+    const watchedPath = active?.kind === 'text' ? active.path : undefined
     for (const [path, controller] of watchAbort.current) {
-      if (!textPaths.has(path)) {
+      if (path !== watchedPath) {
         controller.abort()
         watchAbort.current.delete(path)
+        unwatchedPaths.current.add(path)
       }
     }
-    for (const path of textPaths) {
-      if (watchAbort.current.has(path)) continue
-      const controller = new AbortController()
-      watchAbort.current.set(path, controller)
-      watchPath(
-        workspace.workspaceId,
-        path,
-        () => { void checkExternalChange(path) },
-        controller.signal,
-      )
+    if (watchedPath === undefined || watchAbort.current.has(watchedPath)) return
+    if (unwatchedPaths.current.has(watchedPath)) {
+      unwatchedPaths.current.delete(watchedPath)
+      void checkExternalChange(watchedPath)
     }
-  }, [tabs, workspace, watchPath, checkExternalChange])
+    const controller = new AbortController()
+    watchAbort.current.set(watchedPath, controller)
+    watchPath(
+      workspace.workspaceId,
+      watchedPath,
+      () => { void checkExternalChange(watchedPath) },
+      controller.signal,
+    )
+  }, [tabs, activePath, workspace, watchPath, checkExternalChange])
 
   useEffect(() => () => {
     for (const controller of watchAbort.current.values()) controller.abort()
     watchAbort.current.clear()
+    unwatchedPaths.current.clear()
     for (const timer of lspDebounce.current.values()) clearTimeout(timer)
     lspDebounce.current.clear()
     for (const controller of lspSyncAbort.current.values()) controller.abort()
@@ -616,6 +667,7 @@ export function EditorSurface({
         onPathDeleted={handlePathDeleted}
         onPathRenamed={handlePathRenamed}
         onOpenFile={(entry) => { void openEntry(entry) }}
+        onDismissOpenFeedback={dismissOpenFeedback}
         diagnosticsByPath={lspDiagnostics}
         {...(activePath !== undefined ? { activeEditorPath: activePath } : {})}
       />
@@ -636,7 +688,7 @@ export function EditorSurface({
         treeCollapsed={!treeVisible}
         onShowTree={() => { setTreeVisible(true) }}
         workspaceRoot={workspace?.path}
-        onFocus={(path) => { editorActions?.focusTab(path) }}
+        onFocus={focusEditorTab}
         onClose={handleCloseTab}
         onBufferChange={(path, buffer) => {
           editorActions?.setBuffer(path, buffer)

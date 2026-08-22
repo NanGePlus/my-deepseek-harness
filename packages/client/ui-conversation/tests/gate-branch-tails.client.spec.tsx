@@ -174,7 +174,7 @@ describe('render branch tails', () => {
         },
       })} />,
     )
-    expect(view.getByRole('tab', { name: 'Tool 详情' })).toBeTruthy()
+    expect(view.getByRole('tab', { name: '工具详情' })).toBeTruthy()
     expect(view.getByText('该调用不在当前窗口内')).toBeTruthy()
   })
 

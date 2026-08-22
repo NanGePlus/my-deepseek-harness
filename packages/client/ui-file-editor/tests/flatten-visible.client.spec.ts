@@ -19,6 +19,28 @@ describe('flattenVisibleTree', () => {
     )
     expect(rows.map(row => row.entry.name)).toEqual(['src', 'app.ts'])
   })
+
+  it('suppresses a stale folder spinner when listing data is already cached', () => {
+    const docs = file('docs', '/w/docs', true)
+    const rows = flattenVisibleTree(
+      [docs],
+      new Set(['/w/docs']),
+      new Set(['/w/docs']),
+      new Map([['/w/docs', [file('guide.md', '/w/docs/guide.md')]]]),
+      '',
+    )
+    expect(rows).toEqual([{
+      entry: docs,
+      depth: 0,
+      expanded: true,
+      loading: false,
+    }, {
+      entry: file('guide.md', '/w/docs/guide.md'),
+      depth: 1,
+      expanded: false,
+      loading: false,
+    }])
+  })
 })
 
 describe('paintVisibleRows', () => {

@@ -20,6 +20,7 @@ import {
   directoryChainToFile, joinChildPath, parentDirectoryForCreate, siblingNameExists,
 } from './file-tree-parent.ts'
 import { flattenVisibleTree, paintVisibleRows } from './flatten-visible.ts'
+import { filterTreeEntries } from './tree-entry-filter.ts'
 import { withDirectoryListingTimeout } from './directory-listing-timeout.ts'
 import css from './FileTreePane.module.css'
 import iconCss from './IconButton.module.css'
@@ -146,6 +147,8 @@ export interface FileTreePaneProps extends FileTreeHost, FileTreeMutationHost {
   diagnosticsByPath?: ReadonlyMap<string, readonly HostLspDiagnostic[]> | undefined
   /** Host-absolute path of the focused editor tab; reveals and selects the tree row. */
   activeEditorPath?: string
+  /** Cancel a pending open/error overlay when the user navigates the tree without opening a file. */
+  onDismissOpenFeedback?: () => void
 }
 
 const ROW_HEIGHT_PX = 22
@@ -170,7 +173,7 @@ export function FileTreePane({
   createWorkspaceDirectory, writeFile, t, onOpenFile, newFileTrigger = 0,
   gitRefreshTrigger = 0,
   collapsed = false, onHide, treeWidthPx = null,
-  onPathDeleted, onPathRenamed, diagnosticsByPath, activeEditorPath,
+  onPathDeleted, onPathRenamed, diagnosticsByPath, activeEditorPath, onDismissOpenFeedback,
 }: FileTreePaneProps) {
   const [childrenByPath, setChildrenByPath] = useState<Map<string, readonly WorkspaceEntry[]>>(
     () => new Map(),
@@ -193,6 +196,10 @@ export function FileTreePane({
   const fetchAbortByPath = useRef<Map<string, AbortController>>(new Map())
   const listWorkspaceEntriesRef = useRef(listWorkspaceEntries)
   listWorkspaceEntriesRef.current = listWorkspaceEntries
+  const childrenByPathRef = useRef(childrenByPath)
+  childrenByPathRef.current = childrenByPath
+  const failedPathsRef = useRef(failedPaths)
+  failedPathsRef.current = failedPaths
   const gitStatusRef = useRef(gitStatus)
   gitStatusRef.current = gitStatus
   const gitAbort = useRef<AbortController | null>(null)
@@ -213,8 +220,33 @@ export function FileTreePane({
     return undefined
   }, [selectedPath, childrenByPath, workspace])
 
-  const fetchDirectory = useCallback(async (dirPath: string): Promise<boolean> => {
+  const clearLoadingPath = useCallback((dirPath: string): void => {
+    setLoadingPaths((current) => {
+      if (!current.has(dirPath)) return current
+      const next = new Set(current)
+      next.delete(dirPath)
+      return next
+    })
+  }, [])
+
+  const clearLoadingPathRef = useRef(clearLoadingPath)
+  clearLoadingPathRef.current = clearLoadingPath
+
+  const fetchDirectory = useCallback(async (
+    dirPath: string,
+    options: { force?: boolean } = {},
+  ): Promise<boolean> => {
     if (workspace === undefined) return false
+    if (
+      !options.force
+      && childrenByPathRef.current.has(dirPath)
+      && !failedPathsRef.current.has(dirPath)
+    ) {
+      fetchAbortByPath.current.get(dirPath)?.abort()
+      fetchAbortByPath.current.delete(dirPath)
+      clearLoadingPath(dirPath)
+      return true
+    }
     fetchAbortByPath.current.get(dirPath)?.abort()
     const ac = new AbortController()
     fetchAbortByPath.current.set(dirPath, ac)
@@ -231,31 +263,31 @@ export function FileTreePane({
         ac,
       )
       if (ac.signal.aborted) return false
-      setChildrenByPath(current => new Map(current).set(dirPath, listing.entries))
+      setChildrenByPath(current => new Map(current).set(dirPath, filterTreeEntries(listing.entries)))
       setTruncatedPaths((current) => {
         const next = new Set(current)
         if (listing.truncated) next.add(dirPath)
         else next.delete(dirPath)
         return next
       })
+      clearLoadingPath(dirPath)
       return true
     } catch (error: unknown) {
       if (ac.signal.aborted) return false
       void error
       setChildrenByPath(current => new Map(current).set(dirPath, []))
       setFailedPaths(current => new Set(current).add(dirPath))
+      clearLoadingPath(dirPath)
       return false
     } finally {
       if (fetchAbortByPath.current.get(dirPath) === ac) {
         fetchAbortByPath.current.delete(dirPath)
       }
-      setLoadingPaths((current) => {
-        const next = new Set(current)
-        next.delete(dirPath)
-        return next
-      })
     }
-  }, [workspace])
+  }, [workspace, clearLoadingPath])
+
+  const fetchDirectoryRef = useRef(fetchDirectory)
+  fetchDirectoryRef.current = fetchDirectory
 
   const invalidateDirectory = useCallback(async (dirPath: string) => {
     setChildrenByPath((current) => {
@@ -277,7 +309,7 @@ export function FileTreePane({
     })
     if (workspace === undefined) return
     if (dirPath === workspace.path || expanded.has(dirPath)) {
-      await fetchDirectory(dirPath)
+      await fetchDirectory(dirPath, { force: true })
     }
   }, [workspace, expanded, fetchDirectory])
 
@@ -333,7 +365,7 @@ export function FileTreePane({
     void listWorkspaceEntriesRef.current(boundWorkspaceId, boundWorkspacePath, ac.signal)
       .then((listing) => {
         if (ac.signal.aborted) return
-        setChildrenByPath(new Map([[boundWorkspacePath, listing.entries]]))
+        setChildrenByPath(new Map([[boundWorkspacePath, filterTreeEntries(listing.entries)]]))
         setTruncatedPaths(listing.truncated ? new Set([boundWorkspacePath]) : new Set())
       })
       .catch((error: unknown) => {
@@ -379,9 +411,29 @@ export function FileTreePane({
     setOpError(null)
   }, [newFileTrigger, workspace])
 
+  useEffect(() => {
+    setLoadingPaths((current) => {
+      if (current.size === 0) return current
+      let changed = false
+      const next = new Set<string>()
+      for (const path of current) {
+        if (childrenByPath.has(path) && !failedPaths.has(path)) {
+          changed = true
+          continue
+        }
+        next.add(path)
+      }
+      return changed ? next : current
+    })
+  }, [childrenByPath, failedPaths])
+
   const toggleDirectory = useCallback(async (entry: WorkspaceEntry) => {
     if (!entry.isDirectory || workspace === undefined) return
+    onDismissOpenFeedback?.()
     if (expanded.has(entry.path)) {
+      fetchAbortByPath.current.get(entry.path)?.abort()
+      fetchAbortByPath.current.delete(entry.path)
+      clearLoadingPath(entry.path)
       setExpanded((current) => {
         const next = new Set(current)
         next.delete(entry.path)
@@ -390,9 +442,12 @@ export function FileTreePane({
       return
     }
     setExpanded(current => new Set(current).add(entry.path))
-    if (childrenByPath.has(entry.path) && !failedPaths.has(entry.path)) return
+    if (childrenByPath.has(entry.path) && !failedPaths.has(entry.path)) {
+      clearLoadingPath(entry.path)
+      return
+    }
     await fetchDirectory(entry.path)
-  }, [workspace, expanded, childrenByPath, failedPaths, fetchDirectory])
+  }, [workspace, expanded, childrenByPath, failedPaths, fetchDirectory, clearLoadingPath, onDismissOpenFeedback])
 
   const workspaceBound = workspace !== undefined
   const rootEntries = workspace === undefined
@@ -428,13 +483,23 @@ export function FileTreePane({
       for (const dirPath of chain) {
         if (cancelled) return
         setExpanded(current => new Set(current).add(dirPath))
-        await fetchDirectory(dirPath)
+        await fetchDirectoryRef.current(dirPath)
+        if (cancelled) return
       }
       if (cancelled) return
       setSelectedPath(activeEditorPath)
     })()
-    return () => { cancelled = true }
-  }, [workspace, activeEditorPath, fetchDirectory])
+    return () => {
+      cancelled = true
+      for (const dirPath of chain) {
+        fetchAbortByPath.current.get(dirPath)?.abort()
+        fetchAbortByPath.current.delete(dirPath)
+        if (childrenByPathRef.current.has(dirPath) && !failedPathsRef.current.has(dirPath)) {
+          clearLoadingPathRef.current(dirPath)
+        }
+      }
+    }
+  }, [workspace, activeEditorPath])
 
   useEffect(() => {
     if (activeEditorPath === undefined || selectedPath !== activeEditorPath) return
