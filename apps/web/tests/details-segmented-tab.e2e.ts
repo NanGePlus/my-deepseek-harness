@@ -81,7 +81,7 @@ describe.skipIf(MODE === 'record')('web e2e: details segmented tab chrome', () =
 
     await openDetailsViaEditorTab(page)
 
-    const tabsSnapshot = await captureStableAria(page, '[role="tablist"][aria-label="Details panel"]', scaffold.workspaceCwd)
+    const tabsSnapshot = await captureStableAria(page, '[role="tablist"][aria-label="Toolbox"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(TABS_EXPECTED, tabsSnapshot, MODE)
 
     await page.getByRole('tab', { name: 'File editor' }).click()

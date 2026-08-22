@@ -1,3 +1,3 @@
-- tablist "Details panel":
+- tablist "Toolbox":
   - tab "Tool details" [selected]
   - tab "File editor"
