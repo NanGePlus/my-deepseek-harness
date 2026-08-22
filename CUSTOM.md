@@ -114,4 +114,4 @@
 | 2026-08-22 | 会话头工具箱入口改为 **图标 +「工具箱」** capsule | `DetailsPanelToggle`；改 client 插件后需 `pnpm --filter @deepseek-ai/dsh-client-ui-conversation run bundle` 并硬刷新 `pnpm dsh web` |
 | 2026-08-22 | 工具箱 Tab 条样式对齐对话区 Tab | `DetailsPanel.module.css`：左对齐、蓝色选中态、2px 下划线 |
 | 2026-08-22 | 新增 Cursor 规则 `.cursor/rules/custom-md-changelog.mdc` | 定制改动须同步更新 `CUSTOM.md` |
-| 2026-08-22 | 本地移除 `.claude/skills` symlink | 仅 Claude Code 用；Cursor 开发可忽略 `.claude/`，**未提交** |
+| 2026-08-22 | 移除 `.claude/skills` symlink | 仅 Claude Code 用；本 fork 以 Cursor 为主，skills 见 `.agents/skills` |
