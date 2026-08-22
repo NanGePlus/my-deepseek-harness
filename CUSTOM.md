@@ -6,21 +6,23 @@
 - **集成分支**：`custom/main`（本 fork 的功能集成线；相对 upstream `master` 约 +48 commits，截至 2026-08-22）
 - 运行方式：从源码 `pnpm install` / `pnpm run build:lib:host` + client bundle + `pnpm run build:web` / `pnpm dsh web`
 - Node：^22.19 或 >=24；pnpm@11.7.0（Corepack）
-- 扩展策略：V1 文件编辑器因需改 Host RPC 与 details 栏壳层，**直接改 `packages/`**；长期仍优先树外插件 / 组合包，不改 `vendor/`
+- 扩展策略：V1 文件编辑器因需改 Host RPC 与 **工具箱**（details 栏）壳层，**直接改 `packages/`**；长期仍优先树外插件 / 组合包，不改 `vendor/`
 - 领域与决策：`CONTEXT.md`、`docs/adr/0001-file-editor-host-rpc.md`、`docs/adr/0002-file-editor-details-tab.md`、`docs/prd/file-editor-v1.md`
 
 ## 产品
 - 产品名：（待填写）
 - 默认 profile：`web`
 - 模型提供方：DeepSeek / 其它 / 自定义 OpenAI 兼容端点
-- **V1 定制重点**：Web details 栏内嵌 Workspace 文件编辑器（文件树 + Monaco 多 Tab），与 Agent 对话并列、不占用中栏
+- **V1 定制重点**：Web **工具箱**（原 details 栏）内嵌 Workspace 文件编辑器（文件树 + Monaco 多 Tab），与 Agent 对话并列、不占用中栏
 
 ## 已实现定制功能（相对上游 master）
 
-### Details 栏与壳层（PR #28–29）
-- details 栏 segmented Tab：**Tool 详情 | 文件编辑器**
+### 工具箱与壳层（details 栏，PR #28–29 及后续）
+- 产品文案：**详情栏 / 详情面板** 统一表述为 **工具箱**（`packages/client/ui-conversation` locales；Tab 内「工具详情」仍指 Tool 输出内容）
+- 会话头入口：**图标 +「工具箱」** capsule 按钮（与 Session log 同高 32px）；tooltip / `aria-label` 仍为「打开 / 收起工具箱」
+- 工具箱 segmented Tab：**资源管理器 | 工具详情**；Tab 条样式与对话区 **对话 / 轨迹** 一致（左对齐、13px、`state-business-primary` 选中下划线）
 - 文件编辑器 Tab 注入 `@deepseek-ai/dsh-client-ui-file-editor`（`cordis.patch.yml` 注册）
-- details 栏可拖宽；Tool 行点击可跳转 Tool 详情并保持面板存活（PR #38 前后续修复）
+- 工具箱可拖宽；Tool 行点击可跳转工具详情并保持面板存活（PR #38 前后续修复）
 
 ### Host RPC 扩展（`packages/host/apiproxy`，ADR-0001）
 | RPC | 作用 |
@@ -62,7 +64,7 @@
 ## 我的插件与组合包
 | 名称 | 形态 | 作用 | 日期 |
 |------|------|------|------|
-| `@deepseek-ai/dsh-client-ui-file-editor` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-file-editor` | details 栏文件编辑器 surface | 2026-08 |
+| `@deepseek-ai/dsh-client-ui-file-editor` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-file-editor` | 工具箱内文件编辑器 surface | 2026-08 |
 | `@deepseek-ai/dsh-lsp-editor` | Host 面新包 + apiproxy 接线 | 编辑器 LSP 文档 sync / hover / close | 2026-08 |
 
 ## 我改过的官方文件（尽量为空）
@@ -70,11 +72,11 @@
 |-----------|----------|------|
 | `packages/host/apiproxy/` | 文件编辑器 Host RPC、listing 性能、`readFile` 大小上限 | 2026-08 |
 | `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface | 2026-08 |
-| `packages/client/ui-conversation/` | details segmented Tab、Tool 详情与编辑器 Tab 协调 | 2026-08 |
+| `packages/client/ui-conversation/` | 工具箱 segmented Tab、Tool 详情与编辑器 Tab 协调；**2026-08-22** 工具箱文案、capsule 入口、Tab 样式对齐对话区 | 2026-08 |
 | `packages/client/runtime/` | `WorkspaceRuntime` 转发新 Host RPC | 2026-08 |
 | `packages/client/ui-primitives/` | Mermaid 块、ZoomPanLightbox、Markdown 图片 | 2026-08 |
 | `packages/client/ui-tool/` | Tool 行 selection → details 跳转 | 2026-08 |
-| `packages/client/ui-layout/` | details 栏宽度 / AppFrame 微调 | 2026-08 |
+| `packages/client/ui-layout/` | 工具箱栏宽度 / AppFrame 微调 | 2026-08 |
 | `packages/lsp/lsp-editor/` | **新包**：编辑器 LSP 类型与接线 | 2026-08 |
 | `packages/lsp/lsp-stdio/` | 编辑器实例诊断推送 | 2026-08 |
 | `packages/bundle/web-app/cordis.patch.yml` | 注册 ui-file-editor 与 LSP 相关插件 | 2026-08 |
@@ -85,7 +87,7 @@
 ## 我故意不跟的上游行为
 | 点 | 原因 |
 |----|------|
-| 在 `packages/` 内联实现文件编辑器 V1 | Host RPC 与 details 壳层必须改官方包；树外插件留待后续拆分 |
+| 在 `packages/` 内联实现文件编辑器 V1 | Host RPC 与工具箱壳层必须改官方包；树外插件留待后续拆分 |
 | `custom/main` 长期领先 upstream `master` | 自研功能集成线，合并 upstream 时需手动 reconcile |
 | 文件树 listing 单层上限 1000 + dirent 扫描上限 10 000 | 防止 monorepo 大目录拖垮 Host / 浏览器 |
 | `readFile` 5 MB 硬上限 | 防止 minified bundle 等超大文件经 RPC + Monaco 卡死主线程 |
@@ -100,5 +102,16 @@
 ## 待合并 / 进行中
 | 分支 | 内容 | 状态 |
 |------|------|------|
-| `fix/file-editor-v1-qa` | Tab 批量关闭、删除/重命名/同名冲突、文件夹重命名 Tab 同步、Markdown 默认源码、空状态 UI | 进行中 → `custom/main` |
+| `fix/file-editor-v1-qa-validation` | 从 `custom/main` 拉出的验证 / BUG 修复线：**工具箱**文案与 capsule 入口、Tab 样式对齐对话区（`39e3b07463`、`a3dd6ffdc8`） | 进行中 → `custom/main` |
+| `fix/file-editor-v1-qa` | Tab 批量关闭、删除/重命名/同名冲突、文件夹重命名 Tab 同步、Markdown 默认源码、空状态 UI | 已并入 `custom/main` 或与本线并行，合并前需 reconcile |
 | `fix/file-editor-v1-verify-fix` | 大文件 + 目录 listing 性能修复 | 已合并入 `custom/main` |
+
+## 近期操作记录
+| 日期 | 操作 | 备注 |
+|------|------|------|
+| 2026-08-22 | 从最新 `origin/custom/main` 创建分支 `fix/file-editor-v1-qa-validation` | 用于 V1 验证测试与 BUG 修复；开工前 stash 了未提交 WIP |
+| 2026-08-22 | 用户可见文案：详情栏 / 详情面板 → **工具箱** | `ui-conversation` locales；e2e `details-segmented-tab` 快照英文 `Toolbox` |
+| 2026-08-22 | 会话头工具箱入口改为 **图标 +「工具箱」** capsule | `DetailsPanelToggle`；改 client 插件后需 `pnpm --filter @deepseek-ai/dsh-client-ui-conversation run bundle` 并硬刷新 `pnpm dsh web` |
+| 2026-08-22 | 工具箱 Tab 条样式对齐对话区 Tab | `DetailsPanel.module.css`：左对齐、蓝色选中态、2px 下划线 |
+| 2026-08-22 | 新增 Cursor 规则 `.cursor/rules/custom-md-changelog.mdc` | 定制改动须同步更新 `CUSTOM.md` |
+| 2026-08-22 | 本地移除 `.claude/skills` symlink | 仅 Claude Code 用；Cursor 开发可忽略 `.claude/`，**未提交** |
