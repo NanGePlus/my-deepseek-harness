@@ -19,6 +19,7 @@ import { FileTypeIcon } from './file-type-icon.tsx'
 import { lspErrorCount } from './diagnostics-ui.ts'
 import {
   directoryChainToFile, isPathInDirectorySubtree, joinChildPath, parentDirectoryForCreate,
+  remapPathAfterRename,
   parentDirectoryOfEntry, siblingNameConflictKey,
 } from './file-tree-parent.ts'
 import { flattenVisibleTree, paintVisibleRows } from './flatten-visible.ts'
@@ -675,6 +676,16 @@ export function FileTreePane({
           return
         }
         const result = await renamePath(workspace.workspaceId, entry.path, trimmed)
+        if (entry.isDirectory) {
+          purgeCachedSubtree(entry.path)
+          setExpanded((current) => {
+            const next = new Set<string>()
+            for (const path of current) {
+              next.add(remapPathAfterRename(entry.path, result.path, path))
+            }
+            return next
+          })
+        }
         await invalidateDirectory(parent)
         onPathRenamed?.(entry.path, result.path, trimmed)
         setSelectedPath(result.path)

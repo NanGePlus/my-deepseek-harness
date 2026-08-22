@@ -52,7 +52,7 @@ export function MarkdownEditorBody({
   tab, workspaceRoot, dark, t, onBufferChange, onHover,
 }: MarkdownEditorBodyProps) {
   const [viewsByPath, setViewsByPath] = useState<Partial<Record<string, MarkdownViewMode>>>({})
-  const view = viewsByPath[tab.path] ?? 'preview'
+  const view = viewsByPath[tab.path] ?? 'source'
   const segments = breadcrumbSegments(workspaceRoot, tab.path)
   const themeLabel = dark ? t('editor.theme.dark') : t('editor.theme.light')
 

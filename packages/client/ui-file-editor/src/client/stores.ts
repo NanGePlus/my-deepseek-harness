@@ -4,6 +4,7 @@
  */
 import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
+import { remapPathAfterRename } from './file-tree-parent.ts'
 
 /** Editable-text tab: buffer is the unsaved copy; saved is the last explicit write. */
 export interface TextEditorTab {
@@ -136,13 +137,16 @@ export function createFileEditorStore(): EngineStoreHandle<FileEditorRootState, 
       },
       renameTabPath: (draft, workspaceId, oldPath, newPath, newName) => {
         const state = partition(draft, workspaceId)
+        const normalizedOld = oldPath.replace(/[/\\]+$/, '')
         for (const tab of state.tabs) {
-          if (tab.path === oldPath) {
-            tab.path = newPath
-            tab.name = newName
-          }
+          const remapped = remapPathAfterRename(oldPath, newPath, tab.path)
+          if (remapped === tab.path) continue
+          if (tab.path === normalizedOld) tab.name = newName
+          tab.path = remapped
         }
-        if (state.activePath === oldPath) state.activePath = newPath
+        if (state.activePath !== undefined) {
+          state.activePath = remapPathAfterRename(oldPath, newPath, state.activePath)
+        }
       },
       closeAllTabs: (draft, workspaceId) => {
         const state = partition(draft, workspaceId)

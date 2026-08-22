@@ -29,6 +29,28 @@ export function isPathInDirectorySubtree(directoryPath: string, candidatePath: s
 }
 
 /**
+ * Host-absolute path after renaming a file or directory.
+ * Descendant paths keep their trailing segments under the new prefix.
+ * @param renamedOldPath - Host-absolute path before rename.
+ * @param renamedNewPath - Host-absolute path after rename.
+ * @param path - Host-absolute path to remap.
+ * @returns {@link path} unchanged when outside the renamed subtree.
+ */
+export function remapPathAfterRename(
+  renamedOldPath: string,
+  renamedNewPath: string,
+  path: string,
+): string {
+  const normalizedOld = renamedOldPath.replace(/[/\\]+$/, '')
+  const normalizedNew = renamedNewPath.replace(/[/\\]+$/, '')
+  if (path === normalizedOld) return normalizedNew
+  if (path.startsWith(`${normalizedOld}/`)) {
+    return `${normalizedNew}${path.slice(normalizedOld.length)}`
+  }
+  return path
+}
+
+/**
  * Resolve the parent directory for a toolbar create operation.
  * @param workspaceRoot - bound Workspace root path.
  * @param selected - currently selected tree entry, if any.

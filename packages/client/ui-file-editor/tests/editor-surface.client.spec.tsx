@@ -86,14 +86,17 @@ function defaultReadFile(_id: WorkspaceId, path: string, kind: FileReadKind): Pr
   return Promise.resolve({ kind: 'text', path, text: `contents of ${path}\n` })
 }
 
-async function switchMarkdownToSource(): Promise<void> {
-  await waitFor(() => {
-    expect(screen.getByRole('tab', { name: 'Markdown' })).toBeTruthy()
-  })
-  fireEvent.click(screen.getByRole('tab', { name: 'Markdown' }))
+async function expectMarkdownSourceOpen(name = 'README.md'): Promise<void> {
   await waitFor(() => {
     expect(screen.getByRole('tab', { name: 'Markdown' }).getAttribute('aria-selected')).toBe('true')
   })
+  await waitFor(() => {
+    expect(screen.getByRole('textbox', { name: new RegExp(name) })).toBeTruthy()
+  })
+}
+
+async function switchMarkdownToSource(): Promise<void> {
+  await expectMarkdownSourceOpen()
 }
 
 async function markdownEditor(name = 'README.md'): Promise<HTMLTextAreaElement> {
@@ -769,18 +772,24 @@ describe('EditorSurface open / save', () => {
     await clickFile('README.md')
     await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
     expect(screen.queryByText('未打开文件')).toBeNull()
-    expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
+    await expectMarkdownSourceOpen()
     const box = await markdownEditor()
     expect(box.value).toBe('# README.md\n\nPreview **body**\n')
     expect(screen.queryByRole('button', { name: '保存' })).toBeNull()
     expect(b.readFile).toHaveBeenCalledWith(WID, `${ROOT}/README.md`, 'text', expect.any(AbortSignal))
   })
 
+  it('default-source: opening a Markdown file selects source mode', async () => {
+    mount()
+    await clickFile('README.md')
+    await expectMarkdownSourceOpen()
+    expect(screen.getByRole('tab', { name: '预览' }).getAttribute('aria-selected')).toBe('false')
+  })
+
   it('markdown-preview: toggles between preview and Markdown source', async () => {
     mount()
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy() })
-    await markdownEditor()
+    await expectMarkdownSourceOpen()
     fireEvent.click(screen.getByRole('tab', { name: '预览' }))
     expect(screen.queryByRole('textbox', { name: /README\.md/ })).toBeNull()
     expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
@@ -1062,9 +1071,9 @@ describe('EditorSurface open / save', () => {
       },
     })
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy() })
+    await expectMarkdownSourceOpen()
     await clickFile('gone.ts')
-    expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
+    await expectMarkdownSourceOpen()
     expect(screen.queryByText('无法打开此文件')).toBeNull()
     expect(screen.queryByRole('tab', { name: /gone\.ts/ })).toBeNull()
   })
@@ -1081,12 +1090,12 @@ describe('EditorSurface open / save', () => {
       },
     })
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy() })
+    await expectMarkdownSourceOpen()
     await clickFile('gone.ts')
-    expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
+    await expectMarkdownSourceOpen()
     expect(screen.queryByText('加载中…')).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: /README\.md/ }))
-    expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
+    await expectMarkdownSourceOpen()
     expect(b.readFile.mock.calls.filter(call => call[1]?.endsWith('gone.ts'))).toHaveLength(1)
   })
 
@@ -1103,12 +1112,12 @@ describe('EditorSurface open / save', () => {
     await clickFile('gone.ts')
     await waitFor(() => { expect(screen.getByText('加载中…')).toBeTruthy() })
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy() })
+    await expectMarkdownSourceOpen()
     expect(screen.queryByText('加载中…')).toBeNull()
     await act(async () => {
       releaseGone!({ kind: 'text', path: `${ROOT}/gone.ts`, text: 'late\n' })
     })
-    expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
+    await expectMarkdownSourceOpen()
     expect(screen.queryByRole('tab', { name: /gone\.ts/ })).toBeNull()
   })
 
@@ -1122,9 +1131,9 @@ describe('EditorSurface open / save', () => {
       },
     })
     await clickFile('README.md')
-    await waitFor(() => { expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy() })
+    await expectMarkdownSourceOpen()
     await clickFile('gone.ts')
-    expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
+    await expectMarkdownSourceOpen()
     expect(screen.queryByText('加载中…')).toBeNull()
   })
 
@@ -1449,6 +1458,74 @@ describe('EditorSurface file operations', () => {
     await waitFor(() => { expect(screen.getByText('lib')).toBeTruthy() })
     expect(b.renamePath).toHaveBeenCalledWith(WID, `${ROOT}/src`, 'lib')
     expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length).toBeGreaterThan(1)
+  })
+
+  it('rename-folder: remaps open child tabs and delete closes them at the new path', async () => {
+    const TEST = `${ROOT}/test`
+    const TEST02 = `${ROOT}/test02`
+    let folderName = 'test'
+    let folderPresent = true
+    const renamePath = vi.fn(async (_id: WorkspaceId, path: string, newName: string) => {
+      folderName = newName
+      return { path: path.replace(/[^/]+$/, newName) }
+    })
+    const deletePath = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === TEST02) folderPresent = false
+      return { path }
+    })
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === ROOT) {
+        const entries = DEFAULT_ROOT.filter(entry => entry.name !== 'src')
+        if (folderPresent) entries.push(entry(folderName, true))
+        return { path, entries, truncated: false }
+      }
+      if (path === TEST && folderName === 'test') {
+        return {
+          path,
+          entries: [
+            { name: 'test01.md', path: `${TEST}/test01.md`, isDirectory: false, hidden: false },
+            { name: 'test02.md', path: `${TEST}/test02.md`, isDirectory: false, hidden: false },
+          ],
+          truncated: false,
+        }
+      }
+      if (path === TEST02 && folderName === 'test02') {
+        return {
+          path,
+          entries: [
+            { name: 'test01.md', path: `${TEST02}/test01.md`, isDirectory: false, hidden: false },
+            { name: 'test02.md', path: `${TEST02}/test02.md`, isDirectory: false, hidden: false },
+          ],
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    mount({ list: listWorkspaceEntries, renamePath, deletePath })
+    await waitFor(() => { expect(screen.getByText('test')).toBeTruthy() })
+    await selectRow('test')
+    await waitFor(() => { expect(screen.getByText('test01.md')).toBeTruthy() })
+    await selectRow('test01.md')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /test01\.md/ })).toBeTruthy() })
+    await selectRow('test02.md')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /test02\.md/ })).toBeTruthy() })
+    openTreeContextMenu('test')
+    await chooseTreeMenuItem('重命名')
+    const renameDialog = await waitFor(() => screen.getByRole('dialog', { name: '重命名' }))
+    fireEvent.change(within(renameDialog).getByLabelText('名称'), { target: { value: 'test02' } })
+    fireEvent.click(within(renameDialog).getByRole('button', { name: '重命名' }))
+    await waitFor(() => { expect(screen.getByText('test02')).toBeTruthy() })
+    expect(screen.getByRole('tab', { name: /test01\.md/ })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /test02\.md/ })).toBeTruthy()
+    openTreeContextMenu('test02')
+    await chooseTreeMenuItem('删除')
+    fireEvent.click(within(await waitFor(() => screen.getByRole('dialog', { name: '删除' })))
+      .getByRole('button', { name: '删除' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('tab', { name: /test01\.md/ })).toBeNull()
+      expect(screen.queryByRole('tab', { name: /test02\.md/ })).toBeNull()
+    })
+    expect(deletePath).toHaveBeenCalledWith(WID, TEST02)
   })
 
   it('rename-conflict: shows validation copy and does not call Host rename', async () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { WorkspaceEntry } from '@deepseek-ai/dsh-client-runtime/client'
 import {
   directoryChainToFile, isPathInDirectorySubtree, joinChildPath, parentDirectoryForCreate,
-  parentDirectoryOfEntry, siblingKindNameExists, siblingNameConflictKey,
+  parentDirectoryOfEntry, remapPathAfterRename, siblingKindNameExists, siblingNameConflictKey,
 } from '../src/client/file-tree-parent.ts'
 
 const ROOT = '/w/alpha'
@@ -39,6 +39,14 @@ describe('file-tree-parent helpers', () => {
     expect(isPathInDirectorySubtree(`${ROOT}/test03`, `${ROOT}/test03`)).toBe(true)
     expect(isPathInDirectorySubtree(`${ROOT}/test03`, `${ROOT}/test03/a.md`)).toBe(true)
     expect(isPathInDirectorySubtree(`${ROOT}/test03`, `${ROOT}/test03-old/a.md`)).toBe(false)
+  })
+
+  it('remaps renamed directory paths and their descendants', () => {
+    const oldDir = `${ROOT}/test`
+    const newDir = `${ROOT}/test02`
+    expect(remapPathAfterRename(oldDir, newDir, oldDir)).toBe(newDir)
+    expect(remapPathAfterRename(oldDir, newDir, `${oldDir}/test01.md`)).toBe(`${newDir}/test01.md`)
+    expect(remapPathAfterRename(oldDir, newDir, `${ROOT}/other.ts`)).toBe(`${ROOT}/other.ts`)
   })
 
   it('joins a parent directory and child segment', () => {

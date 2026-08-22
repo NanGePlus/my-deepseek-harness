@@ -18,6 +18,7 @@ import { languageForPath, openKindForPath } from './open-kind.ts'
 import { createFileEditorStore, tabIsDirty, workspaceEditorState, type EditorTab } from './stores.ts'
 import { createDirtyGuard, type DirtyGuard, type WorkspaceEditorBridge } from './dirty-guard.ts'
 import { shouldSkipLsp, yieldToMain } from './editor-file-policy.ts'
+import { remapPathAfterRename } from './file-tree-parent.ts'
 import { FILE_READ_TIMEOUT_MS, withHostIoTimeout } from './host-io-timeout.ts'
 import {
   type TabCloseScope,
@@ -645,16 +646,36 @@ export function EditorSurface({
   }, [tabs, editorActions, closeLsp])
 
   const handlePathRenamed = useCallback((oldPath: string, newPath: string, newName: string) => {
+    const remappings = new Map<string, string>()
+    for (const tab of tabsRef.current) {
+      const remapped = remapPathAfterRename(oldPath, newPath, tab.path)
+      if (remapped !== tab.path) remappings.set(tab.path, remapped)
+    }
     setLspDiagnostics((prev) => {
-      const items = prev.get(oldPath)
-      if (items === undefined) return prev
-      const next = new Map(prev)
-      next.delete(oldPath)
-      next.set(newPath, items)
-      return next
+      let next: Map<string, HostLspDiagnostic[]> | undefined
+      for (const [path, items] of prev) {
+        const remapped = remapPathAfterRename(oldPath, newPath, path)
+        if (remapped === path) continue
+        next ??= new Map(prev)
+        next.delete(path)
+        next.set(remapped, items)
+      }
+      return next ?? prev
     })
+    for (const [oldTabPath, newTabPath] of remappings) {
+      closeLsp(oldTabPath)
+      const version = lspVersions.current.get(oldTabPath)
+      if (version !== undefined) {
+        lspVersions.current.set(newTabPath, version)
+        lspVersions.current.delete(oldTabPath)
+      }
+    }
     editorActions?.renameTabPath(oldPath, newPath, newName)
-  }, [editorActions])
+    for (const [oldTabPath, newTabPath] of remappings) {
+      const tab = tabsRef.current.find(item => item.path === oldTabPath)
+      if (tab?.kind === 'text') scheduleLspSync(newTabPath, tab.buffer)
+    }
+  }, [editorActions, closeLsp, scheduleLspSync])
 
   const handleCloseTab = useCallback((path: string) => {
     if (workspaceId !== undefined && dirtyGuard.requestCloseTab(workspaceId, path)) return

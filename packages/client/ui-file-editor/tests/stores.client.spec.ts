@@ -40,6 +40,31 @@ describe('file editor store', () => {
     expect(instance.getSnapshot().byWorkspace[WID]?.activePath).toBe('/w/GUIDE.md')
   })
 
+  it('remaps open tabs under a renamed directory', () => {
+    const instance = createFileEditorStore().create()
+    instance.actions.openTab(WID, {
+      kind: 'text',
+      path: '/w/test/test01.md',
+      name: 'test01.md',
+      language: 'markdown',
+      buffer: 'a',
+      saved: 'a',
+    })
+    instance.actions.openTab(WID, {
+      kind: 'text',
+      path: '/w/test/test02.md',
+      name: 'test02.md',
+      language: 'markdown',
+      buffer: 'b',
+      saved: 'b',
+    })
+    instance.actions.renameTabPath(WID, '/w/test', '/w/test02', 'test02')
+    const tabs = instance.getSnapshot().byWorkspace[WID]?.tabs ?? []
+    expect(tabs.map(tab => tab.path)).toEqual(['/w/test02/test01.md', '/w/test02/test02.md'])
+    expect(tabs.map(tab => tab.name)).toEqual(['test01.md', 'test02.md'])
+    expect(instance.getSnapshot().byWorkspace[WID]?.activePath).toBe('/w/test02/test02.md')
+  })
+
   it('reloadTextTab replaces buffer and saved text for a text tab', () => {
     const instance = createFileEditorStore().create()
     instance.actions.openTab(WID, {
