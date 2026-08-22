@@ -1,7 +1,7 @@
 /** Right-pane tabs, Monaco / preview / non-openable / empty / loading / error. */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { IconCloseOutline16, IconLoadingOutline16, IconPanelLeftOutline16, Menu, Tooltip, ZoomableImage } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconCloseOutline16, IconCodeOutline16, IconLoadingOutline16, IconPanelLeftOutline16, Menu, Tooltip, ZoomableImage } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
@@ -232,20 +232,14 @@ export function EditorPane({
           </div>
         )}
         {active === undefined && status.kind === 'idle' && (
-          <div className={css.emptyCard}>
+          <div className={css.emptyState}>
             <span className={css.emptyIcon} aria-hidden="true">
-              <svg width={48} height={48} viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M4.2 1.5h5.1L12.8 5v9.5H4.2V1.5Z"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  strokeLinejoin="round"
-                />
-                <path d="M9.2 1.6V5h3.5" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-              </svg>
+              <IconCodeOutline16 size={28} />
             </span>
-            <div className={css.emptyTitle}>{t('editor.empty.title')}</div>
-            <div className={css.emptyBody}>{t('editor.empty.body')}</div>
+            <div className={css.emptyCopy}>
+              <div className={css.emptyTitle}>{t('editor.empty.title')}</div>
+              <div className={css.emptyBody}>{t('editor.empty.body')}</div>
+            </div>
           </div>
         )}
         {active?.kind === 'text' && isMarkdownLanguage(active.language) && (

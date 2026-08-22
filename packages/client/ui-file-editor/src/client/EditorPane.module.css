@@ -176,23 +176,47 @@
   text-align: center;
 }
 
+.emptyState {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
 .emptyIcon {
-  color: var(--dsw-alias-label-caption);
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dsw-alias-label-caption) 10%, transparent);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.emptyCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 220px;
 }
 
 .emptyTitle {
   font-family: var(--dsw-font-family);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 20px;
-  font-weight: 600;
-  color: var(--dsw-alias-label-primary);
+  font-weight: 400;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .emptyBody {
   font-family: var(--dsw-font-family);
   font-size: 12px;
   line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-caption);
 }
 
 .errorCopy {

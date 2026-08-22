@@ -36,19 +36,24 @@
 - 绑定当前 Session 的 Workspace；文件树**懒加载** + **虚拟滚动** + 文件名过滤
 - Material Icon Theme 文件类型图标；Git 行尾徽章（M/U/D 等）
 - 打开三档：**可编辑文本**（Monaco / textarea fallback）、**图片只读预览**、**已知二进制不可打开**
-- 多 Tab、dirty 标记、**显式保存**（⌘S / Ctrl+S）；Markdown **预览 / 源码**切换
-- 文件树工具栏：新建文件/文件夹、重命名、删除（确认对话框）
+- 多 Tab、dirty 标记、**显式保存**（⌘S / Ctrl+S）；Markdown **预览 / 源码**切换（**默认源码**）
+- 文件树工具栏：新建文件/文件夹、重命名、删除（确认对话框）；**右键菜单**（文件/文件夹分类型操作）
+- **Tab 栏批量关闭**（关闭当前 / 其它 / 全部 / 左侧 / 右侧，VS Code 风格）
+- **文件夹重命名**时同步更新已打开子文件 Tab 路径；**删除文件夹**时关闭子树 Tab 并清理树缓存
+- 同名冲突：文件↔文件、文件夹↔文件夹分别提示；Host 层拦截路径类型冲突
 - 外部变更对话框：**重新加载** / **保留本地编辑**（`watchPath`）
 - Session 切换 / 关闭 dirty Tab **守卫**（保存 / 丢弃 / 取消）
 - Session 内文件路径链接可在 details 编辑器中打开
 - Monaco / 主题跟随 Harness light/dark
+- 多 Tab 横向滚动、树切换时保持可用；滚动条按需显示
+- 未打开文件**空状态**：设计系统图标 + 与文件树一致的轻量排版
 
 ### Markdown / 预览增强（PR #37–38，`ui-primitives` 等）
 - Mermaid 代码块渲染 + **可缩放 lightbox**
 - Markdown / 图片 **ZoomPanLightbox**（与会话消息区共用组件）
 - 抑制空白 inline-code 芯片与 Monaco unicode 高亮噪声
 
-### 性能与边界（分支 `fix/file-editor-v1-verify-fix`，待合并入 `custom/main`）
+### 性能与边界（分支 `fix/file-editor-v1-verify-fix`，已合并入 `custom/main`）
 - **`host.readFile` 5 MB 上限**：超出返回 `file-too-large`，编辑器提示「文件过大」
 - **大文件 / minified 单行**：Monaco `largeFileOptimizations`、超长行关闭 word wrap、跳过 LSP 全量同步，避免页面卡死
 - **目录 listing 优化**：symlink 分类 32 并发；dirent 扫描上限 10 000；Client 每目录 **30 s 超时**、独立 AbortController
@@ -95,4 +100,5 @@
 ## 待合并 / 进行中
 | 分支 | 内容 | 状态 |
 |------|------|------|
-| `fix/file-editor-v1-verify-fix` | 大文件 + 目录 listing 性能修复（`84513ac3eb`） | 已提交，待 PR → `custom/main` |
+| `fix/file-editor-v1-qa` | Tab 批量关闭、删除/重命名/同名冲突、文件夹重命名 Tab 同步、Markdown 默认源码、空状态 UI | 进行中 → `custom/main` |
+| `fix/file-editor-v1-verify-fix` | 大文件 + 目录 listing 性能修复 | 已合并入 `custom/main` |
