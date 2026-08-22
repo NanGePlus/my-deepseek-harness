@@ -126,4 +126,19 @@ describe('dirty guard', () => {
     expect(guard.getSnapshot().mode).toMatchObject({ kind: 'close-tab', workspaceId: W1 })
     expect(guard.requestCloseTab(W2, TAB.path)).toBe(false)
   })
+
+  it('queues every dirty bulk-close target in tab-bar order', () => {
+    const guard = createDirtyGuard()
+    guard.registerBridge(W1, {
+      dirtyTabs: () => [TAB, { path: '/w/b.ts', name: 'b.ts' }],
+      saveTab: async () => true,
+      discardTab: () => {},
+    })
+    expect(guard.requestCloseTabs(W1, ['/w/a.ts', '/w/b.ts', '/w/c.ts'])).toBe(true)
+    expect(guard.getSnapshot().mode).toMatchObject({
+      kind: 'close-tab',
+      queue: [TAB, { path: '/w/b.ts', name: 'b.ts' }],
+    })
+    expect(guard.requestCloseTabs(W1, ['/w/c.ts'])).toBe(false)
+  })
 })

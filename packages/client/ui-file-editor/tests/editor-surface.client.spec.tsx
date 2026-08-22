@@ -903,6 +903,35 @@ describe('EditorSurface open / save', () => {
     await waitFor(() => { expect(screen.getByText('未打开文件')).toBeTruthy() })
   })
 
+  it('tab-menu-close-others: the tab context menu closes every tab except the anchor', async () => {
+    mount()
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
+    await clickFile('untracked.ts')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /untracked\.ts/ })).toBeTruthy() })
+    await clickFile('gone.ts')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /gone\.ts/ })).toBeTruthy() })
+    fireEvent.contextMenu(screen.getByRole('tab', { name: /README\.md/ }))
+    fireEvent.click(await waitFor(() => screen.getByRole('menuitem', { name: '关闭其他' })))
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy()
+      expect(screen.queryByRole('tab', { name: /untracked\.ts/ })).toBeNull()
+      expect(screen.queryByRole('tab', { name: /gone\.ts/ })).toBeNull()
+    })
+  })
+
+  it('tab-menu-close-all: the tab context menu closes every tab', async () => {
+    mount()
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /README\.md/ })).toBeTruthy() })
+    await clickFile('untracked.ts')
+    await waitFor(() => { expect(screen.getAllByRole('tab').length).toBe(2) })
+    fireEvent.contextMenu(screen.getByRole('tab', { name: /README\.md/ }))
+    fireEvent.click(await waitFor(() => screen.getByRole('menuitem', { name: '关闭全部' })))
+    await waitFor(() => { expect(screen.queryByRole('tab')).toBeNull() })
+    expect(screen.getByText('未打开文件')).toBeTruthy()
+  })
+
   it('does not open a folder row as a tab', async () => {
     const b = mount()
     await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })

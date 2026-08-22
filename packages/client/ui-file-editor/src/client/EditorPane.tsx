@@ -1,7 +1,8 @@
 /** Right-pane tabs, Monaco / preview / non-openable / empty / loading / error. */
 
-import { useEffect, useRef } from 'react'
-import { IconCloseOutline16, IconLoadingOutline16, IconPanelLeftOutline16, Tooltip, ZoomableImage } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { IconCloseOutline16, IconLoadingOutline16, IconPanelLeftOutline16, Menu, Tooltip, ZoomableImage } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { HostLspDiagnostic } from '@deepseek-ai/dsh-client-runtime/client'
@@ -10,6 +11,7 @@ import { MarkdownEditorBody } from './MarkdownEditorBody.tsx'
 import { isMarkdownLanguage, languageLabel } from './open-kind.ts'
 import { tabIsDirty, type EditorTab } from './stores.ts'
 import { lspErrorCount } from './diagnostics-ui.ts'
+import { type TabCloseScope, tabCloseMenuState } from './tab-close-scope.ts'
 import css from './EditorPane.module.css'
 import iconCss from './IconButton.module.css'
 
@@ -43,6 +45,12 @@ export interface EditorPaneProps {
    * @param path - tab path.
    */
   onClose: (path: string) => void
+  /**
+   * Bulk-close tabs relative to a context-menu anchor.
+   * @param scope - close scope.
+   * @param anchorPath - right-clicked tab path.
+   */
+  onCloseTabs: (scope: TabCloseScope, anchorPath: string) => void
   /**
    * Edit-buffer change for a text tab.
    * @param path - tab path.
@@ -79,11 +87,12 @@ export interface EditorPaneProps {
  * @param props - tabs, status, theme, and callbacks.
  */
 export function EditorPane({
-  tabs, activePath, status, dark, t, onFocus, onClose, onBufferChange, onRetry,
+  tabs, activePath, status, dark, t, onFocus, onClose, onCloseTabs, onBufferChange, onRetry,
   treeCollapsed = false, onShowTree, workspaceRoot, diagnosticsByPath, onHover,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.path === activePath)
   const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const [tabMenu, setTabMenu] = useState<{ anchorPath: string; rect: DOMRect } | null>(null)
   const themeLabel = dark ? t('editor.theme.dark') : t('editor.theme.light')
   const openPending = status.kind === 'loading' && status.op === 'open'
   const openFailed = status.kind === 'error' && status.op === 'open'
@@ -96,6 +105,19 @@ export function EditorPane({
       tab.scrollIntoView({ block: 'nearest', inline: 'nearest' })
     }
   }, [activePath, tabs])
+
+  const tabCloseMenuItems = useMemo((): readonly MenuEntry[] => {
+    if (tabMenu === null) return []
+    const disabled = tabCloseMenuState(tabs, tabMenu.anchorPath)
+    return [
+      { id: 'current', label: t('editor.tab.closeCurrent') },
+      { id: 'others', label: t('editor.tab.closeOthers'), disabled: disabled.closeOthersDisabled },
+      { id: 'right', label: t('editor.tab.closeRight'), disabled: disabled.closeRightDisabled },
+      { id: 'left', label: t('editor.tab.closeLeft'), disabled: disabled.closeLeftDisabled },
+      { type: 'separator', id: 'close-sep' },
+      { id: 'all', label: t('editor.tab.closeAll'), danger: true },
+    ]
+  }, [tabMenu, tabs, t])
 
   return (
     <div className={css.pane}>
@@ -131,6 +153,14 @@ export function EditorPane({
                     aria-selected={selected}
                     className={clsx(css.tab, selected && css.tabActive)}
                     onClick={() => { onFocus(tab.path) }}
+                    onContextMenu={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      setTabMenu({
+                        anchorPath: tab.path,
+                        rect: event.currentTarget.getBoundingClientRect(),
+                      })
+                    }}
                   >
                     {dirty && <span className={css.dirty} aria-label={t('editor.tab.dirty')} />}
                     <span className={clsx(css.tabTitle, errorCount > 0 && css.tabTitleError)}>
@@ -162,6 +192,23 @@ export function EditorPane({
                 )
               })}
             </div>
+          )}
+          {tabMenu !== null && (
+            <Menu
+              open
+              portal
+              compact
+              align="start"
+              side="bottom"
+              anchor={<span aria-hidden="true" />}
+              items={tabCloseMenuItems}
+              onSelect={(id) => {
+                onCloseTabs(id as TabCloseScope, tabMenu.anchorPath)
+                setTabMenu(null)
+              }}
+              onClose={() => { setTabMenu(null) }}
+              getAnchorRect={() => tabMenu.rect}
+            />
           )}
         </div>
       )}

@@ -57,6 +57,13 @@ export interface DirtyGuard {
    * @returns true when a guard dialog opened (caller must not close directly).
    */
   requestCloseTab(workspaceId: WorkspaceId, path: string): boolean
+  /**
+   * Begin a dirty-tab close guard for a bulk close when any target path is dirty.
+   * @param workspaceId - current Workspace.
+   * @param paths - tab paths slated to close (dirty subset is queued in tab-bar order).
+   * @returns true when a guard dialog opened (caller must not close directly).
+   */
+  requestCloseTabs(workspaceId: WorkspaceId, paths: readonly string[]): boolean
   /** Save the head of the current guard queue. */
   saveCurrent(): Promise<void>
   /** Discard the head of the current guard queue. */
@@ -107,11 +114,15 @@ export function createDirtyGuard(): DirtyGuard {
       return () => { bridges.delete(workspaceId) }
     },
     requestCloseTab(workspaceId, path) {
+      return this.requestCloseTabs(workspaceId, [path])
+    },
+    requestCloseTabs(workspaceId, paths) {
       const bridge = bridgeFor(workspaceId)
       if (bridge === undefined) return false
-      const tab = bridge.dirtyTabs().find(item => item.path === path)
-      if (tab === undefined) return false
-      publish({ mode: { kind: 'close-tab', workspaceId, queue: [tab] } })
+      const targets = new Set(paths)
+      const queue = bridge.dirtyTabs().filter(item => targets.has(item.path))
+      if (queue.length === 0) return false
+      publish({ mode: { kind: 'close-tab', workspaceId, queue } })
       return true
     },
     async saveCurrent() {

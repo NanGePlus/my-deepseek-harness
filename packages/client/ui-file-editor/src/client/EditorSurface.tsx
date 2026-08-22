@@ -19,6 +19,11 @@ import { createFileEditorStore, tabIsDirty, workspaceEditorState, type EditorTab
 import { createDirtyGuard, type DirtyGuard, type WorkspaceEditorBridge } from './dirty-guard.ts'
 import { shouldSkipLsp, yieldToMain } from './editor-file-policy.ts'
 import { FILE_READ_TIMEOUT_MS, withHostIoTimeout } from './host-io-timeout.ts'
+import {
+  type TabCloseScope,
+  pathsForTabCloseScope,
+  survivePathAfterTabClose,
+} from './tab-close-scope.ts'
 import css from './EditorSurface.module.css'
 import dialogCss from './FileTreeDialogs.module.css'
 
@@ -241,6 +246,10 @@ export function EditorSurface({
   const retryRef = useRef<(() => void) | null>(null)
   const watchAbort = useRef<Map<string, AbortController>>(new Map())
   const unwatchedPaths = useRef<Set<string>>(new Set())
+  const pendingBulkCloseRef = useRef<{
+    cleanPaths: readonly string[]
+    survivePath: string | undefined
+  } | null>(null)
   const lspVersions = useRef<Map<string, number>>(new Map())
   const lspSyncAbort = useRef<Map<string, AbortController>>(new Map())
   const lspDebounce = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -281,18 +290,6 @@ export function EditorSurface({
       return false
     }
   }, [workspace, writeFile, editorActions, bumpGitRefresh])
-
-  useEffect(() => {
-    if (workspaceId === undefined) return
-    const bridge: WorkspaceEditorBridge = {
-      dirtyTabs: () => tabsRef.current
-        .filter(tabIsDirty)
-        .map(tab => ({ path: tab.path, name: tab.name })),
-      saveTab,
-      discardTab: (path) => { editorActions?.closeTab(path) },
-    }
-    return dirtyGuard.registerBridge(workspaceId, bridge)
-  }, [workspaceId, dirtyGuard, editorActions, saveTab])
 
   useEffect(() => {
     const sync = (): void => { setDark(document.body.hasAttribute(DARK_ATTRIBUTE)) }
@@ -347,6 +344,44 @@ export function EditorSurface({
     lspVersions.current.delete(path)
     void lspCloseDocument(workspace.workspaceId, path).catch(() => {})
   }, [workspace, lspCloseDocument])
+
+  useEffect(() => {
+    if (workspaceId === undefined) return
+    const bridge: WorkspaceEditorBridge = {
+      dirtyTabs: () => tabsRef.current
+        .filter(tabIsDirty)
+        .map(tab => ({ path: tab.path, name: tab.name })),
+      saveTab,
+      discardTab: (path) => {
+        closeLsp(path)
+        editorActions?.closeTab(path)
+      },
+    }
+    return dirtyGuard.registerBridge(workspaceId, bridge)
+  }, [workspaceId, dirtyGuard, editorActions, saveTab, closeLsp])
+
+  useEffect(() => {
+    if (guardMode.mode.kind !== 'idle') return
+    const pending = pendingBulkCloseRef.current
+    if (pending === null) return
+    pendingBulkCloseRef.current = null
+    for (const path of pending.cleanPaths) {
+      if (!tabsRef.current.some(tab => tab.path === path)) continue
+      closeLsp(path)
+      editorActions?.closeTab(path)
+    }
+    if (
+      pending.survivePath !== undefined
+      && tabsRef.current.some(tab => tab.path === pending.survivePath)
+    ) {
+      editorActions?.focusTab(pending.survivePath)
+    }
+  }, [guardMode, editorActions, closeLsp])
+
+  const cancelDirtyGuard = useCallback(() => {
+    pendingBulkCloseRef.current = null
+    dirtyGuard.cancel()
+  }, [dirtyGuard])
 
   const fetchLspHover = useCallback(async (
     path: string,
@@ -619,6 +654,31 @@ export function EditorSurface({
     editorActions?.closeTab(path)
   }, [dirtyGuard, workspaceId, editorActions, closeLsp])
 
+  const handleCloseTabs = useCallback((scope: TabCloseScope, anchorPath: string) => {
+    const currentTabs = tabsRef.current
+    const paths = pathsForTabCloseScope(currentTabs, anchorPath, scope)
+    if (paths.length === 0) return
+    const survivePath = survivePathAfterTabClose(currentTabs, anchorPath, scope)
+    const cleanPaths = paths.filter((path) => {
+      const tab = currentTabs.find(item => item.path === path)
+      return tab === undefined || !tabIsDirty(tab)
+    })
+    if (workspaceId !== undefined && dirtyGuard.requestCloseTabs(workspaceId, paths)) {
+      pendingBulkCloseRef.current = { cleanPaths, survivePath }
+      return
+    }
+    for (const path of paths) {
+      closeLsp(path)
+      editorActions?.closeTab(path)
+    }
+    if (
+      survivePath !== undefined
+      && tabsRef.current.some(tab => tab.path === survivePath)
+    ) {
+      editorActions?.focusTab(survivePath)
+    }
+  }, [workspaceId, dirtyGuard, editorActions, closeLsp])
+
   const beginTreeResize = useCallback(() => {
     const root = rootRef.current
     if (root === null) return
@@ -690,6 +750,7 @@ export function EditorSurface({
         workspaceRoot={workspace?.path}
         onFocus={focusEditorTab}
         onClose={handleCloseTab}
+        onCloseTabs={handleCloseTabs}
         onBufferChange={(path, buffer) => {
           editorActions?.setBuffer(path, buffer)
           scheduleLspSync(path, buffer)
@@ -720,7 +781,7 @@ export function EditorSurface({
       />
       <Modal
         open={activeGuard !== null}
-        onClose={() => { dirtyGuard.cancel() }}
+        onClose={cancelDirtyGuard}
         closeLabel={t('editor.dialog.close')}
         title={t('editor.dialog.dirtyGuard.title')}
         className={dialogCss.dialogSurface ?? ''}
@@ -734,7 +795,7 @@ export function EditorSurface({
                 {t('editor.dialog.dirtyGuard.saveError')}
               </div>
             )}
-            <Button variant="outline" onClick={() => { dirtyGuard.cancel() }}>
+            <Button variant="outline" onClick={cancelDirtyGuard}>
               {t('editor.dialog.dirtyGuard.cancel')}
             </Button>
             <Button variant="outline" onClick={() => { dirtyGuard.discardCurrent() }}>
