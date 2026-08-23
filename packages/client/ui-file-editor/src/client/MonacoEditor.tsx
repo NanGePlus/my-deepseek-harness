@@ -6,6 +6,7 @@ import type { HostLspDiagnostic, HostLspHover } from '@deepseek-ai/dsh-client-ru
 import { loadMonacoEditor, type MonacoEditorModule, type MonacoStandaloneEditor } from './monaco-load.ts'
 import { ensureMonacoConfigured } from './monaco-config.ts'
 import { monacoOptionsForContent, monacoSurfaceOptionsForLanguage } from './editor-file-policy.ts'
+import { installMonacoClickSelectionGuard } from './monaco-click-selection.ts'
 import { emitMonacoBuffer, shouldSyncMonacoBuffer } from './monaco-buffer-sync.ts'
 import { setLspHoverHandler } from './monaco-hover.ts'
 import { installMonacoEnvironment } from './monaco-environment.ts'
@@ -146,6 +147,7 @@ export function MonacoEditor({
     if (host === null) return
     let cancelled = false
     let removeImeGuards: (() => void) | undefined
+    let removeClickGuard: (() => void) | undefined
     void loadMonacoEditor().then((monaco) => {
       if (cancelled) return
       if (monaco === undefined) return
@@ -190,6 +192,8 @@ export function MonacoEditor({
             ambiguousCharacters: false,
             nonBasicASCII: false,
           },
+          occurrencesHighlight: 'off',
+          selectionHighlight: false,
         })
       } catch (error: unknown) {
         // jsdom and worker-less hosts: monaco.editor.create throws; keep textarea.
@@ -204,6 +208,7 @@ export function MonacoEditor({
         emitMonacoBuffer(next, onChangeRef.current, lastEmitted)
       }
       removeImeGuards = installMonacoImeGuards(host, syncState.current, flushBuffer)
+      removeClickGuard = installMonacoClickSelectionGuard(editor).dispose
       editor.onDidChangeModelContent(() => {
         if (syncState.current.composing) return
         flushBuffer()
@@ -232,6 +237,7 @@ export function MonacoEditor({
     return () => {
       cancelled = true
       removeImeGuards?.()
+      removeClickGuard?.()
       editorRef.current?.dispose()
       editorRef.current = null
       syncState.current = { composing: false, focused: false }

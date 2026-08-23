@@ -39,8 +39,8 @@
 - Material Icon Theme 文件类型图标；Git 行尾徽章（M/U/D 等）
 - 打开三档：**可编辑文本**（Monaco / textarea fallback）、**图片只读预览**、**已知二进制不可打开**
 - 多 Tab、dirty 标记、**显式保存**（⌘S / Ctrl+S）；Markdown **预览 / 源码**切换（**默认源码**）
-- Markdown **预览态可编辑**（TipTap + `@tiptap/markdown` 双向序列化）：段落 + 行内 **B/I/U/S/Code/Link**；选区浮动工具栏；**链接**为同一 BubbleMenu 内切换的胶囊输入框（点「链接」即显）；预览内 **链接可点击**（新标签页打开）；**代码块 / Mermaid 只读**（`readOnlyFencedBlock` atom + `MarkdownText` 渲染）；**中文 IME** 组合输入期间不回写 buffer
-- Markdown **源码（Monaco）** 与预览同样保护 **IME 组合输入**：聚焦/拼音组合期间不 `setValue` 重载模型；**默认 soft wrap**；Markdown 使用 `wrappingStrategy: simple` + `accessibilitySupport: off` 以保持 CJK IME preedit 紧跟光标（不再组合期间切换 wrap）
+- Markdown **预览态可编辑**（TipTap + `@tiptap/markdown` 双向序列化）：段落 + 行内 **B/I/U/S/Code/Link**；选区浮动工具栏；**链接**为同一 BubbleMenu 内切换的胶囊输入框（点「链接」即显）；预览内 **链接可点击**（新标签页打开）；**代码块 / Mermaid 只读**（`readOnlyFencedBlock` atom + `MarkdownText` 渲染）；**中文 IME** 组合输入期间不回写 buffer；**单击仅定位光标**（误选区自动折叠，双击/拖拽选区不受影响）
+- Markdown **源码（Monaco）** 与预览同样保护 **IME 组合输入**：聚焦/拼音组合期间不 `setValue` 重载模型；**默认 soft wrap**；Markdown 使用 `wrappingStrategy: simple` + `accessibilitySupport: off` 以保持 CJK IME preedit 紧跟光标（不再组合期间切换 wrap）；**单击仅定位光标**（误选区自动折叠）
 - 文件树工具栏：新建文件/文件夹、重命名、删除（确认对话框）；**右键菜单**（文件/文件夹分类型操作）
 - **Tab 栏批量关闭**（关闭当前 / 其它 / 全部 / 左侧 / 右侧，VS Code 风格）
 - **文件夹重命名**时同步更新已打开子文件 Tab 路径；**删除文件夹**时关闭子树 Tab 并清理树缓存
@@ -134,3 +134,4 @@
 | 2026-08-23 | Markdown 源码恢复软换行 | 移除 markdown 专用 `wordWrap: off`；与普通文本同样随宽度 wrap |
 | 2026-08-23 | Markdown 源码 wrap + IME 兼得 | 默认 soft wrap；`compositionstart/end` 临时 `wordWrap: off` 保持 preedit 内联 |
 | 2026-08-23 | Markdown 源码 CJK IME + soft wrap | 移除组合期间 wrap 切换；Markdown 用 `accessibilitySupport: off` + simple wrap |
+| 2026-08-23 | 修复单击误选文本 | 预览（TipTap）与源码（Monaco）在简单单击后折叠非空选区；拖拽与多击选词/选行保留 |

@@ -7,6 +7,7 @@ import type { MarkdownCodeLabels, MermaidSecurityLevel } from '@deepseek-ai/dsh-
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { createEditableMarkdownExtensions } from './editable-markdown-extensions.ts'
 import { MarkdownSelectionToolbar } from './MarkdownSelectionToolbar.tsx'
+import { installPreviewClickSelectionGuard } from './preview-click-selection.ts'
 import css from './EditableMarkdownPreview.module.css'
 
 /** Props for {@link EditableMarkdownPreview}. */
@@ -108,7 +109,11 @@ export function EditableMarkdownPreview({
       emitPreviewMarkdown(() => editor.getMarkdown(), onChangeRef.current, lastEmitted)
     }
     dom.addEventListener('compositionend', flushComposition)
-    return () => { dom.removeEventListener('compositionend', flushComposition) }
+    const removeClickGuard = installPreviewClickSelectionGuard(editor.view)
+    return () => {
+      dom.removeEventListener('compositionend', flushComposition)
+      removeClickGuard()
+    }
   }, [editor])
 
   if (!editor) return null
