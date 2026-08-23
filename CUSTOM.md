@@ -46,6 +46,7 @@
 - **文件夹重命名**时同步更新已打开子文件 Tab 路径；**删除文件夹**时关闭子树 Tab 并清理树缓存
 - 同名冲突：文件↔文件、文件夹↔文件夹分别提示；Host 层拦截路径类型冲突
 - 外部变更对话框：**重新加载** / **保留本地编辑**（`watchPath`）
+- **文件树自动刷新**：编辑器保存、外部磁盘变更（`watchPath`）及 Workspace 根目录监听后，自动重载对应目录 listing，无需手动点刷新
 - Session 切换 / 关闭 dirty Tab **守卫**（保存 / 丢弃 / 取消）
 - Session 内文件路径链接可在 details 编辑器中打开
 - Monaco / 主题跟随 Harness light/dark
@@ -73,7 +74,7 @@
 | 文件/目录 | 改了什么 | 日期 |
 |-----------|----------|------|
 | `packages/host/apiproxy/` | 文件编辑器 Host RPC、listing 性能、`readFile` 大小上限 | 2026-08 |
-| `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat | 2026-08 |
+| `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat；**2026-08-23** 保存/外部变更后文件树自动刷新 | 2026-08 |
 | `packages/client/ui-conversation/` | 工具箱 segmented Tab、Tool 详情与编辑器 Tab 协调；**2026-08-22** 工具箱文案、capsule 入口、Tab 样式对齐对话区；**2026-08-23** 已发送用户消息 file-context pill 展示投影 | 2026-08 |
 | `packages/client/runtime/` | `WorkspaceRuntime` 转发新 Host RPC | 2026-08 |
 | `packages/client/ui-primitives/` | Mermaid 块、ZoomPanLightbox、Markdown 图片 | 2026-08 |
@@ -108,7 +109,7 @@
 ## 待合并 / 进行中
 | 分支 | 内容 | 状态 |
 |------|------|------|
-| `fix/file-editor-v1-qa-validation` | PR [#48](https://github.com/NanGePlus/my-deepseek-harness/pull/48)：**工具箱**文案与 capsule 入口、Tab 样式对齐对话区；**Markdown 预览 WYSIWYG**（TipTap）与 IME/wrap 修复；**Add to Chat file-context pill**（Markdown 源码 + 全语言 Monaco → composer pill；发送展开进 prompt；**已发送用户气泡** pill 投影并可点击打开编辑器） | PR 待审 / 待合并 → `custom/main` |
+| `fix/file-editor-v1-qa-validation` | PR [#48](https://github.com/NanGePlus/my-deepseek-harness/pull/48)：**工具箱**文案与 capsule 入口、Tab 样式对齐对话区；**Markdown 预览 WYSIWYG**（TipTap）与 IME/wrap 修复；**Add to Chat file-context pill**（Markdown 源码 + 全语言 Monaco → composer pill；发送展开进 prompt；**已发送用户气泡** pill 投影并可点击打开编辑器） | 已合并入 `custom/main` |
 | `fix/file-editor-v1-qa` | Tab 批量关闭、删除/重命名/同名冲突、文件夹重命名 Tab 同步、Markdown 默认源码、空状态 UI | 已并入 `custom/main` 或与本线并行，合并前需 reconcile |
 | `fix/file-editor-v1-verify-fix` | 大文件 + 目录 listing 性能修复 | 已合并入 `custom/main` |
 
@@ -141,3 +142,5 @@
 | 2026-08-23 | 已发送用户消息 file-context pill 展示投影 | `b15cd147`；`ui-conversation` `project-user-text`；气泡显示 pill 非全文 excerpt；可点击打开编辑器；session log 仍保留展开全文 |
 | 2026-08-23 | 全语言 Monaco 选区 Add to Chat | `8c624b4a`；TS/Python 等可编辑文本与 Markdown 源码同链路；改 `ui-file-editor` 后需 `run bundle` |
 | 2026-08-23 | 开 PR [#48](https://github.com/NanGePlus/my-deepseek-harness/pull/48) → `custom/main` | 分支 `fix/file-editor-v1-qa-validation`；7 commit（预览/IME + Add to Chat 全链路） |
+| 2026-08-23 | PR #48 合并入 `custom/main` | 保留分支 `fix/file-editor-v1-qa-validation` |
+| 2026-08-23 | 文件树自动刷新 | 保存 / `watchPath` 外部变更 / Workspace 根监听后重载 listing；改 `ui-file-editor` 后需 `run bundle` |

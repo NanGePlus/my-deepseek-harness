@@ -1,6 +1,21 @@
 import type { WorkspaceEntry } from '@deepseek-ai/dsh-client-runtime/client'
 
 /**
+ * Resolve the parent directory that lists {@link path} as a direct child.
+ * @param workspaceRoot - bound Workspace root path.
+ * @param path - Host-absolute file or directory path under the root.
+ * @returns the absolute parent directory whose listing includes {@link path}.
+ */
+export function parentDirectoryOfPath(workspaceRoot: string, path: string): string {
+  const normalizedRoot = workspaceRoot.replace(/[/\\]+$/, '')
+  if (path === normalizedRoot) return normalizedRoot
+  const slash = path.lastIndexOf('/')
+  if (slash < 0) return normalizedRoot
+  const parent = path.slice(0, slash)
+  return parent.length >= normalizedRoot.length ? parent : normalizedRoot
+}
+
+/**
  * Resolve the parent directory that lists {@link entry} as a direct child.
  * @param workspaceRoot - bound Workspace root path.
  * @param entry - tree entry being renamed or deleted.
@@ -10,12 +25,7 @@ export function parentDirectoryOfEntry(
   workspaceRoot: string,
   entry: WorkspaceEntry,
 ): string {
-  const normalizedRoot = workspaceRoot.replace(/[/\\]+$/, '')
-  if (entry.path === normalizedRoot) return normalizedRoot
-  const slash = entry.path.lastIndexOf('/')
-  if (slash < 0) return normalizedRoot
-  const parent = entry.path.slice(0, slash)
-  return parent.length >= normalizedRoot.length ? parent : normalizedRoot
+  return parentDirectoryOfPath(workspaceRoot, entry.path)
 }
 
 /**

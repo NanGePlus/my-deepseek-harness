@@ -247,6 +247,11 @@ export function EditorSurface({
   const [dark, setDark] = useState(() => document.body.hasAttribute(DARK_ATTRIBUTE))
   const [newFileTrigger, _setNewFileTrigger] = useState(0)
   const [gitRefreshTrigger, setGitRefreshTrigger] = useState(0)
+  const [explorerRefresh, setExplorerRefresh] = useState({
+    trigger: 0,
+    path: '',
+    mode: 'parent' as 'parent' | 'visible',
+  })
   const [treeVisible, setTreeVisible] = useState(true)
   const [treeWidthPx, setTreeWidthPx] = useState<number | null>(null)
   const [treeDragging, setTreeDragging] = useState(false)
@@ -257,6 +262,8 @@ export function EditorSurface({
   const openGeneration = useRef(0)
   const retryRef = useRef<(() => void) | null>(null)
   const watchAbort = useRef<Map<string, AbortController>>(new Map())
+  const workspaceRootWatchAbort = useRef<AbortController | null>(null)
+  const explorerRefreshDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const unwatchedPaths = useRef<Set<string>>(new Set())
   const pendingBulkCloseRef = useRef<{
     cleanPaths: readonly string[]
@@ -288,6 +295,23 @@ export function EditorSurface({
     setGitRefreshTrigger(current => current + 1)
   }, [])
 
+  const bumpExplorerRefresh = useCallback((path: string, mode: 'parent' | 'visible' = 'parent') => {
+    setExplorerRefresh(prev => ({
+      trigger: prev.trigger + 1,
+      path,
+      mode,
+    }))
+  }, [])
+
+  const scheduleVisibleExplorerRefresh = useCallback(() => {
+    if (workspace === undefined) return
+    if (explorerRefreshDebounce.current !== null) clearTimeout(explorerRefreshDebounce.current)
+    explorerRefreshDebounce.current = setTimeout(() => {
+      explorerRefreshDebounce.current = null
+      bumpExplorerRefresh(workspace.path, 'visible')
+    }, 200)
+  }, [workspace, bumpExplorerRefresh])
+
   const saveTab = useCallback(async (path: string): Promise<boolean> => {
     const tab = tabsRef.current.find(item => item.path === path)
     /* v8 ignore next -- guard only runs for open text tabs in a bound Workspace */
@@ -296,12 +320,13 @@ export function EditorSurface({
       await writeFile(workspace.workspaceId, path, tab.buffer)
       editorActions?.markSaved(path)
       bumpGitRefresh()
+      bumpExplorerRefresh(path, 'parent')
       return true
     } catch (error: unknown) {
       void error
       return false
     }
-  }, [workspace, writeFile, editorActions, bumpGitRefresh])
+  }, [workspace, writeFile, editorActions, bumpGitRefresh, bumpExplorerRefresh])
 
   useEffect(() => {
     const sync = (): void => { setDark(document.body.hasAttribute(DARK_ATTRIBUTE)) }
@@ -559,6 +584,25 @@ export function EditorSurface({
 
   useEffect(() => {
     if (workspace === undefined) return
+    workspaceRootWatchAbort.current?.abort()
+    const controller = new AbortController()
+    workspaceRootWatchAbort.current = controller
+    watchPath(
+      workspace.workspaceId,
+      workspace.path,
+      scheduleVisibleExplorerRefresh,
+      controller.signal,
+    )
+    return () => {
+      controller.abort()
+      if (workspaceRootWatchAbort.current === controller) {
+        workspaceRootWatchAbort.current = null
+      }
+    }
+  }, [workspace, watchPath, scheduleVisibleExplorerRefresh])
+
+  useEffect(() => {
+    if (workspace === undefined) return
     const active = tabs.find(tab => tab.path === activePath)
     const watchedPath = active?.kind === 'text' ? active.path : undefined
     for (const [path, controller] of watchAbort.current) {
@@ -578,12 +622,18 @@ export function EditorSurface({
     watchPath(
       workspace.workspaceId,
       watchedPath,
-      () => { void checkExternalChange(watchedPath) },
+      () => {
+        void checkExternalChange(watchedPath)
+        bumpExplorerRefresh(watchedPath, 'parent')
+      },
       controller.signal,
     )
-  }, [tabs, activePath, workspace, watchPath, checkExternalChange])
+  }, [tabs, activePath, workspace, watchPath, checkExternalChange, bumpExplorerRefresh])
 
   useEffect(() => () => {
+    if (explorerRefreshDebounce.current !== null) clearTimeout(explorerRefreshDebounce.current)
+    workspaceRootWatchAbort.current?.abort()
+    workspaceRootWatchAbort.current = null
     for (const controller of watchAbort.current.values()) controller.abort()
     watchAbort.current.clear()
     unwatchedPaths.current.clear()
@@ -617,13 +667,14 @@ export function EditorSurface({
       if (ac.signal.aborted) return
       editorActions?.markSaved(active.path)
       bumpGitRefresh()
+      bumpExplorerRefresh(active.path, 'parent')
       setStatus(prev => (prev.kind === 'error' && prev.op === 'save' ? { kind: 'idle' } : prev))
     } catch (error: unknown) {
       if (ac.signal.aborted) return
       void error
       setStatus({ kind: 'error', op: 'save', message: t('editor.error.save') })
     }
-  }, [tabs, activePath, workspace, writeFile, editorActions, bumpGitRefresh, t])
+  }, [tabs, activePath, workspace, writeFile, editorActions, bumpGitRefresh, bumpExplorerRefresh, t])
 
   useEffect(() => () => { ioAbort.current?.abort() }, [])
 
@@ -763,6 +814,9 @@ export function EditorSurface({
         onHide={() => { setTreeVisible(false) }}
         newFileTrigger={newFileTrigger}
         gitRefreshTrigger={gitRefreshTrigger}
+        explorerRefreshTrigger={explorerRefresh.trigger}
+        explorerRefreshPath={explorerRefresh.path}
+        explorerRefreshMode={explorerRefresh.mode}
         onPathDeleted={handlePathDeleted}
         onPathRenamed={handlePathRenamed}
         onOpenFile={(entry) => { void openEntry(entry) }}
