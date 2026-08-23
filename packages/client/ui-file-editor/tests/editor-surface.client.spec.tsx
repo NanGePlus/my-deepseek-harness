@@ -791,7 +791,8 @@ describe('EditorSurface open / save', () => {
     await clickFile('README.md')
     await expectMarkdownSourceOpen()
     fireEvent.click(screen.getByRole('tab', { name: '预览' }))
-    expect(screen.queryByRole('textbox', { name: /README\.md/ })).toBeNull()
+    expect(screen.getByRole('textbox', { name: /README\.md.*预览/ })).toBeTruthy()
+    expect(screen.queryByRole('textbox', { name: /README\.md.*Markdown/ })).toBeNull()
     expect(screen.getByRole('heading', { level: 1, name: 'README.md' })).toBeTruthy()
   })
 

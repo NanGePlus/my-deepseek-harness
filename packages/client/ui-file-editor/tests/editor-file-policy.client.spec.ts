@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   hasLongLine,
   monacoOptionsForContent,
+  monacoSurfaceOptionsForLanguage,
   MONACO_LONG_LINE_CHARS,
   shouldSkipLsp,
   utf8ByteLength,
@@ -30,11 +31,26 @@ describe('editor-file-policy', () => {
   })
 
   it('keeps wrap for normal source files under the byte threshold', () => {
-    expect(monacoOptionsForContent('export const x = 1\n')).toEqual({
+    const normal = monacoOptionsForContent('export const x = 1\n')
+    expect(normal).toEqual({
       largeFileOptimizations: false,
       wordWrap: 'on',
       wrappingStrategy: 'advanced',
     })
+    expect(monacoOptionsForContent('# Title\n\nParagraph text\n')).toEqual(normal)
     expect(utf8ByteLength('café')).toBe(5)
+  })
+
+  it('tunes markdown for CJK IME with soft wrap instead of toggling wrap mid-composition', () => {
+    const contentOptions = monacoOptionsForContent('# Title\n\nParagraph text\n')
+    expect(monacoSurfaceOptionsForLanguage('markdown', contentOptions)).toEqual({
+      wordWrap: 'on',
+      wrappingStrategy: 'simple',
+      accessibilitySupport: 'off',
+    })
+    expect(monacoSurfaceOptionsForLanguage('typescript', contentOptions)).toEqual({
+      wordWrap: 'on',
+      wrappingStrategy: 'advanced',
+    })
   })
 })

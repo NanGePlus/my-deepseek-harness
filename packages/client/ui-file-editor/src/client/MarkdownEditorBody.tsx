@@ -1,9 +1,9 @@
 /** Markdown tab body: Preview / Markdown source switcher and rendered preview. */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import type { HostLspHover } from '@deepseek-ai/dsh-client-runtime/client'
-import { MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
+import { EditableMarkdownPreview } from './EditableMarkdownPreview.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { MonacoEditor } from './MonacoEditor.tsx'
 import { breadcrumbSegments, languageLabel } from './open-kind.ts'
@@ -55,6 +55,10 @@ export function MarkdownEditorBody({
   const view = viewsByPath[tab.path] ?? 'source'
   const segments = breadcrumbSegments(workspaceRoot, tab.path)
   const themeLabel = dark ? t('editor.theme.dark') : t('editor.theme.light')
+  const codeLabels = useMemo(
+    () => ({ copyLabel: t('editor.copy'), copiedLabel: t('editor.copied') }),
+    [t],
+  )
 
   const setView = (mode: MarkdownViewMode): void => {
     setViewsByPath(current => ({ ...current, [tab.path]: mode }))
@@ -102,10 +106,13 @@ export function MarkdownEditorBody({
       <div className={css.markdownBody}>
         {view === 'preview' ? (
           <div className={css.markdownPreview}>
-            <MarkdownText
-              text={tab.buffer}
+            <EditableMarkdownPreview
+              value={tab.buffer}
+              ariaLabel={t('editor.markdown.preview.label', { name: tab.name })}
+              t={t}
+              codeLabels={codeLabels}
               mermaidSecurityLevel="loose"
-              codeLabels={{ copyLabel: t('editor.copy'), copiedLabel: t('editor.copied') }}
+              onChange={(value) => { onBufferChange(tab.path, value) }}
             />
           </div>
         ) : (

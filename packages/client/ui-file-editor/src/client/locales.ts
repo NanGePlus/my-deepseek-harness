@@ -79,6 +79,17 @@ export const zh = {
   'editor.markdown.mode.label': 'Markdown 视图',
   'editor.markdown.mode.preview': '预览',
   'editor.markdown.mode.source': 'Markdown',
+  'editor.markdown.preview.label': '{name} 预览',
+  'editor.markdown.toolbar.label': 'Markdown 格式',
+  'editor.markdown.toolbar.bold': '粗体',
+  'editor.markdown.toolbar.italic': '斜体',
+  'editor.markdown.toolbar.underline': '下划线',
+  'editor.markdown.toolbar.strike': '删除线',
+  'editor.markdown.toolbar.code': '行内代码',
+  'editor.markdown.toolbar.link': '链接',
+  'editor.markdown.toolbar.linkPrompt': '链接地址',
+  'editor.markdown.toolbar.linkPlaceholder': '粘贴或输入链接…',
+  'editor.markdown.toolbar.linkConfirm': '确认链接',
 } as const
 
 /** English dictionary, checked complete against the zh key set. */
@@ -162,6 +173,17 @@ export const en = {
   'editor.markdown.mode.label': 'Markdown view',
   'editor.markdown.mode.preview': 'Preview',
   'editor.markdown.mode.source': 'Markdown',
+  'editor.markdown.preview.label': '{name} preview',
+  'editor.markdown.toolbar.label': 'Markdown formatting',
+  'editor.markdown.toolbar.bold': 'Bold',
+  'editor.markdown.toolbar.italic': 'Italic',
+  'editor.markdown.toolbar.underline': 'Underline',
+  'editor.markdown.toolbar.strike': 'Strikethrough',
+  'editor.markdown.toolbar.code': 'Inline code',
+  'editor.markdown.toolbar.link': 'Link',
+  'editor.markdown.toolbar.linkPrompt': 'Link URL',
+  'editor.markdown.toolbar.linkPlaceholder': 'Paste or type a link…',
+  'editor.markdown.toolbar.linkConfirm': 'Confirm link',
 } as const
 
 /** The fileEditor namespace key union. */

@@ -46,6 +46,13 @@
   "license": "MIT",
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.9",
+    "@tiptap/core": "^3.30.2",
+    "@tiptap/extension-link": "^3.30.2",
+    "@tiptap/extension-underline": "^3.30.2",
+    "@tiptap/markdown": "^3.30.2",
+    "@tiptap/pm": "^3.30.2",
+    "@tiptap/react": "^3.30.2",
+    "@tiptap/starter-kit": "^3.30.2",
     "clsx": "^2.0.0",
     "material-icon-resolver": "^0.1.7",
     "material-icon-theme": "^5.37.0",
