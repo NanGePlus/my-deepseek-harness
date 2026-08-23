@@ -108,7 +108,7 @@
 ## 待合并 / 进行中
 | 分支 | 内容 | 状态 |
 |------|------|------|
-| `fix/file-editor-v1-qa-validation` | 从 `custom/main` 拉出的验证 / BUG 修复线：**工具箱**文案与 capsule 入口、Tab 样式对齐对话区；**Markdown 预览 WYSIWYG**（TipTap） | 进行中 → `custom/main` |
+| `fix/file-editor-v1-qa-validation` | PR [#48](https://github.com/NanGePlus/my-deepseek-harness/pull/48)：**工具箱**文案与 capsule 入口、Tab 样式对齐对话区；**Markdown 预览 WYSIWYG**（TipTap）与 IME/wrap 修复；**Add to Chat file-context pill**（Markdown 源码 + 全语言 Monaco → composer pill；发送展开进 prompt；**已发送用户气泡** pill 投影并可点击打开编辑器） | PR 待审 / 待合并 → `custom/main` |
 | `fix/file-editor-v1-qa` | Tab 批量关闭、删除/重命名/同名冲突、文件夹重命名 Tab 同步、Markdown 默认源码、空状态 UI | 已并入 `custom/main` 或与本线并行，合并前需 reconcile |
 | `fix/file-editor-v1-verify-fix` | 大文件 + 目录 listing 性能修复 | 已合并入 `custom/main` |
 
@@ -137,3 +137,7 @@
 | 2026-08-23 | 修复单击误选文本 | 预览（TipTap）与源码（Monaco）在简单单击后折叠非空选区；拖拽与多击选词/选行保留 |
 | 2026-08-23 | Markdown 源码 Add to Chat pill 交互 | 圆角胶囊 pill（适度 padding）；backdrop 点击跳转；chip 点击后在 buffer 同步完成后再选中 Monaco 行范围 |
 | 2026-08-23 | Add to Chat pill 光标与输入 | 单层 13/20 regular 胶囊（勿用 500，长英文会宽于光标）；光标在尾随空格后 |
+| 2026-08-23 | Markdown 源码 Add to Chat → composer file-context pill | `e9a619f`；Monaco 选区浮动 **Add to Chat**；`file-context` input trigger；提交时读文件展开行内容进 prompt |
+| 2026-08-23 | 已发送用户消息 file-context pill 展示投影 | `b15cd147`；`ui-conversation` `project-user-text`；气泡显示 pill 非全文 excerpt；可点击打开编辑器；session log 仍保留展开全文 |
+| 2026-08-23 | 全语言 Monaco 选区 Add to Chat | `8c624b4a`；TS/Python 等可编辑文本与 Markdown 源码同链路；改 `ui-file-editor` 后需 `run bundle` |
+| 2026-08-23 | 开 PR [#48](https://github.com/NanGePlus/my-deepseek-harness/pull/48) → `custom/main` | 分支 `fix/file-editor-v1-qa-validation`；7 commit（预览/IME + Add to Chat 全链路） |
