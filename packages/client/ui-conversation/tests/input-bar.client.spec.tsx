@@ -89,6 +89,7 @@ interface BenchOptions {
   commandMenuOpen?: boolean
   busyEnter?: 'queue' | 'steer'
   toggleCommandMenu?: (selection: { start: number; end: number }) => void
+  openReferenceChip?: InputBarProps['openReferenceChip']
 }
 
 /** One pending queue row (the runtime snapshot shape, as the dock tests build it). */
@@ -189,6 +190,7 @@ function bench(over?: BenchOptions) {
     ...(over?.overlay !== undefined ? { overlay: over.overlay } : {}),
     ...(over?.leftItems !== undefined ? { leftItems: over.leftItems } : {}),
     ...(over?.rightItems !== undefined ? { rightItems: over.rightItems } : {}),
+    ...(over?.openReferenceChip !== undefined ? { openReferenceChip: over.openReferenceChip } : {}),
   }
   const view = render(<InputBar {...props} />)
   const textarea = view.container.querySelector('textarea')!
@@ -1081,6 +1083,106 @@ describe('decorations', () => {
     expect(shell.snapshot.occurrences).toHaveLength(1)
     // The draft carries exactly one placeholder char where the token was.
     expect(shell.snapshot.draft).toBe('参考 \uFFFC 内容')
+  })
+
+  it('a visible draftToken reference renders the full label as a variable-width chip', () => {
+    const { view, shell } = bench()
+    act(() => {
+      shell.setDraft('')
+      shell.insertReference(
+        {
+          source: 'file-context',
+          ref: '{}',
+          label: 'CONTEXT.md (19-21)',
+          clipboardText: 'CONTEXT.md (19-21)',
+          draftToken: 'CONTEXT.md (19-21)',
+        },
+        { start: 0, end: 0, draftRev: shell.snapshot.draftRev },
+      )
+    })
+    const chip = view.container.querySelector('[data-decoration="chip"]')
+    expect(chip?.textContent).toBe('CONTEXT.md (19-21)')
+    expect(chip?.getAttribute('data-label')).toBe('CONTEXT.md (19-21)')
+    expect(chip?.className).toMatch(/visibleChip/)
+    expect(chip?.tagName).toBe('SPAN')
+    expect(shell.snapshot.draft).toBe('CONTEXT.md (19-21) ')
+    // <mark> UA fill is yellow; visible chips must not use mark.
+    expect(getComputedStyle(chip as Element).backgroundColor).not.toBe('rgb(255, 255, 0)')
+  })
+
+  it('typing after a visible draftToken chip keeps the chip and appends text', () => {
+    const { view, shell } = bench()
+    act(() => {
+      shell.setDraft('')
+      shell.insertReference(
+        {
+          source: 'file-context',
+          ref: '{}',
+          label: 'CONTEXT.md (19-21)',
+          clipboardText: 'CONTEXT.md (19-21)',
+          draftToken: 'CONTEXT.md (19-21)',
+        },
+        { start: 0, end: 0, draftRev: shell.snapshot.draftRev },
+      )
+    })
+    const textarea = view.container.querySelector('textarea')
+    expect(textarea).toBeTruthy()
+    expect(shell.snapshot.draft).toBe('CONTEXT.md (19-21) ')
+    act(() => {
+      fireEvent.change(textarea!, { target: { value: 'CONTEXT.md (19-21) hello' } })
+    })
+    expect(shell.snapshot.draft).toBe('CONTEXT.md (19-21) hello')
+    expect(shell.snapshot.occurrences).toHaveLength(1)
+  })
+
+  it('clicking a visible draftToken chip opens its reference', () => {
+    const openReferenceChip = vi.fn()
+    const { view, shell } = bench({ openReferenceChip })
+    act(() => {
+      shell.setDraft('')
+      shell.insertReference(
+        {
+          source: 'file-context',
+          ref: '{"path":"/w/a.md"}',
+          label: 'CONTEXT.md (19-21)',
+          clipboardText: 'CONTEXT.md (19-21)',
+          draftToken: 'CONTEXT.md (19-21)',
+        },
+        { start: 0, end: 0, draftRev: shell.snapshot.draftRev },
+      )
+    })
+    const textarea = view.container.querySelector('textarea')
+    expect(textarea).toBeTruthy()
+    const chip = view.container.querySelector('[data-visible-chip="true"]')
+    expect(chip).toBeTruthy()
+    act(() => {
+      fireEvent.mouseDown(chip!, { button: 0 })
+    })
+    expect(openReferenceChip).toHaveBeenCalledWith('file-context', '{"path":"/w/a.md"}')
+  })
+
+  it('deleting one character inside a visible draftToken chip removes the whole chip', () => {
+    const { view, shell } = bench()
+    act(() => {
+      shell.setDraft('')
+      shell.insertReference(
+        {
+          source: 'file-context',
+          ref: '{}',
+          label: 'CONTEXT.md (19-21)',
+          clipboardText: 'CONTEXT.md (19-21)',
+          draftToken: 'CONTEXT.md (19-21)',
+        },
+        { start: 0, end: 0, draftRev: shell.snapshot.draftRev },
+      )
+    })
+    const textarea = view.container.querySelector('textarea')
+    expect(textarea).toBeTruthy()
+    act(() => {
+      fireEvent.change(textarea!, { target: { value: 'CONTEXT.md (19-2) ' } })
+    })
+    expect(shell.snapshot.draft).toBe(' ')
+    expect(shell.snapshot.occurrences).toHaveLength(0)
   })
 
   it('a lexicon-matched plain token renders the text-ref mark', () => {

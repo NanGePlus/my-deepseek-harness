@@ -1,11 +1,11 @@
 /** Markdown tab body: Preview / Markdown source switcher and rendered preview. */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import clsx from 'clsx'
 import type { HostLspHover } from '@deepseek-ai/dsh-client-runtime/client'
 import { EditableMarkdownPreview } from './EditableMarkdownPreview.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { MonacoEditor } from './MonacoEditor.tsx'
+import { MonacoEditor, type MonacoSourceLineRange } from './MonacoEditor.tsx'
 import { breadcrumbSegments, languageLabel } from './open-kind.ts'
 import type { TextEditorTab } from './stores.ts'
 import css from './EditorPane.module.css'
@@ -42,6 +42,18 @@ export interface MarkdownEditorBodyProps {
     character: number,
     signal?: AbortSignal,
   ) => Promise<HostLspHover | null>
+  /**
+   * Insert the active Markdown source selection into the session composer.
+   * @param range - one-based inclusive line range.
+   */
+  insertFileContextToComposer?: ((range: { startLine: number; endLine: number }) => void) | undefined
+  /** One-shot source line-range selection from a composer chip navigation. */
+  sourceLineRange?: MonacoSourceLineRange | undefined
+  /**
+   * Called after {@link sourceLineRange} is applied in the live editor.
+   * @param ticket - applied range ticket.
+   */
+  onSourceLineRangeApplied?: ((ticket: number) => void) | undefined
 }
 
 /**
@@ -49,10 +61,15 @@ export interface MarkdownEditorBodyProps {
  * @param props - tab, workspace root, theme, and buffer callback.
  */
 export function MarkdownEditorBody({
-  tab, workspaceRoot, dark, t, onBufferChange, onHover,
+  tab, workspaceRoot, dark, t, onBufferChange, onHover, insertFileContextToComposer,
+  sourceLineRange, onSourceLineRangeApplied,
 }: MarkdownEditorBodyProps) {
   const [viewsByPath, setViewsByPath] = useState<Partial<Record<string, MarkdownViewMode>>>({})
   const view = viewsByPath[tab.path] ?? 'source'
+  useEffect(() => {
+    if (sourceLineRange === undefined) return
+    setViewsByPath(current => ({ ...current, [tab.path]: 'source' }))
+  }, [sourceLineRange, tab.path])
   const segments = breadcrumbSegments(workspaceRoot, tab.path)
   const themeLabel = dark ? t('editor.theme.dark') : t('editor.theme.light')
   const codeLabels = useMemo(
@@ -130,6 +147,18 @@ export function MarkdownEditorBody({
             {...(onHover === undefined
               ? {}
               : { onHover: (line, character, signal) => onHover(tab.path, line, character, signal) })}
+            {...(insertFileContextToComposer === undefined
+              ? {}
+              : {
+                sourceSelectionActions: {
+                  toolbarLabel: t('editor.markdown.sourceSelection.toolbar'),
+                  addToChatLabel: t('editor.markdown.sourceSelection.addToChat'),
+                  onAddToChat: insertFileContextToComposer,
+                },
+              })}
+            {...(sourceLineRange === undefined
+              ? {}
+              : { sourceLineRange, onSourceLineRangeApplied })}
             onChange={(value) => { onBufferChange(tab.path, value) }}
           />
         )}

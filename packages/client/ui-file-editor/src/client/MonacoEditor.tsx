@@ -10,7 +10,32 @@ import { installMonacoClickSelectionGuard } from './monaco-click-selection.ts'
 import { emitMonacoBuffer, shouldSyncMonacoBuffer } from './monaco-buffer-sync.ts'
 import { setLspHoverHandler } from './monaco-hover.ts'
 import { installMonacoEnvironment } from './monaco-environment.ts'
+import { MonacoSourceSelectionToolbar } from './MonacoSourceSelectionToolbar.tsx'
+import { applyMonacoSourceLineRange } from './monaco-source-line-range.ts'
 import css from './MonacoEditor.module.css'
+
+/** Labels and callback for Markdown source Add to Chat. */
+export interface MonacoSourceSelectionActions {
+  /** Accessible toolbar label. */
+  toolbarLabel: string
+  /** Add to Chat button label. */
+  addToChatLabel: string
+  /**
+   * Insert the current source selection into the session composer.
+   * @param range - one-based inclusive line range.
+   */
+  onAddToChat: (range: { startLine: number; endLine: number }) => void
+}
+
+/** One-shot source line-range selection applied after navigation from a composer chip. */
+export interface MonacoSourceLineRange {
+  /** One-based inclusive start line. */
+  startLine: number
+  /** One-based inclusive end line. */
+  endLine: number
+  /** Monotonic apply ticket. */
+  ticket: number
+}
 
 /** Props for the editable-text editor widget. */
 export interface MonacoEditorProps {
@@ -43,6 +68,15 @@ export interface MonacoEditorProps {
    * @param signal - aborts a superseded hover request.
    */
   onHover?: (line: number, character: number, signal?: AbortSignal) => Promise<HostLspHover | null>
+  /** Optional Markdown source selection actions (Add to Chat). */
+  sourceSelectionActions?: MonacoSourceSelectionActions | undefined
+  /** Optional one-shot line-range selection from a composer chip navigation. */
+  sourceLineRange?: MonacoSourceLineRange | undefined
+  /**
+   * Called after {@link sourceLineRange} is applied in the live editor.
+   * @param ticket - applied range ticket.
+   */
+  onSourceLineRangeApplied?: ((ticket: number) => void) | undefined
 }
 
 /**
@@ -115,6 +149,7 @@ export function installMonacoImeGuards(
  */
 export function MonacoEditor({
   path, value, language, diagnostics, ariaLabel, dark, surface = 'sidebar', onChange, onHover,
+  sourceSelectionActions, sourceLineRange, onSourceLineRangeApplied,
 }: MonacoEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const fallbackRef = useRef<HTMLTextAreaElement>(null)
@@ -125,10 +160,24 @@ export function MonacoEditor({
   const syncState = useRef<SyncState>({ composing: false, focused: false })
   const onChangeRef = useRef(onChange)
   const onHoverRef = useRef(onHover)
+  const pendingSourceLineRangeRef = useRef(sourceLineRange)
+  const onSourceLineRangeAppliedRef = useRef(onSourceLineRangeApplied)
   const [fallback, setFallback] = useState(true)
+  const [liveEditor, setLiveEditor] = useState<MonacoStandaloneEditor | null>(null)
   valueRef.current = value
   onChangeRef.current = onChange
   onHoverRef.current = onHover
+  pendingSourceLineRangeRef.current = sourceLineRange
+  onSourceLineRangeAppliedRef.current = onSourceLineRangeApplied
+
+  const flushPendingSourceLineRange = (): void => {
+    const range = pendingSourceLineRangeRef.current
+    if (range === undefined || liveEditor === null) return
+    if (liveEditor.getValue() !== valueRef.current) return
+    if (!applyMonacoSourceLineRange(liveEditor, range.startLine, range.endLine)) return
+    pendingSourceLineRangeRef.current = undefined
+    onSourceLineRangeAppliedRef.current?.(range.ticket)
+  }
 
   useEffect(() => {
     lastEmitted.current = value
@@ -232,6 +281,7 @@ export function MonacoEditor({
         },
         dispose: () => { editor.dispose() },
       }
+      setLiveEditor(editor)
       setFallback(false)
     })
     return () => {
@@ -240,6 +290,7 @@ export function MonacoEditor({
       removeClickGuard?.()
       editorRef.current?.dispose()
       editorRef.current = null
+      setLiveEditor(null)
       syncState.current = { composing: false, focused: false }
       setFallback(true)
     }
@@ -252,9 +303,10 @@ export function MonacoEditor({
     const id = window.requestAnimationFrame(() => {
       handle.setValue(value)
       lastEmitted.current = value
+      flushPendingSourceLineRange()
     })
     return () => { window.cancelAnimationFrame(id) }
-  }, [value])
+  }, [value, liveEditor])
 
   useEffect(() => {
     if (!fallback) return
@@ -263,6 +315,19 @@ export function MonacoEditor({
     if (!shouldSyncMonacoBuffer(value, lastEmitted.current, syncState.current)) return
     if (textarea.value !== value) textarea.value = value
     lastEmitted.current = value
+    const range = pendingSourceLineRangeRef.current
+    if (range === undefined) return
+    const lines = value.split('\n')
+    const start = Math.max(0, Math.min(range.startLine, range.endLine) - 1)
+    const end = Math.max(start, Math.min(Math.max(range.startLine, range.endLine), lines.length) - 1)
+    let offset = 0
+    for (let i = 0; i < start; i += 1) offset += (lines[i]?.length ?? 0) + 1
+    const selectionStart = offset
+    let endOffset = offset
+    for (let i = start; i <= end; i += 1) endOffset += (lines[i]?.length ?? 0) + (i < end ? 1 : 0)
+    textarea.setSelectionRange(selectionStart, endOffset)
+    pendingSourceLineRangeRef.current = undefined
+    onSourceLineRangeAppliedRef.current?.(range.ticket)
   }, [value, fallback])
 
   useEffect(() => {
@@ -279,6 +344,10 @@ export function MonacoEditor({
   useEffect(() => {
     editorRef.current?.setDiagnostics(diagnostics)
   }, [diagnostics])
+
+  useEffect(() => {
+    flushPendingSourceLineRange()
+  }, [liveEditor, sourceLineRange])
 
   return (
     <div className={clsx(css.wrap, surface === 'document' && css.document)}>
@@ -306,6 +375,14 @@ export function MonacoEditor({
         aria-multiline={fallback ? undefined : true}
         aria-label={fallback ? undefined : ariaLabel}
       />
+      {liveEditor !== null && sourceSelectionActions !== undefined && (
+        <MonacoSourceSelectionToolbar
+          editor={liveEditor}
+          toolbarLabel={sourceSelectionActions.toolbarLabel}
+          addToChatLabel={sourceSelectionActions.addToChatLabel}
+          onAddToChat={sourceSelectionActions.onAddToChat}
+        />
+      )}
     </div>
   )
 }

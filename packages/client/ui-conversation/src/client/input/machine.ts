@@ -19,6 +19,7 @@ import type {
   ConsumeTokenGuard, EditRange, EditSelection, InputEffect, InputEvent, InputMachineOptions,
   InputState, Occurrence, PasteAttemptState, PasteComponent, SubmitAttempt,
 } from './contract.ts'
+import { occurrenceSpanLength } from './contract.ts'
 
 /** The object-replacement character backing every chip occurrence in the draft. */
 export const PLACEHOLDER = '￼'
@@ -81,7 +82,7 @@ export function projectClipboard(state: Pick<InputState, 'draft' | 'occurrences'
   let cursor = 0
   for (const o of occurrences) {
     out += draft.slice(cursor, o.offset) + o.clipboardText
-    cursor = o.offset + 1
+    cursor = o.offset + occurrenceSpanLength(o)
   }
   return out + draft.slice(cursor)
 }
@@ -202,7 +203,8 @@ export class InputMachine {
     const delta = range.insertedLength - (range.end - range.start)
     const kept: Occurrence[] = []
     for (const o of this.occurrences) {
-      if (o.offset < range.start) kept.push(o)
+      const end = o.offset + occurrenceSpanLength(o)
+      if (end <= range.start) kept.push(o)
       else if (o.offset >= range.end) kept.push(delta === 0 ? o : { ...o, offset: o.offset + delta })
     }
     this.occurrences = kept
@@ -219,11 +221,13 @@ export class InputMachine {
   /** Mint one occurrence at a draft offset. */
   private mint(reference: ReferenceInsert, offset: number): Occurrence {
     this.occurrenceSeq += 1
+    const token = reference.draftToken ?? PLACEHOLDER
     return {
       occurrenceId: this.occurrenceSeq,
       source: reference.source,
       ref: reference.ref,
       offset,
+      spanLength: token.length,
       label: reference.label,
       clipboardText: reference.clipboardText,
     }
@@ -286,16 +290,17 @@ export class InputMachine {
 
   /**
    * Shared chip-insertion transaction: replace [span) with one placeholder
-   * occurrence (insert-ref and paste-upgrade both land here). A separating
-   * space follows the chip unless one is already next.
-   * @returns the inserted length (placeholder plus optional gap).
+   * or visible draft token (insert-ref and paste-upgrade both land here). A
+   * separating space follows the chip unless one is already next.
+   * @returns the inserted length (token plus optional gap).
    */
   private replaceSpanWithChip(reference: ReferenceInsert, span: TokenSpan): number {
     this.pushTxn()
     this.typingRun = undefined
     const tail = this.draft.slice(span.end)
+    const token = reference.draftToken ?? PLACEHOLDER
     const gap = tail.length === 0 || tail[0] !== ' ' ? ' ' : ''
-    const inserted = PLACEHOLDER + gap
+    const inserted = token + gap
     this.reconcile({ start: span.start, end: span.end, insertedLength: inserted.length })
     this.withMinted([this.mint(reference, span.start)])
     this.adopt(this.draft.slice(0, span.start) + inserted + tail)

@@ -6,7 +6,7 @@
  * region-slot content) ride the owner props. Session facts
  * (running/removed/promptError) are self-selected via useSession. */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
@@ -25,7 +25,15 @@ import type {} from '@deepseek-ai/dsh-goal/client'
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ComposerAttachment, ComposerBarProps } from '../contract/slots.ts'
 import { deriveDecorations } from '../input/decorations.ts'
-import type { DraftDecorations } from '../input/decorations.ts'
+import type { DraftDecorations, ChipRender } from '../input/decorations.ts'
+import {
+  caretAfterVisibleChip,
+  expandVisibleChipEdit,
+  normalizeComposerSelection,
+  skipArrowOverVisibleChips,
+} from '../input/chip-edit.ts'
+import { takePendingComposerCaret, COMPOSER_CARET_EVENT, scheduleComposerCaret, type ComposerCaretDetail } from '../input/composer-caret.ts'
+import { occurrenceSpanLength } from '../input/contract.ts'
 import {
   attachmentErrorText, attachmentRailLabels, dropOverlayLabels, imageSizeText, lightboxLabels,
 } from '../image-labels.ts'
@@ -45,7 +53,7 @@ export type InputBarProps = ComposerBarProps
 
 export function InputBar({
   useSession, useInput, inputActions, keyboard, addImages, removeImage, draftImages,
-  resolveSubmitMode, toggleCommandMenu, stop, command, t,
+  resolveSubmitMode, toggleCommandMenu, stop, command, openReferenceChip, t,
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
@@ -199,7 +207,6 @@ export function InputBar({
   const revealSelectionFocus = (el: HTMLTextAreaElement): void => {
     // selectionStart/End are number|null in lib.dom; the type-aware lint program narrows them.
     const caret = el.selectionDirection === 'backward' ? el.selectionStart : el.selectionEnd
-    // oxlint-disable-next-line typescript/no-unnecessary-condition
     revealCaret(caret ?? el.value.length)
   }
 
@@ -230,6 +237,34 @@ export function InputBar({
     if (locked || draft === '' || el === null) return
     revealSelectionFocus(el)
   }, [draft !== ''])
+
+  useEffect(() => {
+    const onComposerCaret = (event: Event): void => {
+      const caret = (event as CustomEvent<ComposerCaretDetail>).detail?.caret
+      if (typeof caret !== 'number') return
+      scheduleComposerCaret(caret)
+    }
+    document.addEventListener(COMPOSER_CARET_EVENT, onComposerCaret)
+    return () => { document.removeEventListener(COMPOSER_CARET_EVENT, onComposerCaret) }
+  }, [])
+
+  // Controlled draft updates (reference insert, undo) can reset the textarea
+  // selection before paint; park the caret after visible chips (never inside).
+  useLayoutEffect(() => {
+    const el = inputRef.current
+    if (el === null || input === undefined || locked || machineBusy) return
+    const pending = takePendingComposerCaret()
+    if (pending !== null) {
+      el.focus({ preventScroll: true })
+      el.setSelectionRange(pending, pending)
+      return
+    }
+    const { start, end } = selectionOf(el)
+    const normalized = normalizeComposerSelection(draft, input.occurrences, start, end)
+    if (normalized.start !== start || normalized.end !== end) {
+      el.setSelectionRange(normalized.start, normalized.end)
+    }
+  }, [draft, input?.occurrences, locked, machineBusy])
 
   // Caret restore after an edit the composer performs itself. The machine owns
   // the draft and the undo log, so paste and cut suppress the native edit and
@@ -282,11 +317,43 @@ export function InputBar({
     // IME guard so a composition-closing Shift+Enter still breaks the line.
     if (e.key === 'Enter' && e.shiftKey) return
     // keyCode 229 is the legacy IME-composition signal engines emit without isComposing.
-    // oxlint-disable-next-line typescript/no-deprecated
     const composing = composingRef.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229
+    if (input !== undefined && !composing && !locked && !machineBusy) {
+      const el = e.currentTarget
+      const { start, end } = selectionOf(el)
+      if (start === end && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const normalized = normalizeComposerSelection(draft, input.occurrences, start, end)
+        if (normalized.start !== start) {
+          el.setSelectionRange(normalized.start, normalized.start)
+        }
+      }
+    }
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       if (keyboard.arbitrate(e.key === 'ArrowUp' ? 'up' : 'down', composing) === 'consumed') e.preventDefault()
       return
+    }
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && input !== undefined && !composing) {
+      const el = e.currentTarget
+      const { start, end } = selectionOf(el)
+      if (start === end) {
+        const normalized = normalizeComposerSelection(draft, input.occurrences, start, end)
+        if (normalized.start !== start) {
+          e.preventDefault()
+          restoreCaret(el, normalized.start)
+          return
+        }
+        const skip = skipArrowOverVisibleChips(
+          input.occurrences,
+          start,
+          e.key === 'ArrowLeft' ? 'left' : 'right',
+          draft,
+        )
+        if (skip !== null) {
+          e.preventDefault()
+          restoreCaret(el, skip)
+          return
+        }
+      }
     }
     if (e.key === 'Escape') {
       // Escape layering: an open overlay closes; claimed without an overlay
@@ -342,28 +409,33 @@ export function InputBar({
   const onChange = (e: ChangeEvent<HTMLTextAreaElement>): void => {
     if (keyboard === undefined || locked) return // disabled/read-only states cannot edit the draft
     if (machineBusy) return // submitting is the read-only span; adjudicating holds the pending lock
-    const next = e.target.value
+    const el = e.target
+    const next = el.value
+    const expanded = input === undefined
+      ? null
+      : expandVisibleChipEdit(draft, next, input.occurrences)
+    if (expanded !== null) {
+      keyboard.setDraft(expanded.draft, expanded.editRange)
+      restoreCaret(el, expanded.caret)
+      keyboard.track(expanded.draft, expanded.caret)
+      return
+    }
     keyboard.setDraft(next)
     // selectionStart is number|null in lib.dom; the type-aware lint program narrows it.
-    // oxlint-disable-next-line typescript/no-unnecessary-condition
-    keyboard.track(next, e.target.selectionStart ?? next.length)
+    keyboard.track(next, el.selectionStart ?? next.length)
   }
 
   // ---- chip atomicity (DOM layer; the machine sees only transactions) ----
-  // Placeholders occupy exactly one char, so caret positions are always
-  // BETWEEN them — what needs normalizing is deletion (whole chip per
-  // Backspace/Delete via native single-char semantics, which U+FFFC already
-  // gives us) and selection endpoints: Shift-extension snapping is native
-  // too (one char = one step). Mouse selection of a chip is handled in the
-  // backdrop click handler below. Undo/redo must NOT reach the browser: the
-  // machine owns the transaction log.
+  // U+FFFC placeholders occupy one char, so native Backspace/Delete already
+  // remove them whole. Visible draft-token chips span multiple glyphs and are
+  // normalized in onChange via expandVisibleChipEdit before setDraft runs.
+  // Visible chip clicks are handled on backdrop marks stacked above the textarea.
+  // Undo/redo must NOT reach the browser: the machine owns the transaction log.
   // selectionStart/End are number|null in lib.dom; the type-aware lint program narrows them.
-  /* oxlint-disable typescript/no-unnecessary-condition */
   const selectionOf = (el: HTMLTextAreaElement) => ({
     start: el.selectionStart ?? 0,
     end: el.selectionEnd ?? el.selectionStart ?? 0,
   })
-  /* oxlint-enable typescript/no-unnecessary-condition */
 
   const onCopyOrCut = (e: React.ClipboardEvent<HTMLTextAreaElement>, cut: boolean): void => {
     if (input === undefined || keyboard === undefined) return // absent machine: no draft can be copied or cut
@@ -371,7 +443,10 @@ export function InputBar({
     const { start, end } = selectionOf(el)
     if (start === end) return
     const slice = draft.slice(start, end)
-    const touched = input.occurrences.filter(o => o.offset >= start && o.offset < end)
+    const touched = input.occurrences.filter((o) => {
+      const chipEnd = o.offset + occurrenceSpanLength(o)
+      return chipEnd > start && o.offset < end
+    })
     if (touched.length === 0 && !cut) return // plain copy of plain text: native path is fine
     e.preventDefault()
     // Expand placeholders to their owner clipboard projections.
@@ -379,7 +454,7 @@ export function InputBar({
     let cursor = start
     for (const o of touched) {
       text += draft.slice(cursor, o.offset) + o.clipboardText
-      cursor = o.offset + 1
+      cursor = o.offset + occurrenceSpanLength(o)
     }
     text += draft.slice(cursor, end)
     e.clipboardData.setData('text/plain', text)
@@ -517,11 +592,36 @@ export function InputBar({
     attachment,
   })), [attachments, t])
 
+  // normalized in onChange via expandVisibleChipEdit before setDraft runs.
+  // Visible chip clicks open the reference; mousedown is suppressed so the
+  // textarea keeps focus (same as toolbar keepFocus).
+
+  const onVisibleChipMouseDown = (
+    event: MouseEvent<HTMLElement>,
+    chip: ChipRender,
+  ): void => {
+    if (openReferenceChip === undefined || locked || machineBusy) return
+    if (event.button !== 0) return
+    event.preventDefault()
+    openReferenceChip(chip.source, chip.ref)
+    const el = inputRef.current
+    if (el !== null) {
+      el.focus({ preventScroll: true })
+      restoreCaret(el, caretAfterVisibleChip(draft, chip))
+    }
+  }
+
   const onSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>): void => {
     // Any caret/selection gesture ends a live paste attempt (the machine
     // cannot observe DOM selection). Cheap no-op when none is live.
     if (keyboard !== undefined && keyboard.snapshot.paste !== undefined) keyboard.invalidatePaste()
-    void e
+    if (input === undefined || locked || machineBusy) return
+    const el = e.currentTarget
+    const { start, end } = selectionOf(el)
+    const normalized = normalizeComposerSelection(draft, input.occurrences, start, end)
+    if (normalized.start !== start || normalized.end !== end) {
+      el.setSelectionRange(normalized.start, normalized.end)
+    }
   }
 
   // Button presses steal focus from the textarea; suppress at mousedown so
@@ -597,22 +697,40 @@ export function InputBar({
       pushPlain(b.at)
       if (b.kind === 'chip') {
         const chip = b.chip
-        backdrop.push(
-          // The cell's ::before renders U+FFFC itself so its advance equals the
-          // textarea's placeholder exactly (same char, same font); the label is
-          // a clipped overlay that never affects layout.
-          <span
-            key={`chip-${chip.occurrenceId}`}
-            className={clsx(css.chip, chip.invalid && css.chipInvalid)}
-            data-decoration="chip"
-            data-occurrence={chip.occurrenceId}
-            data-invalid={chip.invalid || undefined}
-            title={chip.label}
-          >
-            <span className={css.chipLabel}>{chip.label}</span>
-          </span>,
-        )
-        cursor = chip.offset + 1 // the placeholder char the chip stands for
+        if (chip.spanLength > 1) {
+          backdrop.push(
+            <span
+              key={`chip-${chip.occurrenceId}`}
+              className={clsx(css.visibleChip, chip.invalid && css.chipInvalid)}
+              data-decoration="chip"
+              data-visible-chip="true"
+              data-occurrence={chip.occurrenceId}
+              data-invalid={chip.invalid || undefined}
+              data-label={chip.label}
+              title={chip.label}
+              onMouseDown={openReferenceChip === undefined ? undefined : (e) => { onVisibleChipMouseDown(e, chip) }}
+            >
+              {draft.slice(chip.offset, chip.offset + chip.spanLength)}
+            </span>,
+          )
+        } else {
+          backdrop.push(
+            // The cell's ::before renders U+FFFC itself so its advance equals the
+            // textarea's placeholder exactly (same char, same font); the label is
+            // a clipped overlay that never affects layout.
+            <span
+              key={`chip-${chip.occurrenceId}`}
+              className={clsx(css.chip, chip.invalid && css.chipInvalid)}
+              data-decoration="chip"
+              data-occurrence={chip.occurrenceId}
+              data-invalid={chip.invalid || undefined}
+              title={chip.label}
+            >
+              <span className={css.chipLabel}>{chip.label}</span>
+            </span>,
+          )
+        }
+        cursor = chip.offset + chip.spanLength
       } else {
         // Plain-range highlight: the glyphs stay the
         // textarea's (advance untouched); the mark paints the chip look.

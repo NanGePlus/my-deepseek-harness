@@ -8,8 +8,9 @@ import type {
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult, WorkspaceId,
   HostLspDiagnostic,
 } from '@deepseek-ai/dsh-client-runtime/client'
-import type { GitStatusListing, WorkspaceEntriesListing } from '@deepseek-ai/dsh-client-runtime/client'
+import type { GitStatusListing, WorkspaceEntriesListing, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceEntry } from '@deepseek-ai/dsh-client-runtime/client'
+import type { FileContextRefRequest } from './file-context-ref.ts'
 import { FileTreePane } from './FileTreePane.tsx'
 import { EditorPane, type EditorPaneStatus } from './EditorPane.tsx'
 import { TreeSplitHandle } from './TreeSplitHandle.tsx'
@@ -175,6 +176,12 @@ export interface FileEditorInjected {
     character: number,
     signal?: AbortSignal,
   ) => Promise<{ hover: { contents: string; range?: HostLspDiagnostic['range'] } | null }>
+  /**
+   * Insert one file line-range reference into a session composer.
+   * @param sessionId - target session id.
+   * @param request - workspace file path and one-based line range.
+   */
+  insertFileContextToComposer: (sessionId: SessionId, request: FileContextRefRequest) => boolean
 }
 
 /** Dirty guard face injected from apply (close-tab dialogs). */
@@ -204,7 +211,7 @@ export function EditorSurface({
   t, useSessions, useWorkspaces, useStore, actions, dirtyGuard,
   listWorkspaceEntries, gitStatus, readFile, writeFile,
   deletePath, renamePath, createWorkspaceDirectory, watchPath,
-  lspSyncDocument, lspCloseDocument, lspHoverDocument,
+  lspSyncDocument, lspCloseDocument, lspHoverDocument, insertFileContextToComposer,
 }: EditorSurfaceProps) {
   const currentSessionId = useSessions(state => state.current)
   const workspace = useWorkspaces(state =>
@@ -217,6 +224,9 @@ export function EditorSurface({
   const activePath = useStore(state => workspaceId === undefined
     ? undefined
     : workspaceEditorState(state, workspaceId).activePath)
+  const sourceSelection = useStore(state => workspaceId === undefined
+    ? undefined
+    : workspaceEditorState(state, workspaceId).sourceSelection)
   const editorActions = useMemo(() => {
     if (workspaceId === undefined) return undefined
     const wid = workspaceId
@@ -787,6 +797,14 @@ export function EditorSurface({
         diagnosticsByPath={lspDiagnostics}
         onHover={fetchLspHover}
         onRetry={() => { retryRef.current?.() }}
+        insertFileContextToComposer={currentSessionId === undefined
+          ? undefined
+          : request => insertFileContextToComposer(currentSessionId, request)}
+        workspaceId={workspaceId}
+        sourceSelection={sourceSelection}
+        onSourceSelectionApplied={workspaceId === undefined
+          ? undefined
+          : (ticket) => { actions.clearSourceSelection(workspaceId, ticket) }}
       />
       <Modal
         open={externalChange !== null}

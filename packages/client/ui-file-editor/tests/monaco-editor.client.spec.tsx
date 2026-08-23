@@ -5,12 +5,23 @@ import { act, cleanup, render, waitFor } from '@testing-library/react'
 
 const listeners: Array<() => void> = []
 let model = 'hello'
-const textModel = { dispose: vi.fn() }
+const textModel = {
+  dispose: vi.fn(),
+  getLineCount: (): number => model.split('\n').length,
+  getLineMaxColumn: (line: number): number => (model.split('\n')[line - 1]?.length ?? 0) + 1,
+}
+const setSelection = vi.fn()
+const revealLineInCenter = vi.fn()
 const editor = {
   getValue: (): string => model,
   getModel: (): typeof textModel => textModel,
   setValue: (next: string): void => { model = next },
+  setSelection,
+  revealLineInCenter,
   onDidChangeModelContent: (listener: () => void): void => { listeners.push(listener) },
+  onMouseDown: vi.fn(() => ({ dispose: vi.fn() })),
+  onMouseMove: vi.fn(() => ({ dispose: vi.fn() })),
+  onMouseUp: vi.fn(() => ({ dispose: vi.fn() })),
   dispose: vi.fn(),
 }
 const create = vi.fn(() => editor)
@@ -55,6 +66,8 @@ beforeEach(() => {
   listeners.length = 0
   model = 'hello'
   create.mockClear()
+  setSelection.mockClear()
+  revealLineInCenter.mockClear()
   editor.dispose.mockClear()
   loadImpl = () => Promise.resolve(monacoModule)
   delete (globalThis as { MonacoEnvironment?: unknown }).MonacoEnvironment
@@ -192,5 +205,46 @@ describe('MonacoEditor', () => {
       release({ ...monacoModule })
     })
     expect(create).not.toHaveBeenCalled()
+  })
+
+  it('re-applies a pending source line range after a late buffer sync', async () => {
+    model = 'a\nb\nc'
+    const onApplied = vi.fn()
+    const view = render(
+      <MonacoEditor
+        path="/w/a.md"
+        value="a\nb\nc"
+        language="markdown"
+        ariaLabel="a.md"
+        dark={false}
+        onChange={() => {}}
+      />,
+    )
+    await waitFor(() => { expect(create).toHaveBeenCalled() })
+    setSelection.mockClear()
+    onApplied.mockClear()
+
+    const loaded = 'line1\nline2\nline3\nline4\nline5\nline6\nline7'
+    view.rerender(
+      <MonacoEditor
+        path="/w/a.md"
+        value={loaded}
+        language="markdown"
+        ariaLabel="a.md"
+        dark={false}
+        onChange={() => {}}
+        sourceLineRange={{ startLine: 1, endLine: 7, ticket: 2 }}
+        onSourceLineRangeApplied={onApplied}
+      />,
+    )
+    await act(async () => { await new Promise<void>((resolve) => { requestAnimationFrame(() => { resolve() }) }) })
+    expect(model).toBe(loaded)
+    expect(setSelection).toHaveBeenCalledWith({
+      startLineNumber: 1,
+      startColumn: 1,
+      endLineNumber: 7,
+      endColumn: 6,
+    })
+    expect(onApplied).toHaveBeenCalledWith(2)
   })
 })

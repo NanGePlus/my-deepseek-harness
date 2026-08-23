@@ -312,12 +312,14 @@ export function apply(ctx: Context): void {
           toggleCommandMenu: undefined,
           stop: undefined,
           command: undefined,
+          openReferenceChip: undefined,
           hooks: { notices: ABSENT_NOTICES, lexicon: ABSENT_LEXICON, menuLauncher: ABSENT_MENU_LAUNCHER },
         }
       }
       const conversation = concreteConversation(ctx)
       const shell = inputHub.shell(sessionId)
       const inputTriggers = inputHub.inputTriggers(sessionId)
+      const chatInstance = ctx.slots.sessionStore(chatStore, sessionId)
       return {
         keyboard: shell,
         addImages: (files) => {
@@ -365,6 +367,17 @@ export function apply(ctx: Context): void {
           if (session === undefined) return false
           const result = await session.command(line)
           return result.ok && result.value.matched
+        },
+        openReferenceChip: (source, ref) => {
+          const opener = ctx.get('fileEditorOpen')
+          const openReference = opener?.openReference
+          if (openReference === undefined) return
+          const setDetailsTab = chatInstance.actions?.setDetailsTab
+          if (setDetailsTab !== undefined) setDetailsTab('editor')
+          ctx.layout.openDetails()
+          void openReference(source, ref).catch(() => {
+            // Read/open failures stay silent in the composer; the editor surface shows its own state.
+          })
         },
         hooks: {
           notices: shell.notices,

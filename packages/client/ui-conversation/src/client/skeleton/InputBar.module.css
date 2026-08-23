@@ -161,11 +161,13 @@
 
 /* Decoration backdrop: same metrics as the textarea, transparent glyphs; only
    the highlight backgrounds and the ghost hint show through the transparent
-   textarea background above it. */
+   textarea background above it. Visible chips sit above the textarea and
+   receive clicks via pointer-events: auto on .visibleChip. */
 .backdrop {
   position: absolute;
   inset: 0;
-  overflow: hidden;
+  z-index: 2;
+  overflow: visible;
   color: var(--dsw-alias-label-primary);
   pointer-events: none;
 }
@@ -202,6 +204,7 @@
 .input {
   position: absolute;
   inset: 0;
+  z-index: 1;
   width: 100%;
   height: 100%;
   resize: none;
@@ -218,6 +221,12 @@
   caret-color: var(--dsw-alias-state-business-primary);
 }
 
+/* Glyphs are painted by the backdrop; the textarea is transparent, so
+   selection fill must stay visible or drag-select has no highlight. */
+.input::selection {
+  background: rgba(97, 135, 216, 0.28);
+}
+
 .input,
 .mirror,
 .backdrop {
@@ -232,12 +241,14 @@
      slot); everything else falls through to the app stack. All three layers
      share the stack, so placeholder advances agree by construction. */
   font-family: 'DshChipCell', var(--dsw-font-family);
-  font-size: inherit;
+  /* Same 13/20 face as PermissionSelect / model trigger — the visible chip
+     and the textarea must share this advance or the caret and pill drift. */
+  font-size: 13px;
   /* Three consumers, not two: the mirror sizes the stack, the layers must break
      lines identically, and the caret reveal parses this value to step one line
      down for a caret that sits after a newline. That parse needs a length, so a
      theme resolving this to `normal` would make the reveal a silent no-op. */
-  line-height: inherit;
+  line-height: 20px;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -470,6 +481,34 @@
 }
 
 .chipInvalid {
+  background: rgba(216, 97, 97, 0.2);
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+/* Variable-width reference chip: one span, one fill. The draft glyphs ARE
+   the label and MUST share the textarea's 13/20 regular face — a medium
+   weight makes long ASCII chips wider than the caret. Do not add a second
+   paint or horizontal padding. A trailing space after the span is the
+   type-here seat. */
+.visibleChip {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border-radius: 6px;
+  background: rgba(97, 135, 216, 0.28);
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: inherit;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  vertical-align: baseline;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.visibleChip.chipInvalid {
   background: rgba(216, 97, 97, 0.2);
   text-decoration: line-through;
   opacity: 0.7;

@@ -90,6 +90,8 @@ export const zh = {
   'editor.markdown.toolbar.linkPrompt': '链接地址',
   'editor.markdown.toolbar.linkPlaceholder': '粘贴或输入链接…',
   'editor.markdown.toolbar.linkConfirm': '确认链接',
+  'editor.markdown.sourceSelection.toolbar': 'Markdown 源码选区',
+  'editor.markdown.sourceSelection.addToChat': 'Add to Chat',
 } as const
 
 /** English dictionary, checked complete against the zh key set. */
@@ -184,6 +186,8 @@ export const en = {
   'editor.markdown.toolbar.linkPrompt': 'Link URL',
   'editor.markdown.toolbar.linkPlaceholder': 'Paste or type a link…',
   'editor.markdown.toolbar.linkConfirm': 'Confirm link',
+  'editor.markdown.sourceSelection.toolbar': 'Markdown source selection',
+  'editor.markdown.sourceSelection.addToChat': 'Add to Chat',
 } as const
 
 /** The fileEditor namespace key union. */

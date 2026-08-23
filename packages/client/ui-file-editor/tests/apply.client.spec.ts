@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionId, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import { InputTriggerService } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { apply as applyNode } from '../src/index.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { EditorSurface, type FileEditorDirtyGuardInjected, type FileEditorInjected } from '../src/client/EditorSurface.tsx'
@@ -23,11 +24,19 @@ async function bench() {
     watchPath: vi.fn(),
   }
   ctx.provide('workspaces', workspaces)
+  const sessions = {
+    scope: vi.fn(() => ({
+      get: vi.fn(() => undefined),
+      bail: vi.fn(() => false),
+    })),
+  }
+  ctx.provide('sessions', sessions)
+  ctx.provide('conversation', { input: { for: vi.fn() } })
   slots.register({
     name: 'root',
     children: { details: { kind: 'single', scope: 'session' } },
   } as never, () => null)
-  return { ctx, slots, workspaces }
+  return { ctx, slots, workspaces, sessions }
 }
 
 describe('ui-file-editor apply', () => {
@@ -41,10 +50,11 @@ describe('ui-file-editor apply', () => {
       name: 'details',
       children: { 'conversation.details.editor': { kind: 'single', scope: 'root' } },
     } as never, () => null)
+    await b.ctx.plugin(InputTriggerService).await()
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     const entry = b.slots.entries('conversation.details.editor')[0]
     expect(entry?.component).toBe(EditorSurface)
-    const face = entry?.inject?.() as unknown as FileEditorInjected & FileEditorDirtyGuardInjected
+    const face = entry?.inject?.({} as never) as unknown as FileEditorInjected & FileEditorDirtyGuardInjected
     await expect(face.listWorkspaceEntries('ws' as WorkspaceId, '/w')).resolves.toEqual({
       path: '/w', entries: [], truncated: false,
     })
@@ -68,6 +78,12 @@ describe('ui-file-editor apply', () => {
     face.watchPath('ws' as WorkspaceId, '/w/a.ts', () => {}, undefined)
     expect(b.workspaces.watchPath).toHaveBeenCalledWith('ws', '/w/a.ts', expect.any(Function), undefined)
     expect(face.dirtyGuard).toBeDefined()
+    expect(face.insertFileContextToComposer('sess' as SessionId, {
+      workspaceId: 'ws' as WorkspaceId,
+      absolutePath: '/w/a.ts',
+      startLine: 1,
+      endLine: 2,
+    })).toBe(false)
   })
 
   it('provides fileEditorOpen that reads through workspaces and writes editor tabs', async () => {
@@ -76,6 +92,7 @@ describe('ui-file-editor apply', () => {
       name: 'details',
       children: { 'conversation.details.editor': { kind: 'single', scope: 'root' } },
     } as never, () => null)
+    await b.ctx.plugin(InputTriggerService).await()
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     const fileEditorOpen = b.ctx.get('fileEditorOpen')
     expect(fileEditorOpen).toBeDefined()
@@ -86,5 +103,40 @@ describe('ui-file-editor apply', () => {
       '' as SessionId,
     )
     expect(instance.getSnapshot().byWorkspace['ws']?.activePath).toBe('/w/readme.md')
+  })
+
+  it('openReference opens the file and requests a source line selection', async () => {
+    const b = await bench()
+    b.workspaces.readFile = vi.fn(() => Promise.resolve({
+      kind: 'text' as const,
+      path: '/w/readme.md',
+      text: 'one\ntwo\nthree',
+    }))
+    b.slots.register({
+      name: 'details',
+      children: { 'conversation.details.editor': { kind: 'single', scope: 'root' } },
+    } as never, () => null)
+    await b.ctx.plugin(InputTriggerService).await()
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const fileEditorOpen = b.ctx.get('fileEditorOpen')
+    const store = b.slots.sessionStore(
+      b.slots.entries('conversation.details.editor')[0]!.store as never,
+      '' as SessionId,
+    )
+    const ref = JSON.stringify({
+      workspaceId: 'ws',
+      path: '/w/readme.md',
+      startLine: 1,
+      endLine: 7,
+    })
+    await expect(fileEditorOpen!.openReference('file-context', ref)).resolves.toBe(true)
+    const partition = store.getSnapshot().byWorkspace['ws']
+    expect(partition?.activePath).toBe('/w/readme.md')
+    expect(partition?.sourceSelection).toEqual({
+      path: '/w/readme.md',
+      startLine: 1,
+      endLine: 7,
+      ticket: 1,
+    })
   })
 })

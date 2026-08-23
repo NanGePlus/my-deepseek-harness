@@ -4,8 +4,16 @@
  */
 import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { FileEditorOpen } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { InputTriggerServiceContract, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import { insertFileContextIntoComposer } from './composer-file-context-insert.ts'
 import { EditorSurface, editorDirtyGuard, type FileEditorInjected } from './EditorSurface.tsx'
+import {
+  FILE_CONTEXT_SOURCE,
+  decodeFileContextRef,
+  fileContextChipLabel,
+} from './file-context-ref.ts'
+import { serializeFileContextReference } from './file-context-serialize.ts'
 import { openPathInEditor, type OpenPathStore } from './open-path.ts'
 import { createFileEditorStore } from './stores.ts'
 import { en, zh, type FileEditorKey } from './locales.ts'
@@ -20,8 +28,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Dictionary namespace owned by this plugin. */
 const NS = 'fileEditor'
 
-/** Required services for slot injection, Workspace Host RPC, and locale. */
-export const inject = ['slots', 'workspaces', 'locale']
+/** Required services for slot injection, Workspace Host RPC, composer bridge, and locale. */
+export const inject = ['slots', 'workspaces', 'locale', 'sessions', 'conversation', 'inputTriggers']
 
 /**
  * Register the editor-surface occupant once the details child slot is declared.
@@ -34,18 +42,69 @@ export function apply(ctx: ClientContext): void {
 
   const fileEditorOpen: FileEditorOpen = {
     openPath: (workspaceId, absolutePath) => {
-      const instance = ctx.slots.sessionStore(fileEditorStore, '' as SessionId)
+      const handle = ctx.slots.sessionStore(fileEditorStore, '' as SessionId)
       return openPathInEditor(
-        instance as unknown as OpenPathStore,
+        handle as unknown as OpenPathStore,
         (wid, path, kind, signal) => ctx.workspaces.readFile(wid, path, kind, signal),
         workspaceId,
         absolutePath,
       )
     },
+    openReference: async (source: string, ref: string) => {
+      if (source !== FILE_CONTEXT_SOURCE) return false
+      const payload = decodeFileContextRef(ref)
+      const handle = ctx.slots.sessionStore(fileEditorStore, '' as SessionId)
+      const ok = await openPathInEditor(
+        handle as unknown as OpenPathStore,
+        (wid, path, kind, readSignal) => ctx.workspaces.readFile(wid, path, kind, readSignal),
+        payload.workspaceId,
+        payload.path,
+      )
+      if (!ok) return false
+      if (handle.actions !== undefined) {
+        const { requestSourceSelection } = handle.actions as {
+          requestSourceSelection: (
+            workspaceId: typeof payload.workspaceId,
+            path: string,
+            startLine: number,
+            endLine: number,
+          ) => void
+        }
+        requestSourceSelection(
+          payload.workspaceId,
+          payload.path,
+          payload.startLine,
+          payload.endLine,
+        )
+      }
+      return true
+    },
   }
   ctx.provide('fileEditorOpen', fileEditorOpen)
 
-  const injected = (): FileEditorInjected & { dirtyGuard: typeof editorDirtyGuard } => ({
+  const fileContextSource: InputTriggerSource = {
+    trigger: '/',
+    name: FILE_CONTEXT_SOURCE,
+    candidates: () => Promise.resolve([]),
+    onPick: () => undefined,
+    codec: {
+      clipboardText: (ref: string) => fileContextChipLabel(decodeFileContextRef(ref)),
+      serialize: (ref, signal) => serializeFileContextReference(
+        (workspaceId, path, kind, readSignal) => ctx.workspaces.readFile(workspaceId, path, kind, readSignal),
+        ref,
+        signal,
+      ),
+    },
+  }
+  ctx.effect(() => {
+    const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract | undefined
+    if (inputTriggers === undefined) return () => {}
+    return inputTriggers.registerSource(fileContextSource)
+  }, 'ui-file-editor: file-context source')
+
+  const hostInjected = (): Omit<FileEditorInjected, 'insertFileContextToComposer'> & {
+    dirtyGuard: typeof editorDirtyGuard
+  } => ({
     listWorkspaceEntries: (workspaceId, path, signal) =>
       ctx.workspaces.listWorkspaceEntries(workspaceId, path, signal),
     gitStatus: (workspaceId, signal) => ctx.workspaces.gitStatus(workspaceId, signal),
@@ -74,6 +133,14 @@ export function apply(ctx: ClientContext): void {
     name: 'conversation.details.editor',
     locale: NS,
     store: fileEditorStore,
-    inject: injected,
+    inject: (_actions: unknown): FileEditorInjected & { dirtyGuard: typeof editorDirtyGuard } => ({
+      ...hostInjected(),
+      insertFileContextToComposer: (sessionId, request) => {
+        const actx = ctx.sessions.scope(sessionId)
+        const conversation = actx?.get('conversation')
+        if (actx === undefined || conversation === undefined) return false
+        return insertFileContextIntoComposer(actx, conversation, request)
+      },
+    }),
   }, EditorSurface))
 }
