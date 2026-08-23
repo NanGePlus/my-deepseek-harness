@@ -8,6 +8,7 @@ import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { HostLspDiagnostic, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { FileContextRefRequest } from './file-context-ref.ts'
 import { MonacoEditor, type MonacoSourceLineRange } from './MonacoEditor.tsx'
+import { sourceSelectionActionsFor } from './source-selection-actions.ts'
 import { MarkdownEditorBody } from './MarkdownEditorBody.tsx'
 import { isMarkdownLanguage, languageLabel } from './open-kind.ts'
 import { tabIsDirty, type EditorTab, type SourceSelectionRequest } from './stores.ts'
@@ -306,6 +307,22 @@ export function EditorPane({
             {...(onHover === undefined
               ? {}
               : { onHover: (line, character, signal) => onHover(active.path, line, character, signal) })}
+            {...(workspaceId === undefined || insertFileContextToComposer === undefined
+              ? {}
+              : {
+                sourceSelectionActions: sourceSelectionActionsFor(
+                  t,
+                  'code',
+                  (range) => {
+                    insertFileContextToComposer({
+                      workspaceId,
+                      absolutePath: active.path,
+                      startLine: range.startLine,
+                      endLine: range.endLine,
+                    })
+                  },
+                ),
+              })}
             {...(sourceLineRange === undefined
               ? {}
               : { sourceLineRange, onSourceLineRangeApplied: onSourceSelectionApplied })}

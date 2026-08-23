@@ -6,6 +6,7 @@ import type { HostLspHover } from '@deepseek-ai/dsh-client-runtime/client'
 import { EditableMarkdownPreview } from './EditableMarkdownPreview.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { MonacoEditor, type MonacoSourceLineRange } from './MonacoEditor.tsx'
+import { sourceSelectionActionsFor } from './source-selection-actions.ts'
 import { breadcrumbSegments, languageLabel } from './open-kind.ts'
 import type { TextEditorTab } from './stores.ts'
 import css from './EditorPane.module.css'
@@ -150,11 +151,7 @@ export function MarkdownEditorBody({
             {...(insertFileContextToComposer === undefined
               ? {}
               : {
-                sourceSelectionActions: {
-                  toolbarLabel: t('editor.markdown.sourceSelection.toolbar'),
-                  addToChatLabel: t('editor.markdown.sourceSelection.addToChat'),
-                  onAddToChat: insertFileContextToComposer,
-                },
+                sourceSelectionActions: sourceSelectionActionsFor(t, 'markdown', insertFileContextToComposer),
               })}
             {...(sourceLineRange === undefined
               ? {}

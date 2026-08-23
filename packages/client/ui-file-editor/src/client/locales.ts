@@ -92,6 +92,8 @@ export const zh = {
   'editor.markdown.toolbar.linkConfirm': '确认链接',
   'editor.markdown.sourceSelection.toolbar': 'Markdown 源码选区',
   'editor.markdown.sourceSelection.addToChat': 'Add to Chat',
+  'editor.sourceSelection.toolbar': '源码选区',
+  'editor.sourceSelection.addToChat': 'Add to Chat',
 } as const
 
 /** English dictionary, checked complete against the zh key set. */
@@ -188,6 +190,8 @@ export const en = {
   'editor.markdown.toolbar.linkConfirm': 'Confirm link',
   'editor.markdown.sourceSelection.toolbar': 'Markdown source selection',
   'editor.markdown.sourceSelection.addToChat': 'Add to Chat',
+  'editor.sourceSelection.toolbar': 'Source selection',
+  'editor.sourceSelection.addToChat': 'Add to Chat',
 } as const
 
 /** The fileEditor namespace key union. */

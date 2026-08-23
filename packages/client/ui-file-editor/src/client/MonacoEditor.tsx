@@ -14,7 +14,7 @@ import { MonacoSourceSelectionToolbar } from './MonacoSourceSelectionToolbar.tsx
 import { applyMonacoSourceLineRange } from './monaco-source-line-range.ts'
 import css from './MonacoEditor.module.css'
 
-/** Labels and callback for Markdown source Add to Chat. */
+/** Labels and callback for Monaco source Add to Chat. */
 export interface MonacoSourceSelectionActions {
   /** Accessible toolbar label. */
   toolbarLabel: string
@@ -68,7 +68,7 @@ export interface MonacoEditorProps {
    * @param signal - aborts a superseded hover request.
    */
   onHover?: (line: number, character: number, signal?: AbortSignal) => Promise<HostLspHover | null>
-  /** Optional Markdown source selection actions (Add to Chat). */
+  /** Optional source selection actions (Add to Chat). */
   sourceSelectionActions?: MonacoSourceSelectionActions | undefined
   /** Optional one-shot line-range selection from a composer chip navigation. */
   sourceLineRange?: MonacoSourceLineRange | undefined

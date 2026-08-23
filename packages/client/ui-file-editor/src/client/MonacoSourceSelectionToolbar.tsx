@@ -1,4 +1,4 @@
-/** Floating Add to Chat toolbar for Monaco Markdown source selections. */
+/** Floating Add to Chat toolbar for Monaco source selections. */
 
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
