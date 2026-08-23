@@ -877,6 +877,20 @@ describe('EditorSurface open / save', () => {
     await waitFor(() => { expect(b.gitStatus.mock.calls.length).toBeGreaterThan(1) })
   })
 
+  it('save-refreshes-tree: saving re-fetches the parent directory listing', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    const initialRootListings = b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length
+    await clickFile('README.md')
+    const box = await markdownEditor()
+    fireEvent.change(box, { target: { value: 'edited readme\n' } })
+    saveShortcut()
+    await waitFor(() => {
+      expect(b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length)
+        .toBeGreaterThan(initialRootListings)
+    })
+  })
+
   it('save-disabled: a clean text tab, preview tab, and non-openable tab ignore save shortcuts', async () => {
     const b = mount()
     await clickFile('README.md')
@@ -1841,7 +1855,7 @@ describe('EditorSurface external change', () => {
   it('external-change: a fake watch event shows the external-change dialog', async () => {
     const watch = createWatchHarness()
     const readCounts = new Map<string, number>()
-    mount({
+    const b = mount({
       watchPath: watch.watchPath,
       read: async (_id, path, kind) => {
         if (kind !== 'text') return defaultReadFile(_id, path, kind)
@@ -1854,10 +1868,16 @@ describe('EditorSurface external change', () => {
         }
       },
     })
+    await waitFor(() => { expect(b.listWorkspaceEntries).toHaveBeenCalledWith(WID, ROOT, expect.any(AbortSignal)) })
+    const initialRootListings = b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length
     await clickFile('README.md')
     await markdownEditor()
     expect(watch.watchPath).toHaveBeenCalledWith(WID, README, expect.any(Function), expect.any(AbortSignal))
     await act(async () => { watch.trigger(README) })
+    await waitFor(() => {
+      expect(b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length)
+        .toBeGreaterThan(initialRootListings)
+    })
     const dialog = await waitFor(() => screen.getByRole('dialog', { name: '文件已在磁盘上更改' }))
     expect(within(dialog).getByText('README.md')).toBeTruthy()
     expect(within(dialog).getByRole('button', { name: '重新加载' })).toBeTruthy()
@@ -1922,15 +1942,16 @@ describe('EditorSurface external change', () => {
     const watch = createWatchHarness()
     const gone = `${ROOT}/gone.ts`
     mount({ watchPath: watch.watchPath })
+    expect(watch.isWatching(ROOT)).toBe(true)
     await clickFile('README.md')
     await markdownEditor()
     expect(watch.isWatching(README)).toBe(true)
-    expect(watch.watchPath).toHaveBeenCalledTimes(1)
+    expect(watch.watchPath).toHaveBeenCalledTimes(2)
     await clickFile('gone.ts')
     await waitFor(() => { expect(screen.getByRole('tab', { name: /gone\.ts/ })).toBeTruthy() })
     expect(watch.isWatching(README)).toBe(false)
     expect(watch.isWatching(gone)).toBe(true)
-    expect(watch.watchPath).toHaveBeenCalledTimes(2)
+    expect(watch.watchPath).toHaveBeenCalledTimes(3)
     fireEvent.click(screen.getByRole('tab', { name: /README\.md/ }))
     await waitFor(() => { expect(watch.isWatching(README)).toBe(true) })
     expect(watch.isWatching(gone)).toBe(false)
@@ -1975,9 +1996,31 @@ describe('EditorSurface external change', () => {
     fireEvent.click(screen.getByRole('button', { name: '关闭 README.md' }))
     await waitFor(() => { expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull() })
     expect(watch.isWatching(README)).toBe(false)
+    expect(watch.isWatching(ROOT)).toBe(true)
     await act(async () => { watch.trigger(README) })
     expect(screen.queryByRole('dialog', { name: '文件已在磁盘上更改' })).toBeNull()
-    expect(b.watchPath.mock.calls.every(call => call[1] !== ROOT)).toBe(true)
+    expect(b.watchPath.mock.calls.some(call => call[1] === ROOT)).toBe(true)
+  })
+
+  it('workspace-watch-refreshes-tree: a workspace-root watch event re-lists visible directories', async () => {
+    const watch = createWatchHarness()
+    const agentFile = entry('agent.ts', false)
+    const list = vi.fn(async (_id: WorkspaceId, path: string) => {
+      const base = listingFor(path)
+      if (path === ROOT) {
+        return { ...base, entries: [...base.entries, agentFile] }
+      }
+      return base
+    })
+    const b = mount({ watchPath: watch.watchPath, list })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    const initialRootListings = b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length
+    await act(async () => { watch.trigger(ROOT) })
+    await waitFor(() => {
+      expect(b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length)
+        .toBeGreaterThan(initialRootListings)
+    }, { timeout: 3000 })
+    await waitFor(() => { expect(screen.getByText('agent.ts')).toBeTruthy() })
   })
 })
 

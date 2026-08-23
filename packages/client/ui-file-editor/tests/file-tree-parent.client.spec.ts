@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { WorkspaceEntry } from '@deepseek-ai/dsh-client-runtime/client'
 import {
   directoryChainToFile, isPathInDirectorySubtree, joinChildPath, parentDirectoryForCreate,
-  parentDirectoryOfEntry, remapPathAfterRename, siblingKindNameExists, siblingNameConflictKey,
+  parentDirectoryOfEntry, parentDirectoryOfPath, remapPathAfterRename, siblingKindNameExists,
+  siblingNameConflictKey,
 } from '../src/client/file-tree-parent.ts'
 
 const ROOT = '/w/alpha'
@@ -33,6 +34,12 @@ describe('file-tree-parent helpers', () => {
       isDirectory: false,
       hidden: false,
     })).toBe(`${ROOT}/src`)
+  })
+
+  it('uses the parent directory that lists a host path as a direct child', () => {
+    expect(parentDirectoryOfPath(ROOT, `${ROOT}/README.md`)).toBe(ROOT)
+    expect(parentDirectoryOfPath(ROOT, `${ROOT}/src/app.ts`)).toBe(`${ROOT}/src`)
+    expect(parentDirectoryOfPath(ROOT, ROOT)).toBe(ROOT)
   })
 
   it('detects paths inside a deleted directory subtree', () => {

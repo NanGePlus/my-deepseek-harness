@@ -20,7 +20,7 @@ import { lspErrorCount } from './diagnostics-ui.ts'
 import {
   directoryChainToFile, isPathInDirectorySubtree, joinChildPath, parentDirectoryForCreate,
   remapPathAfterRename,
-  parentDirectoryOfEntry, siblingNameConflictKey,
+  parentDirectoryOfEntry, parentDirectoryOfPath, siblingNameConflictKey,
 } from './file-tree-parent.ts'
 import { flattenVisibleTree, paintVisibleRows } from './flatten-visible.ts'
 import { filterTreeEntries } from './tree-entry-filter.ts'
@@ -131,6 +131,12 @@ export interface FileTreePaneProps extends FileTreeHost, FileTreeMutationHost {
   newFileTrigger?: number
   /** Increment after disk writes so Git badges refresh without rebinding the Workspace. */
   gitRefreshTrigger?: number
+  /** Increment after disk writes outside tree mutations so listings refresh. */
+  explorerRefreshTrigger?: number
+  /** Host-absolute path that changed; its parent listing reloads unless mode is visible. */
+  explorerRefreshPath?: string
+  /** `parent` reloads the parent of {@link explorerRefreshPath}; `visible` reloads root and expanded folders. */
+  explorerRefreshMode?: 'parent' | 'visible'
   /** When true, the pane is visually collapsed (width 0). */
   collapsed?: boolean
   /** Hide the file tree pane. */
@@ -210,6 +216,9 @@ export function FileTreePane({
   workspace, listWorkspaceEntries, gitStatus, deletePath, renamePath,
   createWorkspaceDirectory, writeFile, t, onOpenFile, newFileTrigger = 0,
   gitRefreshTrigger = 0,
+  explorerRefreshTrigger = 0,
+  explorerRefreshPath,
+  explorerRefreshMode = 'parent',
   collapsed = false, onHide, treeWidthPx = null,
   onPathDeleted, onPathRenamed, diagnosticsByPath, activeEditorPath, onDismissOpenFeedback,
 }: FileTreePaneProps) {
@@ -217,6 +226,8 @@ export function FileTreePane({
     () => new Map(),
   )
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const expandedRef = useRef(expanded)
+  expandedRef.current = expanded
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(() => new Set())
   const [failedPaths, setFailedPaths] = useState<Set<string>>(() => new Set())
   const [truncatedPaths, setTruncatedPaths] = useState<Set<string>>(() => new Set())
@@ -449,6 +460,15 @@ export function FileTreePane({
     void refreshGitStatus()
   }, [workspace, fetchDirectory, refreshGitStatus])
 
+  const refreshVisibleDirectories = useCallback(async (): Promise<void> => {
+    if (workspace === undefined) return
+    const dirs = [workspace.path, ...expandedRef.current]
+    for (const dirPath of dirs) {
+      await fetchDirectory(dirPath, { force: true })
+    }
+    void refreshGitStatus()
+  }, [workspace, fetchDirectory, refreshGitStatus])
+
   useEffect(() => {
     const ac = new AbortController()
     listingAbort.current = ac
@@ -516,6 +536,24 @@ export function FileTreePane({
     if (gitRefreshTrigger === 0) return
     void refreshGitStatus()
   }, [gitRefreshTrigger, refreshGitStatus])
+
+  useEffect(() => {
+    if (explorerRefreshTrigger === 0 || workspace === undefined) return
+    if (explorerRefreshMode === 'visible') {
+      void refreshVisibleDirectories()
+      return
+    }
+    if (explorerRefreshPath === undefined) return
+    const parent = parentDirectoryOfPath(workspace.path, explorerRefreshPath)
+    void invalidateDirectory(parent)
+  }, [
+    explorerRefreshTrigger,
+    explorerRefreshPath,
+    explorerRefreshMode,
+    workspace,
+    invalidateDirectory,
+    refreshVisibleDirectories,
+  ])
 
   useEffect(() => {
     if (newFileTrigger === 0 || workspace === undefined) return
