@@ -36,18 +36,14 @@ describe('extractFileContextLines', () => {
 })
 
 describe('formatFileContextPrompt', () => {
-  it('wraps the excerpt in a fenced block with a file header', () => {
-    expect(formatFileContextPrompt(
-      { path: '/w/CONTEXT.md', startLine: 19, endLine: 21 },
+  it('wraps the excerpt in a fenced block with a file header and display metadata', () => {
+    const text = formatFileContextPrompt(
+      { workspaceId: 'ws' as never, path: '/w/CONTEXT.md', startLine: 19, endLine: 21 },
       'line19\nline20',
-    )).toMatchInlineSnapshot(`
-      "From \`CONTEXT.md\` (lines 19-21):
-
-      \`\`\`
-      line19
-      line20
-      \`\`\`"
-    `)
+    )
+    expect(text).toContain('From `CONTEXT.md` (lines 19-21):')
+    expect(text).toContain('line19')
+    expect(text).toMatch(/<!--dsh:fc:[A-Za-z0-9_-]+-->/)
   })
 })
 

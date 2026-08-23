@@ -116,19 +116,36 @@ export function extractFileContextLines(text: string, startLine: number, endLine
 }
 
 /**
+ * Base64url-encode one encoded ref for the HTML comment display-metadata suffix.
+ * @param ref - encoded reference payload from {@link encodeFileContextRef}.
+ */
+export function encodeFileContextPromptMeta(ref: string): string {
+  const bytes = new TextEncoder().encode(ref)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+/**
  * Model-visible prompt block for one file line-range reference.
  * @param payload - decoded reference payload.
  * @param excerpt - selected line text.
  */
 export function formatFileContextPrompt(
-  payload: Pick<FileContextRefPayload, 'path' | 'startLine' | 'endLine'>,
+  payload: Pick<FileContextRefPayload, 'workspaceId' | 'path' | 'startLine' | 'endLine'>,
   excerpt: string,
 ): string {
   const name = fileContextBasename(payload.path)
   const lineLabel = payload.startLine === payload.endLine
     ? `line ${payload.startLine}`
     : `lines ${payload.startLine}-${payload.endLine}`
-  return `From \`${name}\` (${lineLabel}):\n\n\`\`\`\n${excerpt}\n\`\`\``
+  const meta = encodeFileContextPromptMeta(encodeFileContextRef({
+    workspaceId: payload.workspaceId,
+    path: payload.path,
+    startLine: payload.startLine,
+    endLine: payload.endLine,
+  }))
+  return `From \`${name}\` (${lineLabel}):\n\n\`\`\`\n${excerpt}\n\`\`\`\n<!--dsh:fc:${meta}-->`
 }
 
 /**

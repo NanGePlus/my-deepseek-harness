@@ -414,6 +414,18 @@ export function apply(ctx: Context): void {
     inject: (sessionId: SessionId, actions: BoundActions<typeof chatStore>): ChatViewInjected => {
       const conversation = concreteConversation(ctx)
       const scoped = scopedConversation(sessions, sessionId)
+      const chatInstance = ctx.slots.sessionStore(chatStore, sessionId)
+      const openReferenceChip = (source: string, ref: string): void => {
+        const opener = ctx.get('fileEditorOpen')
+        const openReference = opener?.openReference
+        if (openReference === undefined) return
+        const setDetailsTab = chatInstance.actions?.setDetailsTab
+        if (setDetailsTab !== undefined) setDetailsTab('editor')
+        layout.openDetails()
+        void openReference(source, ref).catch(() => {
+          // Read/open failures stay silent in the chat row; the editor surface shows its own state.
+        })
+      }
       return {
         openDetails: (target) => {
           actions.select(target)
@@ -471,6 +483,7 @@ export function apply(ctx: Context): void {
               // Fork or child-rename failure keeps the source view untouched.
             })
         },
+        openReferenceChip,
       }
     },
   }, ChatView)

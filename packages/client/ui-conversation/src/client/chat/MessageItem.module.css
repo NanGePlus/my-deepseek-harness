@@ -282,3 +282,23 @@
   white-space: nowrap;
   vertical-align: baseline;
 }
+
+/* File-context pill in a sent user bubble — composer-visibleChip geometry at
+   13/20 inside the 16/24 bubble body. */
+.fileContextChip {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: rgba(97, 135, 216, 0.28);
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: inherit;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  vertical-align: baseline;
+  white-space: nowrap;
+  cursor: pointer;
+}

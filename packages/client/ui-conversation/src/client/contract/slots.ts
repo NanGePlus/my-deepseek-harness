@@ -392,6 +392,8 @@ export interface ChatNodeOwnerProps {
   /** Selection write + details column open + Tool tab in one gesture. */
   openDetails: (target: SelectionTarget) => void
   openFile: (path: string) => void
+  /** Open one encoded inline reference chip in the file editor (file-context today). */
+  openReferenceChip?: ((source: string, ref: string) => void) | undefined
   inspectCall: (callId: CallId) => void
   forkAt: (seq: number) => void
   /** Resolve a session-authorized historical image for inline display. */
@@ -719,6 +721,8 @@ export interface ChatViewInjected {
    * (relative paths resolve against the session cwd).
    */
   openFile: (path: string) => void
+  /** Open one encoded inline reference chip in the file editor (file-context today). */
+  openReferenceChip?: ((source: string, ref: string) => void) | undefined
   loadOlder: () => void
   /** Resolve a session-authorized historical image for inline display. */
   loadImage: (attachment: ImageAttachmentRef) => Promise<string>

@@ -144,7 +144,8 @@ function TurnStatus({ startTime, t }: {
  * ordered business Node crosses the keyed renderer seat.
  */
 export function ChatView({
-  useSession, useSessions, useStore, renderSlot, sessionId, openDetails, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
+  useSession, useSessions, useStore, renderSlot, sessionId, openDetails, openFile, openReferenceChip,
+  loadOlder, loadImage, inspectCall, chatScroll, forkAt,
   fileMentions, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
@@ -388,6 +389,7 @@ export function ChatView({
               cwd={cwd}
               openDetails={openDetails}
               openFile={openFile}
+              openReferenceChip={openReferenceChip}
               inspectCall={inspectCall}
               forkAt={forkAt}
               loadImage={loadImage}
@@ -403,7 +405,13 @@ export function ChatView({
               wait, tool execution, streaming) so it never flickers per step. */}
           {running && <TurnStatus startTime={runningTurnStart} t={t} />}
           {pendingSteering.map(item => (
-            <PendingSteeringBubble key={item.id} content={item.content} loadImage={loadImage} t={t} />
+            <PendingSteeringBubble
+              key={item.id}
+              content={item.content}
+              loadImage={loadImage}
+              openReferenceChip={openReferenceChip}
+              t={t}
+            />
           ))}
         </div>
         {!atBottom && (

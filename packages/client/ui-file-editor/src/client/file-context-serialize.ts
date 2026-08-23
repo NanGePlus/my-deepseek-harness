@@ -37,5 +37,10 @@ export async function serializeFileContextReference(
   }
   if (result.kind !== 'text') throw new Error('file-context: expected a text file')
   const excerpt = extractFileContextLines(result.text, payload.startLine, payload.endLine)
-  return formatFileContextPrompt(payload, excerpt)
+  return formatFileContextPrompt({
+    workspaceId: payload.workspaceId,
+    path: payload.path,
+    startLine: payload.startLine,
+    endLine: payload.endLine,
+  }, excerpt)
 }
