@@ -244,11 +244,11 @@ export function caretOffsetFromPoint(
 ): number | null {
   const doc = textarea.ownerDocument
   const fromCaretPosition = doc.caretPositionFromPoint?.(clientX, clientY)
-  if (fromCaretPosition !== undefined && fromCaretPosition.offsetNode === textarea) {
+  if (fromCaretPosition != null && fromCaretPosition.offsetNode === textarea) {
     return fromCaretPosition.offset
   }
   const fromRange = doc.caretRangeFromPoint?.(clientX, clientY)
-  if (fromRange !== undefined && fromRange.startContainer === textarea) {
+  if (fromRange != null && fromRange.startContainer === textarea) {
     return fromRange.startOffset
   }
   return null

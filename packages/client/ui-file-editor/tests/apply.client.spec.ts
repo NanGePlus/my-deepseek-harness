@@ -129,7 +129,9 @@ describe('ui-file-editor apply', () => {
       startLine: 1,
       endLine: 7,
     })
-    await expect(fileEditorOpen!.openReference('file-context', ref)).resolves.toBe(true)
+    const openReference = fileEditorOpen?.openReference
+    expect(openReference).toBeTypeOf('function')
+    await expect(openReference!('file-context', ref)).resolves.toBe(true)
     const partition = store.getSnapshot().byWorkspace['ws']
     expect(partition?.activePath).toBe('/w/readme.md')
     expect(partition?.sourceSelection).toEqual({
