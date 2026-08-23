@@ -16,6 +16,7 @@ import type {
   DraftAttachmentId, EditRange, EditSelection, InputActions, InputEffect, InputNotice, InputState,
   PasteComponent, QueuedMessage, SessionInput, SubmitAttempt,
 } from './contract.ts'
+import { occurrenceSpanLength } from './contract.ts'
 import type { InputSubmitMode } from '../contract/composer-submission.ts'
 import { InputMachine } from './machine.ts'
 
@@ -434,7 +435,8 @@ export class SessionInputShell implements SessionInput {
         let cursor = 0
         for (const part of parts) {
           out += draft.slice(cursor, part.offset) + part.text
-          cursor = part.offset + 1
+          const occurrence = occurrences.find(o => o.offset === part.offset)
+          cursor = part.offset + (occurrence === undefined ? 1 : occurrenceSpanLength(occurrence))
         }
         out += draft.slice(cursor)
         this.deps.defaultSink(out.trim(), imageIds, mode)

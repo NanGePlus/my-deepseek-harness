@@ -1,0 +1,31 @@
+.toolbar {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--dsw-alias-label-primary) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 70%, transparent);
+  pointer-events: auto;
+}
+
+.action {
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.action:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}

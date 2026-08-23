@@ -312,12 +312,14 @@ export function apply(ctx: Context): void {
           toggleCommandMenu: undefined,
           stop: undefined,
           command: undefined,
+          openReferenceChip: undefined,
           hooks: { notices: ABSENT_NOTICES, lexicon: ABSENT_LEXICON, menuLauncher: ABSENT_MENU_LAUNCHER },
         }
       }
       const conversation = concreteConversation(ctx)
       const shell = inputHub.shell(sessionId)
       const inputTriggers = inputHub.inputTriggers(sessionId)
+      const chatInstance = ctx.slots.sessionStore(chatStore, sessionId)
       return {
         keyboard: shell,
         addImages: (files) => {
@@ -366,6 +368,17 @@ export function apply(ctx: Context): void {
           const result = await session.command(line)
           return result.ok && result.value.matched
         },
+        openReferenceChip: (source, ref) => {
+          const opener = ctx.get('fileEditorOpen')
+          const openReference = opener?.openReference
+          if (openReference === undefined) return
+          const setDetailsTab = chatInstance.actions?.setDetailsTab
+          if (setDetailsTab !== undefined) setDetailsTab('editor')
+          ctx.layout.openDetails()
+          void openReference(source, ref).catch(() => {
+            // Read/open failures stay silent in the composer; the editor surface shows its own state.
+          })
+        },
         hooks: {
           notices: shell.notices,
           lexicon: shell.lexicon,
@@ -401,6 +414,18 @@ export function apply(ctx: Context): void {
     inject: (sessionId: SessionId, actions: BoundActions<typeof chatStore>): ChatViewInjected => {
       const conversation = concreteConversation(ctx)
       const scoped = scopedConversation(sessions, sessionId)
+      const chatInstance = ctx.slots.sessionStore(chatStore, sessionId)
+      const openReferenceChip = (source: string, ref: string): void => {
+        const opener = ctx.get('fileEditorOpen')
+        const openReference = opener?.openReference
+        if (openReference === undefined) return
+        const setDetailsTab = chatInstance.actions?.setDetailsTab
+        if (setDetailsTab !== undefined) setDetailsTab('editor')
+        layout.openDetails()
+        void openReference(source, ref).catch(() => {
+          // Read/open failures stay silent in the chat row; the editor surface shows its own state.
+        })
+      }
       return {
         openDetails: (target) => {
           actions.select(target)
@@ -458,6 +483,7 @@ export function apply(ctx: Context): void {
               // Fork or child-rename failure keeps the source view untouched.
             })
         },
+        openReferenceChip,
       }
     },
   }, ChatView)

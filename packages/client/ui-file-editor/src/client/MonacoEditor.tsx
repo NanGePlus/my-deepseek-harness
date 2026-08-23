@@ -5,10 +5,37 @@ import clsx from 'clsx'
 import type { HostLspDiagnostic, HostLspHover } from '@deepseek-ai/dsh-client-runtime/client'
 import { loadMonacoEditor, type MonacoEditorModule, type MonacoStandaloneEditor } from './monaco-load.ts'
 import { ensureMonacoConfigured } from './monaco-config.ts'
-import { monacoOptionsForContent } from './editor-file-policy.ts'
+import { monacoOptionsForContent, monacoSurfaceOptionsForLanguage } from './editor-file-policy.ts'
+import { installMonacoClickSelectionGuard } from './monaco-click-selection.ts'
+import { emitMonacoBuffer, shouldSyncMonacoBuffer } from './monaco-buffer-sync.ts'
 import { setLspHoverHandler } from './monaco-hover.ts'
 import { installMonacoEnvironment } from './monaco-environment.ts'
+import { MonacoSourceSelectionToolbar } from './MonacoSourceSelectionToolbar.tsx'
+import { applyMonacoSourceLineRange } from './monaco-source-line-range.ts'
 import css from './MonacoEditor.module.css'
+
+/** Labels and callback for Monaco source Add to Chat. */
+export interface MonacoSourceSelectionActions {
+  /** Accessible toolbar label. */
+  toolbarLabel: string
+  /** Add to Chat button label. */
+  addToChatLabel: string
+  /**
+   * Insert the current source selection into the session composer.
+   * @param range - one-based inclusive line range.
+   */
+  onAddToChat: (range: { startLine: number; endLine: number }) => void
+}
+
+/** One-shot source line-range selection applied after navigation from a composer chip. */
+export interface MonacoSourceLineRange {
+  /** One-based inclusive start line. */
+  startLine: number
+  /** One-based inclusive end line. */
+  endLine: number
+  /** Monotonic apply ticket. */
+  ticket: number
+}
 
 /** Props for the editable-text editor widget. */
 export interface MonacoEditorProps {
@@ -41,6 +68,15 @@ export interface MonacoEditorProps {
    * @param signal - aborts a superseded hover request.
    */
   onHover?: (line: number, character: number, signal?: AbortSignal) => Promise<HostLspHover | null>
+  /** Optional source selection actions (Add to Chat). */
+  sourceSelectionActions?: MonacoSourceSelectionActions | undefined
+  /** Optional one-shot line-range selection from a composer chip navigation. */
+  sourceLineRange?: MonacoSourceLineRange | undefined
+  /**
+   * Called after {@link sourceLineRange} is applied in the live editor.
+   * @param ticket - applied range ticket.
+   */
+  onSourceLineRangeApplied?: ((ticket: number) => void) | undefined
 }
 
 /**
@@ -71,6 +107,41 @@ type EditorHandle = {
   setDiagnostics: (items: readonly HostLspDiagnostic[] | undefined) => void
 }
 
+type SyncState = {
+  composing: boolean
+  focused: boolean
+}
+
+/**
+ * Attach IME and focus listeners so buffer sync can skip live composition sessions.
+ * @param root - Monaco host element or fallback textarea.
+ * @param syncState - Mutable focus / composition flags.
+ * @param flush - Commits the current buffer upstream after composition ends.
+ */
+export function installMonacoImeGuards(
+  root: HTMLElement,
+  syncState: SyncState,
+  flush: () => void,
+): () => void {
+  const onFocusIn = (): void => { syncState.focused = true }
+  const onFocusOut = (): void => { syncState.focused = false }
+  const onCompositionStart = (): void => { syncState.composing = true }
+  const onCompositionEnd = (): void => {
+    syncState.composing = false
+    flush()
+  }
+  root.addEventListener('focusin', onFocusIn)
+  root.addEventListener('focusout', onFocusOut)
+  root.addEventListener('compositionstart', onCompositionStart)
+  root.addEventListener('compositionend', onCompositionEnd)
+  return () => {
+    root.removeEventListener('focusin', onFocusIn)
+    root.removeEventListener('focusout', onFocusOut)
+    root.removeEventListener('compositionstart', onCompositionStart)
+    root.removeEventListener('compositionend', onCompositionEnd)
+  }
+}
+
 /**
  * Editable-text widget: Monaco when it can start, a code-font textarea otherwise
  * (jsdom and worker-less bundles). The accessible name carries language and theme.
@@ -78,17 +149,39 @@ type EditorHandle = {
  */
 export function MonacoEditor({
   path, value, language, diagnostics, ariaLabel, dark, surface = 'sidebar', onChange, onHover,
+  sourceSelectionActions, sourceLineRange, onSourceLineRangeApplied,
 }: MonacoEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const fallbackRef = useRef<HTMLTextAreaElement>(null)
   const editorRef = useRef<EditorHandle | null>(null)
   const monacoRef = useRef<MonacoEditorModule | null>(null)
   const valueRef = useRef(value)
+  const lastEmitted = useRef(value)
+  const syncState = useRef<SyncState>({ composing: false, focused: false })
   const onChangeRef = useRef(onChange)
   const onHoverRef = useRef(onHover)
+  const pendingSourceLineRangeRef = useRef(sourceLineRange)
+  const onSourceLineRangeAppliedRef = useRef(onSourceLineRangeApplied)
   const [fallback, setFallback] = useState(true)
+  const [liveEditor, setLiveEditor] = useState<MonacoStandaloneEditor | null>(null)
   valueRef.current = value
   onChangeRef.current = onChange
   onHoverRef.current = onHover
+  pendingSourceLineRangeRef.current = sourceLineRange
+  onSourceLineRangeAppliedRef.current = onSourceLineRangeApplied
+
+  const flushPendingSourceLineRange = (): void => {
+    const range = pendingSourceLineRangeRef.current
+    if (range === undefined || liveEditor === null) return
+    if (liveEditor.getValue() !== valueRef.current) return
+    if (!applyMonacoSourceLineRange(liveEditor, range.startLine, range.endLine)) return
+    pendingSourceLineRangeRef.current = undefined
+    onSourceLineRangeAppliedRef.current?.(range.ticket)
+  }
+
+  useEffect(() => {
+    lastEmitted.current = value
+  }, [path])
 
   useEffect(() => {
     setLspHoverHandler(onHover)
@@ -102,6 +195,8 @@ export function MonacoEditor({
     /* v8 ignore next -- the host div is committed before this effect */
     if (host === null) return
     let cancelled = false
+    let removeImeGuards: (() => void) | undefined
+    let removeClickGuard: (() => void) | undefined
     void loadMonacoEditor().then((monaco) => {
       if (cancelled) return
       if (monaco === undefined) return
@@ -112,6 +207,7 @@ export function MonacoEditor({
       const theme = themeIdFor(dark)
       monacoRef.current = monaco
       const contentOptions = monacoOptionsForContent(valueRef.current)
+      const surfaceOptions = monacoSurfaceOptionsForLanguage(language, contentOptions)
       const fontFamily = getComputedStyle(document.body)
         .getPropertyValue('--ds-font-family-code')
         .trim() || 'ui-monospace, SFMono-Regular, Menlo, Monaco, monospace'
@@ -127,8 +223,9 @@ export function MonacoEditor({
           minimap: { enabled: false },
           automaticLayout: true,
           scrollBeyondLastLine: false,
-          wordWrap: contentOptions.wordWrap,
-          wrappingStrategy: contentOptions.wrappingStrategy,
+          wordWrap: surfaceOptions.wordWrap,
+          wrappingStrategy: surfaceOptions.wrappingStrategy,
+          accessibilitySupport: surfaceOptions.accessibilitySupport,
           largeFileOptimizations: contentOptions.largeFileOptimizations,
           scrollbar: { horizontal: 'auto', vertical: 'auto' },
           renderLineHighlight: 'none',
@@ -144,6 +241,8 @@ export function MonacoEditor({
             ambiguousCharacters: false,
             nonBasicASCII: false,
           },
+          occurrencesHighlight: 'off',
+          selectionHighlight: false,
         })
       } catch (error: unknown) {
         // jsdom and worker-less hosts: monaco.editor.create throws; keep textarea.
@@ -151,9 +250,17 @@ export function MonacoEditor({
         setFallback(true)
         return
       }
-      editor.onDidChangeModelContent(() => {
+      lastEmitted.current = editor.getValue()
+      const flushBuffer = (): void => {
         const next = editor.getValue()
-        if (next !== valueRef.current) onChangeRef.current(next)
+        if (next === lastEmitted.current) return
+        emitMonacoBuffer(next, onChangeRef.current, lastEmitted)
+      }
+      removeImeGuards = installMonacoImeGuards(host, syncState.current, flushBuffer)
+      removeClickGuard = installMonacoClickSelectionGuard(editor).dispose
+      editor.onDidChangeModelContent(() => {
+        if (syncState.current.composing) return
+        flushBuffer()
       })
       editorRef.current = {
         setValue: (next) => {
@@ -174,12 +281,17 @@ export function MonacoEditor({
         },
         dispose: () => { editor.dispose() },
       }
+      setLiveEditor(editor)
       setFallback(false)
     })
     return () => {
       cancelled = true
+      removeImeGuards?.()
+      removeClickGuard?.()
       editorRef.current?.dispose()
       editorRef.current = null
+      setLiveEditor(null)
+      syncState.current = { composing: false, focused: false }
       setFallback(true)
     }
   }, [path, language, dark, surface])
@@ -187,25 +299,72 @@ export function MonacoEditor({
   useEffect(() => {
     const handle = editorRef.current
     if (handle === null) return
+    if (!shouldSyncMonacoBuffer(value, lastEmitted.current, syncState.current)) return
     const id = window.requestAnimationFrame(() => {
       handle.setValue(value)
+      lastEmitted.current = value
+      flushPendingSourceLineRange()
     })
     return () => { window.cancelAnimationFrame(id) }
-  }, [value])
+  }, [value, liveEditor])
+
+  useEffect(() => {
+    if (!fallback) return
+    const textarea = fallbackRef.current
+    if (textarea === null) return
+    if (!shouldSyncMonacoBuffer(value, lastEmitted.current, syncState.current)) return
+    if (textarea.value !== value) textarea.value = value
+    lastEmitted.current = value
+    const range = pendingSourceLineRangeRef.current
+    if (range === undefined) return
+    const lines = value.split('\n')
+    const start = Math.max(0, Math.min(range.startLine, range.endLine) - 1)
+    const end = Math.max(start, Math.min(Math.max(range.startLine, range.endLine), lines.length) - 1)
+    let offset = 0
+    for (let i = 0; i < start; i += 1) offset += (lines[i]?.length ?? 0) + 1
+    const selectionStart = offset
+    let endOffset = offset
+    for (let i = start; i <= end; i += 1) endOffset += (lines[i]?.length ?? 0) + (i < end ? 1 : 0)
+    textarea.setSelectionRange(selectionStart, endOffset)
+    pendingSourceLineRangeRef.current = undefined
+    onSourceLineRangeAppliedRef.current?.(range.ticket)
+  }, [value, fallback])
+
+  useEffect(() => {
+    if (!fallback) return
+    const textarea = fallbackRef.current
+    if (textarea === null) return
+    const flush = (): void => {
+      if (textarea.value === lastEmitted.current) return
+      emitMonacoBuffer(textarea.value, onChangeRef.current, lastEmitted)
+    }
+    return installMonacoImeGuards(textarea, syncState.current, flush)
+  }, [fallback, path])
 
   useEffect(() => {
     editorRef.current?.setDiagnostics(diagnostics)
   }, [diagnostics])
 
+  useEffect(() => {
+    flushPendingSourceLineRange()
+  }, [liveEditor, sourceLineRange])
+
   return (
     <div className={clsx(css.wrap, surface === 'document' && css.document)}>
       {fallback && (
         <textarea
+          ref={fallbackRef}
           className={clsx(css.fallback, surface === 'document' && css.document)}
           aria-label={ariaLabel}
-          value={value}
+          defaultValue={value}
           spellCheck={false}
-          onChange={(event) => { onChange(event.target.value) }}
+          wrap="soft"
+          onChange={(event) => {
+            if (syncState.current.composing) return
+            const next = event.target.value
+            if (next === lastEmitted.current) return
+            emitMonacoBuffer(next, onChange, lastEmitted)
+          }}
         />
       )}
       <div
@@ -216,6 +375,14 @@ export function MonacoEditor({
         aria-multiline={fallback ? undefined : true}
         aria-label={fallback ? undefined : ariaLabel}
       />
+      {liveEditor !== null && sourceSelectionActions !== undefined && (
+        <MonacoSourceSelectionToolbar
+          editor={liveEditor}
+          toolbarLabel={sourceSelectionActions.toolbarLabel}
+          addToChatLabel={sourceSelectionActions.addToChatLabel}
+          onAddToChat={sourceSelectionActions.onAddToChat}
+        />
+      )}
     </div>
   )
 }

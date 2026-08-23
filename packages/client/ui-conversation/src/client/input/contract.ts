@@ -149,11 +149,12 @@ export interface EditRange extends EditSelection {
 }
 
 /**
- * One reference chip occurrence, backing exactly one U+FFFC placeholder in
- * the draft. Identity is occurrenceId — same-named
- * references stay independently addressable. label/clipboardText are the
- * owner's insert-time projections, cached so the chip survives owner loss
- * (invalid flips instead of dropping the occurrence).
+ * One reference chip occurrence, backing one draft span (one U+FFFC by default,
+ * or a visible {@link ReferenceInsert.draftToken} for variable-width chips).
+ * Identity is occurrenceId — same-named references stay independently
+ * addressable. label/clipboardText are the owner's insert-time projections,
+ * cached so the chip survives owner loss (invalid flips instead of dropping the
+ * occurrence).
  */
 export interface Occurrence {
   /** Machine-minted stable identity (monotonic per machine). */
@@ -162,14 +163,24 @@ export interface Occurrence {
   readonly source: string
   /** Owner-scoped reference id. */
   readonly ref: string
-  /** Placeholder offset in the draft; the occurrence occupies exactly [offset, offset+1). */
+  /** Span start offset in the draft; the occurrence occupies [offset, offset+spanLength). */
   readonly offset: number
+  /** Draft span length (defaults to one U+FFFC placeholder). */
+  readonly spanLength?: number
   /** Chip display label (insert-time cache). */
   readonly label: string
   /** Clipboard / persistence projection, e.g. `/name` (insert-time cache, never the model form). */
   readonly clipboardText: string
   /** Owner-resolution failure flag: chip renders invalid; serialization must fail. */
   readonly invalid?: boolean
+}
+
+/**
+ * Draft span length for one occurrence (one U+FFFC when unset).
+ * @param occurrence - published occurrence row.
+ */
+export function occurrenceSpanLength(occurrence: Pick<Occurrence, 'spanLength'>): number {
+  return occurrence.spanLength ?? 1
 }
 
 /** One sync-matched paste component; start/end are relative to the pasted text. */

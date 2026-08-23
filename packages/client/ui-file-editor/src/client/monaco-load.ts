@@ -1,11 +1,27 @@
 /** Dynamic monaco-editor import; undefined when the browser bundle cannot start. */
 
+/** Minimal Monaco selection face used by source selection tooling. */
+export interface MonacoSelection {
+  isEmpty: () => boolean
+  startLineNumber: number
+  endLineNumber: number
+  endColumn: number
+}
+
+/** Monaco mouse event carrying an optional document position. */
+export interface MonacoMouseTargetEvent {
+  event: MouseEvent
+  target: { position?: { lineNumber: number; column: number } | null }
+}
+
 /** Minimal editor instance used by the editable-text widget. */
 export interface MonacoStandaloneEditor {
   /** Current model text. */
   getValue: () => string
   /** Active text model, if any. */
   getModel: () => MonacoTextModel | null
+  /** Current selection, if any. */
+  getSelection: () => MonacoSelection | null
   /**
    * Replace the model text.
    * @param value - the new model text.
@@ -16,14 +32,52 @@ export interface MonacoStandaloneEditor {
    * @param listener - called after the model text changes.
    */
   onDidChangeModelContent: (listener: () => void) => void
+  /**
+   * Subscribe to selection changes.
+   * @param listener - called after the selection changes.
+   */
+  onDidChangeCursorSelection: (listener: () => void) => { dispose: () => void }
+  /**
+   * Subscribe to editor blur events.
+   * @param listener - called when the editor text surface loses focus.
+   */
+  onDidBlurEditorText: (listener: () => void) => { dispose: () => void }
+  /**
+   * Map a document position to coordinates inside the scrolled editor viewport.
+   * @param position - one-based line and column.
+   */
+  getScrolledVisiblePosition: (
+    position: { lineNumber: number; column: number },
+  ) => { top: number; left: number; height: number } | null
+  /** Root DOM node hosting the editor. */
+  getDomNode: () => HTMLElement | null
   /** Release the editor. */
   dispose: () => void
+  /** Replace the current selection. */
+  setSelection: (selection: {
+    startLineNumber: number
+    startColumn: number
+    endLineNumber: number
+    endColumn: number
+  }) => void
+  /** Scroll one one-based line toward the vertical center of the viewport. */
+  revealLineInCenter: (lineNumber: number) => void
+  /** Subscribe to mouse down inside the editor. */
+  onMouseDown: (listener: (event: MonacoMouseTargetEvent) => void) => { dispose: () => void }
+  /** Subscribe to mouse move inside the editor. */
+  onMouseMove: (listener: (event: { event: MouseEvent }) => void) => { dispose: () => void }
+  /** Subscribe to mouse up inside the editor. */
+  onMouseUp: (listener: (event: MonacoMouseTargetEvent) => void) => { dispose: () => void }
 }
 
 /** Minimal Monaco text model face used for diagnostics markers. */
 export interface MonacoTextModel {
   /** Release the model. */
   dispose: () => void
+  /** Total line count. */
+  getLineCount: () => number
+  /** Last column on one one-based line. */
+  getLineMaxColumn: (lineNumber: number) => number
 }
 
 /** monaco-editor module face consumed by the widget. */

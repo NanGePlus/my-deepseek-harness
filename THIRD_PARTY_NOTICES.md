@@ -48,6 +48,13 @@ External packages that a workspace package resolves at runtime. The tier covers 
 | [`@shikijs/langs`](https://github.com/shikijs/shiki) | MIT |
 | [`@standard-schema/spec`](https://github.com/standard-schema/standard-schema) | MIT |
 | [`@tanstack/react-virtual`](https://github.com/TanStack/virtual) | MIT |
+| [`@tiptap/core`](https://github.com/ueberdosis/tiptap) | MIT |
+| [`@tiptap/extension-link`](https://github.com/ueberdosis/tiptap) | MIT |
+| [`@tiptap/extension-underline`](https://github.com/ueberdosis/tiptap) | MIT |
+| [`@tiptap/markdown`](https://github.com/ueberdosis/tiptap) | MIT |
+| [`@tiptap/pm`](https://github.com/ueberdosis/tiptap) | MIT |
+| [`@tiptap/react`](https://github.com/ueberdosis/tiptap) | MIT |
+| [`@tiptap/starter-kit`](https://github.com/ueberdosis/tiptap) | MIT |
 | [`@types/mdast`](https://github.com/DefinitelyTyped/DefinitelyTyped) | MIT |
 | [`@vscode/ripgrep`](https://github.com/microsoft/vscode-ripgrep) | MIT |
 | [`anser`](https://github.com/IonicaBizau/anser) | MIT |

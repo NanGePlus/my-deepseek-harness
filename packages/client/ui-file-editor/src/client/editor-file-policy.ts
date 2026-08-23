@@ -49,6 +49,39 @@ export interface MonacoContentOptions {
   wrappingStrategy: 'simple' | 'advanced'
 }
 
+/** Monaco surface options after language-specific IME and wrap tuning. */
+export interface MonacoSurfaceOptions {
+  wordWrap: MonacoContentOptions['wordWrap']
+  wrappingStrategy: MonacoContentOptions['wrappingStrategy']
+  /** Set for markdown to keep CJK IME preedit aligned while soft wrap is on. */
+  accessibilitySupport?: 'off'
+}
+
+/**
+ * Monaco wrap and accessibility options for a language id.
+ * Markdown keeps soft wrap but uses simple wrapping plus accessibility off so
+ * CJK IME preedit stays at the cursor instead of jumping on wrapped lines.
+ * @param language - Monaco language id.
+ * @param contentOptions - Size-derived wrap defaults.
+ */
+export function monacoSurfaceOptionsForLanguage(
+  language: string,
+  contentOptions: MonacoContentOptions,
+): MonacoSurfaceOptions {
+  const { wordWrap } = contentOptions
+  if (language === 'markdown') {
+    return {
+      wordWrap,
+      wrappingStrategy: 'simple',
+      accessibilitySupport: 'off',
+    }
+  }
+  return {
+    wordWrap,
+    wrappingStrategy: wordWrap === 'off' ? 'simple' : contentOptions.wrappingStrategy,
+  }
+}
+
 /**
  * Monaco options that avoid main-thread stalls on large or minified buffers.
  * @param text - buffer text at open or remount time.

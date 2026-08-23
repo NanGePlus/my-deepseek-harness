@@ -5,11 +5,13 @@ import { IconCloseOutline16, IconCodeOutline16, IconLoadingOutline16, IconPanelL
 import type { MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import clsx from 'clsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type { HostLspDiagnostic } from '@deepseek-ai/dsh-client-runtime/client'
-import { MonacoEditor } from './MonacoEditor.tsx'
+import type { HostLspDiagnostic, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { FileContextRefRequest } from './file-context-ref.ts'
+import { MonacoEditor, type MonacoSourceLineRange } from './MonacoEditor.tsx'
+import { sourceSelectionActionsFor } from './source-selection-actions.ts'
 import { MarkdownEditorBody } from './MarkdownEditorBody.tsx'
 import { isMarkdownLanguage, languageLabel } from './open-kind.ts'
-import { tabIsDirty, type EditorTab } from './stores.ts'
+import { tabIsDirty, type EditorTab, type SourceSelectionRequest } from './stores.ts'
 import { lspErrorCount } from './diagnostics-ui.ts'
 import { type TabCloseScope, tabCloseMenuState } from './tab-close-scope.ts'
 import css from './EditorPane.module.css'
@@ -80,6 +82,20 @@ export interface EditorPaneProps {
     character: number,
     signal?: AbortSignal,
   ) => Promise<{ contents: string; range?: HostLspDiagnostic['range'] } | null>
+  /** Bound workspace for composer file-context insertion. */
+  workspaceId?: WorkspaceId | undefined
+  /**
+   * Insert one file line-range reference into the session composer.
+   * @param request - workspace file path and one-based line range.
+   */
+  insertFileContextToComposer?: ((request: FileContextRefRequest) => boolean) | undefined
+  /** Pending source line-range selection for the active tab, if any. */
+  sourceSelection?: SourceSelectionRequest | undefined
+  /**
+   * Called after a pending source line-range selection is applied.
+   * @param ticket - applied selection ticket.
+   */
+  onSourceSelectionApplied?: ((ticket: number) => void) | undefined
 }
 
 /**
@@ -89,8 +105,17 @@ export interface EditorPaneProps {
 export function EditorPane({
   tabs, activePath, status, dark, t, onFocus, onClose, onCloseTabs, onBufferChange, onRetry,
   treeCollapsed = false, onShowTree, workspaceRoot, diagnosticsByPath, onHover,
+  workspaceId, insertFileContextToComposer, sourceSelection, onSourceSelectionApplied,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.path === activePath)
+  const sourceLineRange: MonacoSourceLineRange | undefined =
+    active !== undefined && sourceSelection?.path === active.path
+      ? {
+        startLine: sourceSelection.startLine,
+        endLine: sourceSelection.endLine,
+        ticket: sourceSelection.ticket,
+      }
+      : undefined
   const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const [tabMenu, setTabMenu] = useState<{ anchorPath: string; rect: DOMRect } | null>(null)
   const themeLabel = dark ? t('editor.theme.dark') : t('editor.theme.light')
@@ -252,6 +277,25 @@ export function EditorPane({
             {...(onHover === undefined
               ? {}
               : { onHover: (path, line, character, signal) => onHover(path, line, character, signal) })}
+            {...(workspaceId === undefined || insertFileContextToComposer === undefined
+              ? {}
+              : {
+                workspaceId,
+                insertFileContextToComposer: (range: { startLine: number; endLine: number }) => {
+                  insertFileContextToComposer({
+                    workspaceId,
+                    absolutePath: active.path,
+                    startLine: range.startLine,
+                    endLine: range.endLine,
+                  })
+                },
+              })}
+            {...(sourceLineRange === undefined
+              ? {}
+              : {
+                sourceLineRange,
+                onSourceLineRangeApplied: onSourceSelectionApplied,
+              })}
           />
         )}
         {active?.kind === 'text' && !isMarkdownLanguage(active.language) && (
@@ -263,6 +307,25 @@ export function EditorPane({
             {...(onHover === undefined
               ? {}
               : { onHover: (line, character, signal) => onHover(active.path, line, character, signal) })}
+            {...(workspaceId === undefined || insertFileContextToComposer === undefined
+              ? {}
+              : {
+                sourceSelectionActions: sourceSelectionActionsFor(
+                  t,
+                  'code',
+                  (range) => {
+                    insertFileContextToComposer({
+                      workspaceId,
+                      absolutePath: active.path,
+                      startLine: range.startLine,
+                      endLine: range.endLine,
+                    })
+                  },
+                ),
+              })}
+            {...(sourceLineRange === undefined
+              ? {}
+              : { sourceLineRange, onSourceLineRangeApplied: onSourceSelectionApplied })}
             ariaLabel={t('editor.buffer.label', {
               name: active.name,
               language: languageLabel(active.language),

@@ -59,8 +59,10 @@ export interface CommandClaim {
 
 /**
  * Inline reference insertion. The draft holds one U+FFFC placeholder per
- * occurrence; the owner supplies both user-facing projections at insert time
- * (the model representation is serialized on submit via the source codec).
+ * occurrence unless {@link ReferenceInsert.draftToken} supplies visible text
+ * (span length follows the token); the owner supplies both user-facing
+ * projections at insert time (the model representation is serialized on submit
+ * via the source codec).
  */
 export interface ReferenceInsert {
   readonly source: string
@@ -69,6 +71,11 @@ export interface ReferenceInsert {
   readonly label: string
   /** Clipboard / persistence projection, e.g. `/name` (never the model form). */
   readonly clipboardText: string
+  /**
+   * When set, this literal text occupies the draft instead of U+FFFC (for
+   * variable-width chip labels that must stay readable in the composer).
+   */
+  readonly draftToken?: string
 }
 
 /** Settled result of a command submit transaction. */

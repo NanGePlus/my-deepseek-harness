@@ -255,10 +255,42 @@ describe('input-machine: insert-ref and the occurrence table', () => {
     expect(fx).toEqual([])
     expect(m.state.draft).toBe(`see ${P} now`)
     expect(m.state.occurrences).toEqual([{
-      occurrenceId: 1, source: 'subagent', ref: 'worker-1', offset: 4,
+      occurrenceId: 1, source: 'subagent', ref: 'worker-1', offset: 4, spanLength: 1,
       label: 'worker-1', clipboardText: '/worker-1',
     }])
     expect(m.state.phase).toBe('plain')
+  })
+
+  it('draftToken inserts the visible label and spans the full token length', () => {
+    const m = new InputMachine()
+    m.dispatch({ type: 'draft-changed', draft: '' })
+    m.dispatch({
+      type: 'insert-ref',
+      reference: {
+        source: 'file-context',
+        ref: '{}',
+        label: 'CONTEXT.md (19-21)',
+        clipboardText: 'CONTEXT.md (19-21)',
+        draftToken: 'CONTEXT.md (19-21)',
+      },
+      span: spanOf(m, 0, 0),
+    })
+    expect(m.state.draft).toBe('CONTEXT.md (19-21) ')
+    expect(m.state.occurrences).toEqual([{
+      occurrenceId: 1,
+      source: 'file-context',
+      ref: '{}',
+      offset: 0,
+      spanLength: 'CONTEXT.md (19-21)'.length,
+      label: 'CONTEXT.md (19-21)',
+      clipboardText: 'CONTEXT.md (19-21)',
+    }])
+    m.dispatch({
+      type: 'draft-changed',
+      draft: ' ',
+      editRange: { start: 0, end: 'CONTEXT.md (19-21)'.length + 1, insertedLength: 1 },
+    })
+    expect(m.state.occurrences).toEqual([])
   })
 
   it('same-named references stay independent: distinct occurrenceIds, one deletion leaves the other', () => {
@@ -674,7 +706,7 @@ describe('input-machine: decorations', () => {
     m.dispatch({ type: 'set-invalid', invalidIds: [1] })
     expect(deriveDecorations(m.state)).toEqual({
       token: null,
-      chips: [{ occurrenceId: 1, offset: 0, label: 'alpha', invalid: true }],
+      chips: [{ occurrenceId: 1, offset: 0, spanLength: 1, source: 'skill', ref: 'alpha', label: 'alpha', invalid: true }],
       textRefs: [],
       hint: null,
     })

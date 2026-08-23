@@ -51,6 +51,20 @@ export interface FileEditorState {
   tabs: EditorTab[]
   /** Path of the focused tab; undefined when no tab is open. */
   activePath: string | undefined
+  /** One-shot Monaco source selection request for the active tab. */
+  sourceSelection?: SourceSelectionRequest
+}
+
+/** Pending source line-range selection for one editor tab. */
+export interface SourceSelectionRequest {
+  /** Host-absolute file path. */
+  path: string
+  /** One-based inclusive start line. */
+  startLine: number
+  /** One-based inclusive end line. */
+  endLine: number
+  /** Monotonic ticket so repeat requests still apply. */
+  ticket: number
 }
 
 /** Root store: one editor partition per registered Workspace. */
@@ -97,6 +111,18 @@ type FileEditorActions = {
     newName: string,
   ) => void
   closeAllTabs: (draft: FileEditorRootState, workspaceId: WorkspaceId) => void
+  requestSourceSelection: (
+    draft: FileEditorRootState,
+    workspaceId: WorkspaceId,
+    path: string,
+    startLine: number,
+    endLine: number,
+  ) => void
+  clearSourceSelection: (
+    draft: FileEditorRootState,
+    workspaceId: WorkspaceId,
+    ticket: number,
+  ) => void
 }
 
 /**
@@ -152,6 +178,21 @@ export function createFileEditorStore(): EngineStoreHandle<FileEditorRootState, 
         const state = partition(draft, workspaceId)
         state.tabs = []
         state.activePath = undefined
+        delete state.sourceSelection
+      },
+      requestSourceSelection: (draft, workspaceId, path, startLine, endLine) => {
+        const state = partition(draft, workspaceId)
+        state.activePath = path
+        state.sourceSelection = {
+          path,
+          startLine,
+          endLine,
+          ticket: (state.sourceSelection?.ticket ?? 0) + 1,
+        }
+      },
+      clearSourceSelection: (draft, workspaceId, ticket) => {
+        const state = partition(draft, workspaceId)
+        if (state.sourceSelection?.ticket === ticket) delete state.sourceSelection
       },
     },
   })

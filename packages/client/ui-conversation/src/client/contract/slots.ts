@@ -326,6 +326,12 @@ export interface FileEditorOpen {
    * @returns whether a tab was focused or opened.
    */
   openPath: (workspaceId: import('@deepseek-ai/dsh-client-runtime/client').WorkspaceId, absolutePath: string) => Promise<boolean>
+  /**
+   * Open one encoded inline reference chip in the file editor (file-context today).
+   * @param source - input trigger source id.
+   * @param ref - owner-scoped encoded reference payload.
+   */
+  openReference?: (source: string, ref: string) => Promise<boolean>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -386,6 +392,8 @@ export interface ChatNodeOwnerProps {
   /** Selection write + details column open + Tool tab in one gesture. */
   openDetails: (target: SelectionTarget) => void
   openFile: (path: string) => void
+  /** Open one encoded inline reference chip in the file editor (file-context today). */
+  openReferenceChip?: ((source: string, ref: string) => void) | undefined
   inspectCall: (callId: CallId) => void
   forkAt: (seq: number) => void
   /** Resolve a session-authorized historical image for inline display. */
@@ -543,6 +551,12 @@ export interface ComposerBarInjected {
    * Resolves admission: false = rejected/unmatched/transport failure.
    */
   command: ((line: string) => Promise<boolean>) | undefined
+  /**
+   * Open one composer reference chip in its owning surface (file-context → editor).
+   * @param source - input trigger source id.
+   * @param ref - owner-scoped encoded reference payload.
+   */
+  openReferenceChip?: ((source: string, ref: string) => void) | undefined
   /**
    * Registrant hooks compartment: the renderer binds these to
    * useNotices/useLexicon (static absent sources without a session — hook
@@ -707,6 +721,8 @@ export interface ChatViewInjected {
    * (relative paths resolve against the session cwd).
    */
   openFile: (path: string) => void
+  /** Open one encoded inline reference chip in the file editor (file-context today). */
+  openReferenceChip?: ((source: string, ref: string) => void) | undefined
   loadOlder: () => void
   /** Resolve a session-authorized historical image for inline display. */
   loadImage: (attachment: ImageAttachmentRef) => Promise<string>

@@ -39,6 +39,8 @@
 - Material Icon Theme 文件类型图标；Git 行尾徽章（M/U/D 等）
 - 打开三档：**可编辑文本**（Monaco / textarea fallback）、**图片只读预览**、**已知二进制不可打开**
 - 多 Tab、dirty 标记、**显式保存**（⌘S / Ctrl+S）；Markdown **预览 / 源码**切换（**默认源码**）
+- Markdown **预览态可编辑**（TipTap + `@tiptap/markdown` 双向序列化）：段落 + 行内 **B/I/U/S/Code/Link**；选区浮动工具栏；**链接**为同一 BubbleMenu 内切换的胶囊输入框（点「链接」即显）；预览内 **链接可点击**（新标签页打开）；**代码块 / Mermaid 只读**（`readOnlyFencedBlock` atom + `MarkdownText` 渲染）；**中文 IME** 组合输入期间不回写 buffer；**单击仅定位光标**（误选区自动折叠，双击/拖拽选区不受影响）
+- Markdown **源码（Monaco）** 与预览同样保护 **IME 组合输入**：聚焦/拼音组合期间不 `setValue` 重载模型；**默认 soft wrap**；Markdown 使用 `wrappingStrategy: simple` + `accessibilitySupport: off` 以保持 CJK IME preedit 紧跟光标（不再组合期间切换 wrap）；**单击仅定位光标**（误选区自动折叠）；**任意可编辑文本文件（含 Markdown 源码与其他语言 Monaco 编辑器）** 选区 **Add to Chat** 插入 composer 可见 pill chip（13/20，与输入框同字重以免长英文宽于光标；光标落在胶囊外空格上，可继续输入；发送时展开行内容进 prompt；**已发送用户气泡**同样投影为 pill、可点击打开编辑器，session log 仍保留展开全文）
 - 文件树工具栏：新建文件/文件夹、重命名、删除（确认对话框）；**右键菜单**（文件/文件夹分类型操作）
 - **Tab 栏批量关闭**（关闭当前 / 其它 / 全部 / 左侧 / 右侧，VS Code 风格）
 - **文件夹重命名**时同步更新已打开子文件 Tab 路径；**删除文件夹**时关闭子树 Tab 并清理树缓存
@@ -71,8 +73,8 @@
 | 文件/目录 | 改了什么 | 日期 |
 |-----------|----------|------|
 | `packages/host/apiproxy/` | 文件编辑器 Host RPC、listing 性能、`readFile` 大小上限 | 2026-08 |
-| `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface | 2026-08 |
-| `packages/client/ui-conversation/` | 工具箱 segmented Tab、Tool 详情与编辑器 Tab 协调；**2026-08-22** 工具箱文案、capsule 入口、Tab 样式对齐对话区 | 2026-08 |
+| `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat | 2026-08 |
+| `packages/client/ui-conversation/` | 工具箱 segmented Tab、Tool 详情与编辑器 Tab 协调；**2026-08-22** 工具箱文案、capsule 入口、Tab 样式对齐对话区；**2026-08-23** 已发送用户消息 file-context pill 展示投影 | 2026-08 |
 | `packages/client/runtime/` | `WorkspaceRuntime` 转发新 Host RPC | 2026-08 |
 | `packages/client/ui-primitives/` | Mermaid 块、ZoomPanLightbox、Markdown 图片 | 2026-08 |
 | `packages/client/ui-tool/` | Tool 行 selection → details 跳转 | 2026-08 |
@@ -106,7 +108,7 @@
 ## 待合并 / 进行中
 | 分支 | 内容 | 状态 |
 |------|------|------|
-| `fix/file-editor-v1-qa-validation` | 从 `custom/main` 拉出的验证 / BUG 修复线：**工具箱**文案与 capsule 入口、Tab 样式对齐对话区（`39e3b07463`、`a3dd6ffdc8`） | 进行中 → `custom/main` |
+| `fix/file-editor-v1-qa-validation` | PR [#48](https://github.com/NanGePlus/my-deepseek-harness/pull/48)：**工具箱**文案与 capsule 入口、Tab 样式对齐对话区；**Markdown 预览 WYSIWYG**（TipTap）与 IME/wrap 修复；**Add to Chat file-context pill**（Markdown 源码 + 全语言 Monaco → composer pill；发送展开进 prompt；**已发送用户气泡** pill 投影并可点击打开编辑器） | PR 待审 / 待合并 → `custom/main` |
 | `fix/file-editor-v1-qa` | Tab 批量关闭、删除/重命名/同名冲突、文件夹重命名 Tab 同步、Markdown 默认源码、空状态 UI | 已并入 `custom/main` 或与本线并行，合并前需 reconcile |
 | `fix/file-editor-v1-verify-fix` | 大文件 + 目录 listing 性能修复 | 已合并入 `custom/main` |
 
@@ -121,3 +123,21 @@
 | 2026-08-22 | 移除 `.claude/skills` symlink | 仅 Claude Code 用；本 fork 以 Cursor 为主，skills 见 `.agents/skills` |
 | 2026-08-22 | 删除根 `CLAUDE.md`、`README.i18n.yaml` | 根 README 改用 `README.md` + `README_EN.md`；配对 gate 排除见 `translation-pairing.manifest.json` |
 | 2026-08-22 | 删除全仓库 `CLAUDE.md` symlink | `examples/`、`packages/`、`vendor/`、`.agents/notes/implemented/`；与 `.claude/skills` 移除一致 |
+| 2026-08-23 | Markdown 预览态 WYSIWYG（TipTap H1） | `EditableMarkdownPreview` + 选区工具栏 B/I/U/S/Code/Link；代码块 / Mermaid 只读；依赖 `@tiptap/*` |
+| 2026-08-23 | 修复 Markdown 预览 IME 无法输入 | 组合输入期间跳过 buffer 回写 / `setContent` 重载，避免打断中文输入法 |
+| 2026-08-23 | 修复预览编辑器每次按键重建 TipTap 实例 | 稳定 `codeLabels` / extensions memo；聚焦时跳过 props 回写；工具栏 portal 到 `document.body` |
+| 2026-08-23 | 修复 Markdown 源码（Monaco）IME 被 props 回写打断 | 聚焦/组合输入期间跳过 `setValue`；组合结束再提交 buffer |
+| 2026-08-23 | Markdown 链接改为内联弹框 | 工具栏「链接」弹出胶囊输入框（图1）；Enter/✓ 确认、Esc 关闭 |
+| 2026-08-23 | 修复链接弹框延迟 / 预览链接不可点 | 单 BubbleMenu 内切换表单与链接输入；`openOnClick: true` + `target=_blank` |
+| 2026-08-23 | 修复预览工具栏选区状态 | 链接确认后折叠选区隐藏工具栏；`useEditorState` 按当前选区刷新 B/I/U 等激活态 |
+| 2026-08-23 | 修复 Markdown 源码 IME 组合排版 | `monacoWordWrapForLanguage('markdown')` 强制 `wordWrap: off`；预览区 `overflow-wrap: break-word` |
+| 2026-08-23 | Markdown 源码恢复软换行 | 移除 markdown 专用 `wordWrap: off`；与普通文本同样随宽度 wrap |
+| 2026-08-23 | Markdown 源码 wrap + IME 兼得 | 默认 soft wrap；`compositionstart/end` 临时 `wordWrap: off` 保持 preedit 内联 |
+| 2026-08-23 | Markdown 源码 CJK IME + soft wrap | 移除组合期间 wrap 切换；Markdown 用 `accessibilitySupport: off` + simple wrap |
+| 2026-08-23 | 修复单击误选文本 | 预览（TipTap）与源码（Monaco）在简单单击后折叠非空选区；拖拽与多击选词/选行保留 |
+| 2026-08-23 | Markdown 源码 Add to Chat pill 交互 | 圆角胶囊 pill（适度 padding）；backdrop 点击跳转；chip 点击后在 buffer 同步完成后再选中 Monaco 行范围 |
+| 2026-08-23 | Add to Chat pill 光标与输入 | 单层 13/20 regular 胶囊（勿用 500，长英文会宽于光标）；光标在尾随空格后 |
+| 2026-08-23 | Markdown 源码 Add to Chat → composer file-context pill | `e9a619f`；Monaco 选区浮动 **Add to Chat**；`file-context` input trigger；提交时读文件展开行内容进 prompt |
+| 2026-08-23 | 已发送用户消息 file-context pill 展示投影 | `b15cd147`；`ui-conversation` `project-user-text`；气泡显示 pill 非全文 excerpt；可点击打开编辑器；session log 仍保留展开全文 |
+| 2026-08-23 | 全语言 Monaco 选区 Add to Chat | `8c624b4a`；TS/Python 等可编辑文本与 Markdown 源码同链路；改 `ui-file-editor` 后需 `run bundle` |
+| 2026-08-23 | 开 PR [#48](https://github.com/NanGePlus/my-deepseek-harness/pull/48) → `custom/main` | 分支 `fix/file-editor-v1-qa-validation`；7 commit（预览/IME + Add to Chat 全链路） |

@@ -4,7 +4,7 @@
  * highlight, the claim hint as ghost text). Zero React — the skeleton renders
  * the instructions; tests drive this directly.
  */
-import type { InputState } from './contract.ts'
+import { occurrenceSpanLength, type InputState } from './contract.ts'
 
 /** The claim-token highlight range (always draft-leading while the watch holds). */
 export interface TokenRange {
@@ -16,8 +16,14 @@ export interface TokenRange {
 export interface ChipRender {
   /** Stable render key (same-labeled chips stay independent). */
   readonly occurrenceId: number
-  /** Placeholder offset in the draft (the chip occupies [offset, offset+1)). */
+  /** Span start offset in the draft (the chip occupies [offset, offset+spanLength)). */
   readonly offset: number
+  /** Draft span length (one U+FFFC when unset). */
+  readonly spanLength: number
+  /** Owning source name (serializer routing key). */
+  readonly source: string
+  /** Owner-scoped reference id. */
+  readonly ref: string
   readonly label: string
   /** Owner-resolution failure styling bit. */
   readonly invalid: boolean
@@ -97,6 +103,9 @@ export function deriveDecorations(
   const chips = occurrences.map(o => ({
     occurrenceId: o.occurrenceId,
     offset: o.offset,
+    spanLength: occurrenceSpanLength(o),
+    source: o.source,
+    ref: o.ref,
     label: o.label,
     invalid: o.invalid === true,
   }))
