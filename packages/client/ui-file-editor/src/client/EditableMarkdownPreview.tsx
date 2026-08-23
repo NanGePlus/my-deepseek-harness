@@ -82,7 +82,7 @@ export function EditableMarkdownPreview({
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: css.proseMirror,
+        class: css.proseMirror ?? '',
         role: 'textbox',
         'aria-label': ariaLabel,
         'aria-multiline': 'true',

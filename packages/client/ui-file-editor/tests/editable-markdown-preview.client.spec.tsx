@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import '@tiptap/markdown'
+import '@tiptap/starter-kit'
+import '@tiptap/extension-underline'
 import { Editor } from '@tiptap/core'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
