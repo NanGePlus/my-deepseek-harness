@@ -34,7 +34,7 @@ V1 `host.gitStatus` 不变：非仓库与本机无 git 仍返回空 `entries`。
 
 ## 后果
 
-- 暂存、取消暂存、丢弃与提交留在 Issue #54；本变更为只读检查外加初始化。
+- 暂存、取消暂存、丢弃与提交见 [Host Git working-tree write RPCs](2026-08-25-host-git-write.md)。
 - `ui-git`（Issue #55–#59）经 `WorkspaceRuntime` 调用这些 RPC，不 import `ui-file-editor` 内部符号。
 - 绑定 Workspace 之外的路径可以出现在列表和预览中；用文件编辑器打开它们仍不在本 RPC 范围内。
 

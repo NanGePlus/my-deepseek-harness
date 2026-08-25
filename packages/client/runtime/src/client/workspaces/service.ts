@@ -304,6 +304,89 @@ export class WorkspaceRuntime implements IWorkspaces {
   }
 
   /**
+   * Stage one unstaged working-tree change (whole file or one hunk).
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param path - Host-absolute path under the discovered repository root.
+   * @param hunkHeader - optional unified-diff hunk header from gitDiffPreview.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  async gitStage(
+    workspaceId: WorkspaceId,
+    path: string,
+    hunkHeader?: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    const response = await this.api.host.gitStage(
+      hunkHeader === undefined ? { workspaceId, path } : { workspaceId, path, hunkHeader },
+      signal,
+    )
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Unstage one staged working-tree change (whole file or one hunk).
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param path - Host-absolute path under the discovered repository root.
+   * @param hunkHeader - optional unified-diff hunk header from gitDiffPreview.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  async gitUnstage(
+    workspaceId: WorkspaceId,
+    path: string,
+    hunkHeader?: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    const response = await this.api.host.gitUnstage(
+      hunkHeader === undefined ? { workspaceId, path } : { workspaceId, path, hunkHeader },
+      signal,
+    )
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Discard one unstaged working-tree change (whole file or one hunk).
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param path - Host-absolute path under the discovered repository root.
+   * @param hunkHeader - optional unified-diff hunk header from gitDiffPreview.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  async gitDiscard(
+    workspaceId: WorkspaceId,
+    path: string,
+    hunkHeader?: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    const response = await this.api.host.gitDiscard(
+      hunkHeader === undefined ? { workspaceId, path } : { workspaceId, path, hunkHeader },
+      signal,
+    )
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Create one new commit from the current index.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param message - commit message; blank after trim is rejected by the Host.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  async gitCommit(
+    workspaceId: WorkspaceId,
+    message: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    const response = await this.api.host.gitCommit({ workspaceId, message }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
    * Read one file inside a registered Workspace.
    * @param workspaceId - Workspace whose root bounds the path.
    * @param path - absolute file path.

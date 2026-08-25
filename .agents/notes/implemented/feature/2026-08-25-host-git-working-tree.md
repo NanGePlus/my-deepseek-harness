@@ -34,7 +34,7 @@ Implementation lives in `git-working-tree.ts`; wire types and zod schemas extend
 
 ## Consequences
 
-- Staging, unstaging, discard, and commit stay on Issue #54; this change is inspect-only plus initialize.
+- Staging, unstaging, discard, and commit are the write RPCs in [Host Git working-tree write RPCs](2026-08-25-host-git-write.md).
 - `ui-git` (Issues #55–#59) calls these RPCs through `WorkspaceRuntime`, not `ui-file-editor` internals.
 - Paths outside the bound Workspace may appear in lists and previews; opening them in the file editor remains out of scope for this RPC.
 

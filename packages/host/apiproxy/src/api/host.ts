@@ -325,6 +325,59 @@ export interface HostApi {
   ): Promise<RpcResponse<GitDiffPreview>>
 
   /**
+   * Stage one unstaged working-tree change. Omit `hunkHeader` to stage the
+   * whole file; when present, only that tracked-text hunk is staged (patch
+   * assembly stays on the Host). The path is a Host-absolute path under the
+   * discovered repository root (it may lie outside the bound Workspace).
+   * Returns the refreshed working tree. Missing unstaged rows or hunks fail with
+   * `git-path-not-found`; a missing git binary with `git-unavailable`; other git
+   * invocation failures with `git-failed`. Does not expose an arbitrary git argv.
+   */
+  gitStage(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string; hunkHeader?: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<GitWorkingTreeResult>>
+
+  /**
+   * Unstage one staged working-tree change. Omit `hunkHeader` to unstage the
+   * whole file; when present, only that tracked-text hunk is unstaged. Does not
+   * rewrite the disk working tree. Returns the refreshed working tree. Missing
+   * staged rows or hunks fail with `git-path-not-found`; a missing git binary
+   * with `git-unavailable`; other git invocation failures with `git-failed`.
+   */
+  gitUnstage(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string; hunkHeader?: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<GitWorkingTreeResult>>
+
+  /**
+   * Discard one unstaged working-tree change. Omit `hunkHeader` to discard the
+   * whole file; when present, only that unstaged tracked-text hunk is discarded
+   * on disk. Tracked modifications restore disk from the index (HEAD when nothing
+   * is staged); untracked paths are deleted from disk; tracked deletions restore
+   * the file. Staged-only paths are not discarded. Returns the refreshed working
+   * tree. Missing unstaged rows or hunks fail with `git-path-not-found`; a missing
+   * git binary with `git-unavailable`; other git invocation failures with `git-failed`.
+   */
+  gitDiscard(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string; hunkHeader?: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<GitWorkingTreeResult>>
+
+  /**
+   * Create one new commit from the current index on HEAD. Requires a non-empty
+   * commit message and a non-empty staged area. Author identity is taken only
+   * from Git config. Does not amend and does not push. Returns the refreshed
+   * working tree. Empty message or empty staged area fail with `git-failed`;
+   * missing git with `git-unavailable`; other Git failures with `git-failed`
+   * carrying Git's own text.
+   */
+  gitCommit(
+    request: RpcRequest<{ workspaceId: WorkspaceId; message: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<GitWorkingTreeResult>>
+
+  /**
    * Read one regular file inside a registered Workspace; the path must lie
    * within that Workspace's root (`workspace-path-out-of-bounds` otherwise).
    * Text reads return UTF-8; byte reads return canonical base64 for image preview.

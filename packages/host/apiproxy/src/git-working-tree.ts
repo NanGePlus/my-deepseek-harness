@@ -1,10 +1,11 @@
 /**
- * host.gitWorkingTree: typed Git inspect for the Git panel (repo discovery + change lists).
+ * Typed Git inspect and write operations for the Git panel.
  */
 
 import { realpathSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
-import { relative, resolve, sep } from 'node:path'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, relative, resolve, sep } from 'node:path'
 import { runNativeCommand, type NativeCommandRunner } from '@deepseek-ai/dsh-native-command'
 import type { GitDiffHunk, GitDiffPreview, GitDiffSide, GitWorkingTreeChange, GitWorkingTreeResult } from './api/host.ts'
 import { parsePorcelainPath } from './git-status.ts'
@@ -255,6 +256,232 @@ function repoRelativePath(repoRoot: string, absolutePath: string): string {
     throw new GitPathNotFoundError(absolutePath)
   }
   return relative(resolve(repoRoot), resolve(absolutePath)).split(sep).join('/')
+}
+
+/**
+ * Discover the Git repository root or throw a typed write-path error.
+ * @param workspaceRoot - canonical bound Workspace directory.
+ * @param signal - caller lifetime.
+ */
+async function requireRepository(workspaceRoot: string, signal: AbortSignal): Promise<string> {
+  try {
+    const toplevel = await git(runNativeCommand, workspaceRoot, ['rev-parse', '--show-toplevel'], signal)
+    return realpathSync.native(toplevel.trim())
+  } catch (error: unknown) {
+    if (signal.aborted) throw error
+    if (isGitUnavailable(error)) throw new GitUnavailableError()
+    if (isNotAGitRepository(error)) throw new GitPathNotFoundError(workspaceRoot)
+    throw new GitCommandFailedError(gitFailureMessage(error))
+  }
+}
+
+function isUnstagedPair(pair: { index: string; work: string }): boolean {
+  return (pair.index === '?' && pair.work === '?')
+    || UNMERGED_PAIRS.has(`${pair.index}${pair.work}`)
+    || (pair.work !== ' ' && pair.work !== '?')
+}
+
+function remapWriteFailure(error: unknown, signal: AbortSignal, absolutePath: string): never {
+  if (error instanceof GitUnavailableError || error instanceof GitPathNotFoundError || error instanceof GitCommandFailedError) {
+    throw error
+  }
+  if (signal.aborted) throw error
+  if (isGitUnavailable(error)) throw new GitUnavailableError()
+  if (isNotAGitRepository(error)) throw new GitPathNotFoundError(absolutePath)
+  throw new GitCommandFailedError(gitFailureMessage(error))
+}
+
+function extractHunkPatch(diff: string, hunkHeader: string): string | undefined {
+  const lines = diff.split('\n')
+  const prefix: string[] = []
+  let index = 0
+  while (index < lines.length && !lines[index]?.startsWith('@@')) {
+    const headerLine = lines[index]
+    /* v8 ignore next -- `split` does not produce holes */
+    if (headerLine === undefined) break
+    prefix.push(headerLine)
+    index += 1
+  }
+  const hunks: { header: string; body: string[] }[] = []
+  let current: { header: string; body: string[] } | undefined
+  for (; index < lines.length; index += 1) {
+    const line = lines[index]
+    /* v8 ignore next -- `split` does not produce holes */
+    if (line === undefined) break
+    if (line.startsWith('@@')) {
+      current = { header: line, body: [] }
+      hunks.push(current)
+      continue
+    }
+    current?.body.push(line)
+  }
+  const match = hunks.find(hunk => hunk.header === hunkHeader)
+  if (match === undefined) return undefined
+  if (match.body.at(-1) === '') match.body.pop()
+  return `${[...prefix, match.header, ...match.body].join('\n')}\n`
+}
+
+/**
+ * Apply a unified patch through a temp file; NativeCommandRunner has no stdin.
+ * @param repoRoot - absolute Git repository root.
+ * @param args - `git apply` flags before the patch path (`--cached`, `--reverse`, …).
+ * @param patch - complete unified diff including file headers.
+ * @param signal - caller lifetime.
+ */
+async function applyPatch(
+  repoRoot: string,
+  args: readonly string[],
+  patch: string,
+  signal: AbortSignal,
+): Promise<void> {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-git-patch-'))
+  const file = join(dir, 'hunk.patch')
+  try {
+    await writeFile(file, patch)
+    await git(runNativeCommand, repoRoot, ['apply', ...args, '--', file], signal)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Stage one unstaged working-tree change and return the refreshed tree.
+ * @param workspaceRoot - canonical bound Workspace directory.
+ * @param absolutePath - Host-absolute path under the Git repository root.
+ * @param signal - caller lifetime.
+ * @param hunkHeader - when set, only this tracked-text hunk is staged.
+ * @returns the refreshed working tree.
+ */
+export async function stageGitPath(
+  workspaceRoot: string,
+  absolutePath: string,
+  signal: AbortSignal,
+  hunkHeader?: string,
+): Promise<GitWorkingTreeResult> {
+  const run = runNativeCommand
+  try {
+    const repoRoot = await requireRepository(workspaceRoot, signal)
+    const rel = repoRelativePath(repoRoot, absolutePath)
+    const porcelain = await git(run, repoRoot, ['status', '--porcelain', '--', rel], signal)
+    const pair = porcelainPairForPath(porcelain, rel)
+    if (pair === undefined || !isUnstagedPair(pair)) throw new GitPathNotFoundError(absolutePath)
+    if (hunkHeader !== undefined) {
+      if (pair.index === '?' && pair.work === '?') throw new GitPathNotFoundError(absolutePath)
+      const diff = await git(run, repoRoot, ['diff', '--', rel], signal)
+      const patch = extractHunkPatch(diff, hunkHeader)
+      if (patch === undefined) throw new GitPathNotFoundError(absolutePath)
+      await applyPatch(repoRoot, ['--cached', '--whitespace=nowarn'], patch, signal)
+    } else {
+      await git(run, repoRoot, ['add', '--', rel], signal)
+    }
+    return await inspectGitWorkingTree(workspaceRoot, signal)
+  } catch (error: unknown) {
+    remapWriteFailure(error, signal, absolutePath)
+  }
+}
+
+function isStagedPair(pair: { index: string; work: string }): boolean {
+  return pair.index !== ' ' && pair.index !== '?'
+}
+
+/**
+ * Unstage one staged working-tree change without rewriting disk.
+ * @param workspaceRoot - canonical bound Workspace directory.
+ * @param absolutePath - Host-absolute path under the Git repository root.
+ * @param signal - caller lifetime.
+ * @param hunkHeader - when set, only this staged tracked-text hunk is unstaged.
+ * @returns the refreshed working tree.
+ */
+export async function unstageGitPath(
+  workspaceRoot: string,
+  absolutePath: string,
+  signal: AbortSignal,
+  hunkHeader?: string,
+): Promise<GitWorkingTreeResult> {
+  const run = runNativeCommand
+  try {
+    const repoRoot = await requireRepository(workspaceRoot, signal)
+    const rel = repoRelativePath(repoRoot, absolutePath)
+    const porcelain = await git(run, repoRoot, ['status', '--porcelain', '--', rel], signal)
+    const pair = porcelainPairForPath(porcelain, rel)
+    if (pair === undefined || !isStagedPair(pair)) throw new GitPathNotFoundError(absolutePath)
+    if (hunkHeader !== undefined) {
+      const diff = await git(run, repoRoot, ['diff', '--cached', '--', rel], signal)
+      const patch = extractHunkPatch(diff, hunkHeader)
+      if (patch === undefined) throw new GitPathNotFoundError(absolutePath)
+      await applyPatch(repoRoot, ['--cached', '--reverse', '--whitespace=nowarn'], patch, signal)
+    } else {
+      await git(run, repoRoot, ['restore', '--staged', '--', rel], signal)
+    }
+    return await inspectGitWorkingTree(workspaceRoot, signal)
+  } catch (error: unknown) {
+    remapWriteFailure(error, signal, absolutePath)
+  }
+}
+
+/**
+ * Discard one unstaged working-tree change and return the refreshed tree.
+ * @param workspaceRoot - canonical bound Workspace directory.
+ * @param absolutePath - Host-absolute path under the Git repository root.
+ * @param signal - caller lifetime.
+ * @param hunkHeader - when set, only this unstaged tracked-text hunk is discarded.
+ * @returns the refreshed working tree.
+ */
+export async function discardGitPath(
+  workspaceRoot: string,
+  absolutePath: string,
+  signal: AbortSignal,
+  hunkHeader?: string,
+): Promise<GitWorkingTreeResult> {
+  const run = runNativeCommand
+  try {
+    const repoRoot = await requireRepository(workspaceRoot, signal)
+    const rel = repoRelativePath(repoRoot, absolutePath)
+    const porcelain = await git(run, repoRoot, ['status', '--porcelain', '--', rel], signal)
+    const pair = porcelainPairForPath(porcelain, rel)
+    if (pair === undefined || !isUnstagedPair(pair)) throw new GitPathNotFoundError(absolutePath)
+    if (hunkHeader !== undefined) {
+      if (pair.index === '?' && pair.work === '?') throw new GitPathNotFoundError(absolutePath)
+      const diff = await git(run, repoRoot, ['diff', '--', rel], signal)
+      const patch = extractHunkPatch(diff, hunkHeader)
+      if (patch === undefined) throw new GitPathNotFoundError(absolutePath)
+      await applyPatch(repoRoot, ['--reverse', '--whitespace=nowarn'], patch, signal)
+    } else if (pair.index === '?' && pair.work === '?') {
+      await rm(absolutePath, { recursive: true, force: true })
+    } else {
+      await git(run, repoRoot, ['restore', '--worktree', '--', rel], signal)
+    }
+    return await inspectGitWorkingTree(workspaceRoot, signal)
+  } catch (error: unknown) {
+    remapWriteFailure(error, signal, absolutePath)
+  }
+}
+
+/**
+ * Create one new commit from the current index. Author comes from Git config.
+ * @param workspaceRoot - canonical bound Workspace directory.
+ * @param message - commit message; blank after trim is rejected.
+ * @param signal - caller lifetime.
+ * @returns the refreshed working tree.
+ */
+export async function commitGitIndex(
+  workspaceRoot: string,
+  message: string,
+  signal: AbortSignal,
+): Promise<GitWorkingTreeResult> {
+  const run = runNativeCommand
+  try {
+    const repoRoot = await requireRepository(workspaceRoot, signal)
+    const trimmed = message.trim()
+    if (trimmed === '') throw new GitCommandFailedError('Aborting commit due to empty commit message.')
+    const porcelain = await git(run, repoRoot, ['status', '--porcelain'], signal)
+    const { staged } = parseWorkingTreePorcelain(porcelain, repoRoot)
+    if (staged.length === 0) throw new GitCommandFailedError('nothing to commit')
+    await git(run, repoRoot, ['commit', '-m', trimmed], signal)
+    return await inspectGitWorkingTree(workspaceRoot, signal)
+  } catch (error: unknown) {
+    remapWriteFailure(error, signal, workspaceRoot)
+  }
 }
 
 function numstatIsBinary(numstat: string): boolean {
