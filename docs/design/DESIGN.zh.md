@@ -4,7 +4,7 @@
 
 > UI 模式：`spec-driven`（规范驱动 UI）
 >
-> 全局 Token、色板与字号仅由 Design Issue 变更；UI 实现 PR 不得修改。页面布局与业务文案以 PRD 为准。运行时 `--dsw-*` 值由 [`ui-theme`](../../packages/client/ui-theme/README.md) 样式表拥有；本文件是品牌板映射。见 [web-styling.md](../web-styling.md) 与 [文件编辑器设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-20-file-editor-design-system.md)。
+> 全局 Token、色板与字号仅由 Design Issue 变更；UI 实现 PR 不得修改。页面布局与业务文案以 PRD 为准。运行时 `--dsw-*` 值由 [`ui-theme`](../../packages/client/ui-theme/README.md) 样式表拥有；本文件是品牌板映射。同一工具箱栏内的 Git 面板消费本品牌板，不另定义色板、字号或 §5 原语。见 [web-styling.md](../web-styling.md)、[文件编辑器设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-20-file-editor-design-system.md) 与 [Git 面板设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-25-git-panel-design-system.md)。
 
 ## 1. 概览与创意北极星
 
@@ -44,7 +44,7 @@
 
 ### 无描边分区规则
 
-**明确指令：** 文件树与 Monaco 编辑区之间、列表行之间禁止 1px 实线作为主分隔；改用 `--dsw-alias-bg-overlay` 与 `--dsw-alias-markdown-code-block` 的 surface 对比，或 `--dsw-alias-border-l2` 仅用于输入框默认态与树/编辑区之间的单条竖向 ghost 线（≤1px 等价透明度）。Tab 选中允许底边 2px `--dsw-alias-brand-primary` 强调。
+**明确指令：** 叠色列表列与代码/预览区之间、列表行之间禁止 1px 实线作为主分隔；改用 `--dsw-alias-bg-overlay` 与 `--dsw-alias-markdown-code-block` 的 surface 对比，或两列之间一条 `--dsw-alias-border-l2` 竖向 ghost 线（≤1px 等价透明度）。Tab 选中允许底边 2px `--dsw-alias-brand-primary` 强调。
 
 light 模式下 `--dsw-alias-brand-primary` 为 `--dsw-static-neutral-bluish-1000`（`#0F1115`），不是 DeepSeek 蓝。Tab 底边强调跟随该 alias。DeepSeek 蓝仍是品牌板主色 HEX，以及 `--dsw-alias-brand-primary-new-colorprimary-new-color`。
 
@@ -53,8 +53,8 @@ light 模式下 `--dsw-alias-brand-primary` 为 `--dsw-static-neutral-bluish-100
 | 层级 | Token | Light HEX | 用途 |
 |------|-------|-----------|------|
 | 底层 | `--dsw-alias-bg-base` | `#FFFFFF` | details 栏背景 |
-| 文件树区 | `--dsw-alias-bg-overlay` | `#E9ECF2` | 文件树列 surface |
-| 编辑区 | `--dsw-alias-markdown-code-block` | `#F9FAFB` | Monaco 容器 surface |
+| 文件树区 | `--dsw-alias-bg-overlay` | `#E9ECF2` | 叠色列表列（文件树或其他操作列表） |
+| 编辑区 | `--dsw-alias-markdown-code-block` | `#F9FAFB` | 代码/预览区（Monaco 或行级差异） |
 | 提示/空状态卡片 | `--dsw-alias-bg-overlay` | `#E9ECF2` | 分组容器，圆角 8px |
 | 对话框/确认 | `--dsw-alias-bg-layer-3` | `#FFFFFF` | 复用 Harness 浮层（若有） |
 
@@ -68,7 +68,7 @@ Dark 模式：`bg-base` `#151517`，`bg-overlay` `#61666B`，`markdown-code-bloc
 
 ## 3. 字体：Harness 继承版式
 
-UI 文案使用 `--dsw-font-family`（含 PingFang SC 等系统栈）；Monaco 代码区使用 `--ds-font-family-code`（SF Mono / JetBrains Mono 栈）。配对理由：与对话区代码块一致，编辑器是「同一套代码字体在可编辑 surface 上的延伸」。
+UI 文案使用 `--dsw-font-family`（含 PingFang SC 等系统栈）；Monaco 代码区与行级差异使用 `--ds-font-family-code`（SF Mono / JetBrains Mono 栈）。配对理由：与对话区代码块一致，可编辑与预览的代码共用同一套字体。
 
 ### 字号阶梯（品牌板须可视化）
 
@@ -77,11 +77,11 @@ UI 文案使用 `--dsw-font-family`（含 PingFang SC 等系统栈）；Monaco �
 | 标题 | `--dsw-font-family` | details 分段 Tab 标签、对话框标题 | 14px/20px semibold |
 | 正文 | `--dsw-font-family` | 文件树文件名、空状态说明 | 13px/18px regular |
 | 标签 | `--dsw-font-family` | 微徽章、搜索框 placeholder、caption | 10–12px/12–16px regular |
-| 代码 | `--ds-font-family-code` | Monaco 编辑区 | 13px/20px regular |
+| 代码 | `--ds-font-family-code` | Monaco 编辑区与行级差异 | 13px/20px regular |
 
 ### 信息层级
 
-标题（Tab、对话框）用 `label-primary`；树节点与 Tab 标题用 13px `label-primary`；辅助说明与徽章用 `label-secondary` / `label-caption`。Monaco 行高 20px 保持紧凑 IDE 密度；文件树行高 22px，与 13px 正文形成 tight 对比而非拉大字号。
+标题（Tab、对话框）用 `label-primary`；树节点、列表路径与 Tab 标题用 13px `label-primary`；辅助说明与徽章用 `label-secondary` / `label-caption`。Monaco 与行级差异用 13px/20px 保持紧凑 IDE 密度；列表行高 22px，与 13px 正文形成 tight 对比而非拉大字号。
 
 ### 字体实现约束（受限运行时须填写）
 
@@ -97,16 +97,16 @@ UI 文案使用 `--dsw-font-family`（含 PingFang SC 等系统栈）；Monaco �
 
 层级通过色调叠层而非线框或阴影建立；details 窄栏内避免浮动阴影卡片。
 
-* **叠层原则：** 文件树（overlay）浅于 Monaco 容器（code-block）；选中/ hover 在行内用交互 tint 抬升，不用 z-index 阴影。
+* **叠层原则：** 叠色列表列浅于代码/预览区；选中/ hover 在行内用交互 tint 抬升，不用 z-index 阴影。
 * **环境阴影：** 文件编辑器 V1 不使用 box-shadow；浮起感仅由 surface 对比与 Tab 底边强调提供。
-* **幽灵描边兜底：** 输入框默认 `--dsw-alias-border-l2`（light `rgba(0,0,0,0.1)`）；聚焦改 `--dsw-alias-brand-primary`；树/编辑区分界可用 `border-l2` 单竖线。
+* **幽灵描边兜底：** 输入框默认 `--dsw-alias-border-l2`（light `rgba(0,0,0,0.1)`）；聚焦改 `--dsw-alias-brand-primary`；叠色列表列与代码/预览区分界可用 `border-l2` 单竖线。
 
 ### 叠色对照表（品牌板须可视化）
 
 | Token | 基准色 | 不透明度 | 预计算 HEX（light） | 用途 |
 |-------|--------|---------|-------------------|------|
-| `editor-hover-tint` | `rgb(38, 49, 72)` | 6% | `#F2F3F4` | 文件树行 hover |
-| `editor-selected-tint` | `--dsw-static-neutral-bluish-75` | 100% | `#F1F3F5` | 文件树行 selected |
+| `editor-hover-tint` | `rgb(38, 49, 72)` | 6% | `#F2F3F4` | 列表行 hover |
+| `editor-selected-tint` | `--dsw-static-neutral-bluish-75` | 100% | `#F1F3F5` | 列表行 selected |
 | `editor-danger-hover-tint` | `--dsw-static-red-600` | 5% | `#FEF5F5` | 危险操作 hover（删除按钮） |
 | `editor-tab-active-line` | `--dsw-alias-brand-primary` | 100% | `#0F1115` | Tab 底边 2px 强调（light） |
 | `editor-dirty-dot` | `--dsw-alias-state-warn-primary` | 100% | `#F59E0B` | 未保存 Tab 圆点 |
@@ -117,7 +117,7 @@ Dark 模式下 `editor-hover-tint` 为 `rgba(255,255,255,0.08)` 叠于 `#151517`
 
 ## 5. 组件
 
-各组件均为通用 UI 原语，供文件编辑器 UI 消费；颜色引用 alias token，复用叠色引用 §4 Token 名。
+各组件均为通用 UI 原语，供工具箱 UI 消费；颜色引用 alias token，复用叠色引用 §4 Token 名。行级新增/删除文字用 `semantic-success` / `semantic-error` 配 §3 代码字体；该组合不是新原语。
 
 ### 按钮与交互（品牌板须可视化）
 
@@ -126,6 +126,7 @@ Dark 模式下 `editor-hover-tint` 为 `rgba(255,255,255,0.08)` 叠于 `#151517`
 * **描边按钮：** 背景 transparent；边框 `--dsw-alias-border-l2`；文字 `--dsw-alias-label-primary`；圆角 6px；hover 背景 `--dsw-alias-button-ghost-active-fill`；按下 `--dsw-alias-interactive-bg-active`。
 * **文字按钮：** 无背景；文字 `--dsw-alias-label-secondary`；圆角 6px；hover 文字 `--dsw-alias-label-primary`；按下背景 `--dsw-alias-interactive-bg-active`。
 * **反色按钮：** 背景 `--dsw-alias-button-contrast-fill`（`#61666B` light）；文字 `--dsw-alias-label-primary-foreground`；圆角 6px；hover 略浅 `--dsw-alias-button-primary-hover`；按下 `--dsw-alias-interactive-bg-active`；用于深色编辑区上的浅色 CTA（少用）。
+* 破坏性对话框确认使用主按钮几何；hover 可用 `editor-danger-hover-tint`；说明文案用 `semantic-error`。
 
 ### 输入与表单
 
@@ -166,6 +167,7 @@ Dark 模式下 `editor-hover-tint` 为 `rgba(255,255,255,0.08)` 叠于 `#151517`
 * 描边粗细 0px（ghost，无描边）。工具栏尺寸 24×24；关闭 / 折叠尺寸 28×28。
 * 默认图标 `label-secondary`；hover 背景 `editor-hover-tint`；active 背景 `editor-selected-tint`、图标 `label-primary`。
 * **选中态：** 与 active 相同，用于 Toggle 按下（如文件夹展开）。
+* **禁用态：** 图标 `label-caption`；无 hover 填充；cursor not-allowed。
 
 ### 空状态
 
@@ -185,14 +187,14 @@ Dark 模式下 `editor-hover-tint` 为 `rgba(255,255,255,0.08)` 叠于 `#151517`
 
 * **应当** 所有颜色与字体通过 `--dsw-alias-*` / `--ds-font-family-*` 消费，不在组件里写 literal HEX。
 * **应当** Monaco 主题从 dsw token 派生，随 light/dark 与对话区同步切换。
-* **应当** 文件树用 ghost hover/selected 与紧凑 22px 行，字母徽章靠右。
+* **应当** 叠色列表行用 ghost hover/selected 与紧凑 22px 行，字母徽章或行尾操作靠右。
 * **应当** 未保存 Tab 用 `editor-dirty-dot`，保存前禁止静默丢编辑缓冲。
 * **应当** 异步操作用分层 Loading，避免全屏 mask。
 
 ### 禁止：
 
-* **禁止** 在文件编辑器内引入第二套主题色或 Tailwind/组件库。
+* **禁止** 在工具箱 UI 内引入第二套主题色或 Tailwind/组件库。
 * **禁止** 用 1px 实线边框做主要分区（除输入框聚焦与 Tab 底边强调外）。
-* **禁止** 全屏遮罩 blocking 整个 dsh Web（保存/加载仅编辑区内反馈）。
-* **禁止** Monaco 区使用 UI sans-serif 字体。
+* **禁止** 全屏遮罩 blocking 整个 dsh Web（异步反馈仅工具箱栏内）。
+* **禁止** Monaco 区或行级差异使用 UI sans-serif 字体。
 * **禁止** 在本设计系统文档中写 Session、Workspace、Agent 等领域术语作视觉标签。

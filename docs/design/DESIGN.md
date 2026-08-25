@@ -4,7 +4,7 @@ English | [中文](DESIGN.zh.md)
 
 > UI mode: `spec-driven` (spec-driven UI)
 >
-> Global tokens, palettes, and type scale change only through a Design Issue; UI implementation PRs must not edit them. Page layout and product copy live in the PRD. Runtime `--dsw-*` values are owned by [`ui-theme`](../../packages/client/ui-theme/README.md) sheets; this file is the brand-board mapping. See [web-styling.md](../web-styling.md) and the [file-editor design-system Agent Note](../../.agents/notes/implemented/process/2026-08-20-file-editor-design-system.md).
+> Global tokens, palettes, and type scale change only through a Design Issue; UI implementation PRs must not edit them. Page layout and product copy live in the PRD. Runtime `--dsw-*` values are owned by [`ui-theme`](../../packages/client/ui-theme/README.md) sheets; this file is the brand-board mapping. The Git panel in the same toolbox column consumes this board and does not define a second palette, type scale, or §5 primitive. See [web-styling.md](../web-styling.md), the [file-editor design-system Agent Note](../../.agents/notes/implemented/process/2026-08-20-file-editor-design-system.md), and the [Git panel design-system Agent Note](../../.agents/notes/implemented/process/2026-08-25-git-panel-design-system.md).
 
 ## 1. Overview and creative north star
 
@@ -44,7 +44,7 @@ Semantic colors reuse dsh aliases. Light-mode HEX values follow; dark mode overr
 
 ### No-stroke partitioning rule
 
-**Explicit instruction:** Do not use a 1px solid line as the primary divider between the file tree and the Monaco pane, or between list rows. Use the surface contrast of `--dsw-alias-bg-overlay` versus `--dsw-alias-markdown-code-block`, or a single vertical ghost line of `--dsw-alias-border-l2` (≤1px equivalent opacity) between tree and editor. Selected tabs may use a 2px bottom edge of `--dsw-alias-brand-primary`.
+**Explicit instruction:** Do not use a 1px solid line as the primary divider between an overlay list column and a code/preview pane, or between list rows. Use the surface contrast of `--dsw-alias-bg-overlay` versus `--dsw-alias-markdown-code-block`, or a single vertical ghost line of `--dsw-alias-border-l2` (≤1px equivalent opacity) between those columns. Selected tabs may use a 2px bottom edge of `--dsw-alias-brand-primary`.
 
 In light mode `--dsw-alias-brand-primary` is `--dsw-static-neutral-bluish-1000` (`#0F1115`), not DeepSeek blue. Tab-edge emphasis follows that alias. DeepSeek blue remains the brand-board primary HEX and `--dsw-alias-brand-primary-new-colorprimary-new-color`.
 
@@ -53,8 +53,8 @@ In light mode `--dsw-alias-brand-primary` is `--dsw-static-neutral-bluish-1000` 
 | Layer | Token | Light HEX | Use |
 |-------|-------|-----------|-----|
 | Base | `--dsw-alias-bg-base` | `#FFFFFF` | details column background |
-| File-tree pane | `--dsw-alias-bg-overlay` | `#E9ECF2` | file-tree column surface |
-| Editor pane | `--dsw-alias-markdown-code-block` | `#F9FAFB` | Monaco container surface |
+| File-tree pane | `--dsw-alias-bg-overlay` | `#E9ECF2` | overlay list column (file tree or other operation lists) |
+| Editor pane | `--dsw-alias-markdown-code-block` | `#F9FAFB` | code/preview pane (Monaco or line-level diffs) |
 | Hint / empty-state card | `--dsw-alias-bg-overlay` | `#E9ECF2` | grouping container, 8px radius |
 | Dialog / confirm | `--dsw-alias-bg-layer-3` | `#FFFFFF` | reuse the Harness overlay when present |
 
@@ -68,7 +68,7 @@ Not applicable; skip. The file editor does not use frosted glass or a signature 
 
 ## 3. Type: Harness-inherited type
 
-UI copy uses `--dsw-font-family` (including PingFang SC and the system stack). The Monaco code pane uses `--ds-font-family-code` (SF Mono / JetBrains Mono stack). Pairing reason: it matches conversation code blocks, so the editor is the same code face on an editable surface.
+UI copy uses `--dsw-font-family` (including PingFang SC and the system stack). The Monaco code pane and line-level diffs use `--ds-font-family-code` (SF Mono / JetBrains Mono stack). Pairing reason: it matches conversation code blocks, so editable and previewed code share one face.
 
 ### Type scale (must be visualizable on a brand board)
 
@@ -77,11 +77,11 @@ UI copy uses `--dsw-font-family` (including PingFang SC and the system stack). T
 | Heading | `--dsw-font-family` | details segmented Tab labels, dialog titles | 14px/20px semibold |
 | Body | `--dsw-font-family` | file-tree names, empty-state body | 13px/18px regular |
 | Label | `--dsw-font-family` | micro badges, search placeholder, caption | 10–12px/12–16px regular |
-| Code | `--ds-font-family-code` | Monaco pane | 13px/20px regular |
+| Code | `--ds-font-family-code` | Monaco pane and line-level diffs | 13px/20px regular |
 
 ### Information hierarchy
 
-Titles (tabs, dialogs) use `label-primary`. Tree nodes and tab titles use 13px `label-primary`. Supporting copy and badges use `label-secondary` / `label-caption`. Monaco line-height 20px keeps IDE density; file-tree row height 22px against 13px body is a tight contrast, not a larger type size.
+Titles (tabs, dialogs) use `label-primary`. Tree nodes, list paths, and tab titles use 13px `label-primary`. Supporting copy and badges use `label-secondary` / `label-caption`. Monaco and line-level diffs use 13px/20px to keep IDE density; list row height 22px against 13px body is a tight contrast, not a larger type size.
 
 ### Font implementation constraints (required for constrained runtimes)
 
@@ -97,16 +97,16 @@ Not applicable; skip. Pure Web embedded in Harness. Monaco is injected with `fon
 
 Hierarchy is built with tonal stacking, not wireframes or shadows. Avoid floating shadowed cards inside the narrow details column.
 
-* **Stacking:** the file tree (overlay) sits lighter than the Monaco container (code-block). Selection and hover lift a row with an interaction tint, not a z-index shadow.
+* **Stacking:** the overlay list column sits lighter than the code/preview pane. Selection and hover lift a row with an interaction tint, not a z-index shadow.
 * **Ambient shadow:** file editor V1 does not use box-shadow. Lift comes only from surface contrast and the tab bottom edge.
-* **Ghost stroke fallback:** inputs default to `--dsw-alias-border-l2` (light `rgba(0,0,0,0.1)`); focus switches to `--dsw-alias-brand-primary`. The tree/editor split may use a single `border-l2` vertical line.
+* **Ghost stroke fallback:** inputs default to `--dsw-alias-border-l2` (light `rgba(0,0,0,0.1)`); focus switches to `--dsw-alias-brand-primary`. The overlay-list / code-preview split may use a single `border-l2` vertical line.
 
 ### Overlay table (must be visualizable on a brand board)
 
 | Token | Base | Opacity | Precomputed HEX (light) | Use |
 |-------|------|---------|-------------------------|-----|
-| `editor-hover-tint` | `rgb(38, 49, 72)` | 6% | `#F2F3F4` | file-tree row hover |
-| `editor-selected-tint` | `--dsw-static-neutral-bluish-75` | 100% | `#F1F3F5` | file-tree row selected |
+| `editor-hover-tint` | `rgb(38, 49, 72)` | 6% | `#F2F3F4` | list-row hover |
+| `editor-selected-tint` | `--dsw-static-neutral-bluish-75` | 100% | `#F1F3F5` | list-row selected |
 | `editor-danger-hover-tint` | `--dsw-static-red-600` | 5% | `#FEF5F5` | danger-action hover (delete) |
 | `editor-tab-active-line` | `--dsw-alias-brand-primary` | 100% | `#0F1115` | 2px tab bottom edge (light) |
 | `editor-dirty-dot` | `--dsw-alias-state-warn-primary` | 100% | `#F59E0B` | unsaved-tab dot |
@@ -117,7 +117,7 @@ In dark mode `editor-hover-tint` is `rgba(255,255,255,0.08)` over `#151517` ≈ 
 
 ## 5. Components
 
-Every component is a generic UI primitive for the file-editor UI to consume. Colors reference alias tokens. Repeated overlays reference §4 token names.
+Every component is a generic UI primitive for toolbox UIs to consume. Colors reference alias tokens. Repeated overlays reference §4 token names. Line-level added/removed text uses `semantic-success` / `semantic-error` with the §3 code face; that pairing is not a new primitive.
 
 ### Buttons and interaction (must be visualizable on a brand board)
 
@@ -126,6 +126,7 @@ Every component is a generic UI primitive for the file-editor UI to consume. Col
 * **Outline:** background transparent; border `--dsw-alias-border-l2`; text `--dsw-alias-label-primary`; radius 6px; hover background `--dsw-alias-button-ghost-active-fill`; pressed `--dsw-alias-interactive-bg-active`.
 * **Text:** no fill; text `--dsw-alias-label-secondary`; radius 6px; hover text `--dsw-alias-label-primary`; pressed background `--dsw-alias-interactive-bg-active`.
 * **Inverse:** background `--dsw-alias-button-contrast-fill` (`#61666B` light); text `--dsw-alias-label-primary-foreground`; radius 6px; hover slightly lighter `--dsw-alias-button-primary-hover`; pressed `--dsw-alias-interactive-bg-active`; for a light CTA on a dark editor pane (use sparingly).
+* Destructive dialog confirm uses Primary geometry; hover may use `editor-danger-hover-tint`; helper copy uses `semantic-error`.
 
 ### Inputs and forms
 
@@ -166,6 +167,7 @@ Every component is a generic UI primitive for the file-editor UI to consume. Col
 * Stroke width 0px (ghost; no outline). Toolbar size 24×24; close / collapse size 28×28.
 * Default icon `label-secondary`; hover background `editor-hover-tint`; active background `editor-selected-tint`, icon `label-primary`.
 * **Selected:** same as active, used for a pressed toggle (for example a folder expanded).
+* **Disabled:** icon `label-caption`; no hover fill; cursor not-allowed.
 
 ### Empty state
 
@@ -185,14 +187,14 @@ Every component is a generic UI primitive for the file-editor UI to consume. Col
 
 * **Do** consume every color and font through `--dsw-alias-*` / `--ds-font-family-*`. Do not write literal HEX in components.
 * **Do** derive the Monaco theme from dsw tokens so it switches with light/dark and the conversation pane.
-* **Do** use ghost hover/selected on the file tree with compact 22px rows, and keep letter badges on the right.
+* **Do** use ghost hover/selected on overlay list rows at compact 22px, and keep letter badges or row actions on the right.
 * **Do** mark an unsaved tab with `editor-dirty-dot`. Do not silently drop an edit buffer before save.
 * **Do** use layered Loading for async work. Do not use a full-screen mask.
 
 ### Don't:
 
-* **Don't** introduce a second theme palette or a Tailwind/component library inside the file editor.
+* **Don't** introduce a second theme palette or a Tailwind/component library inside toolbox UIs.
 * **Don't** use a 1px solid border as the primary partition (except input focus and the tab bottom-edge emphasis).
-* **Don't** full-screen-mask the entire dsh Web (save/load feedback stays inside the editor pane).
-* **Don't** use UI sans-serif in the Monaco pane.
+* **Don't** full-screen-mask the entire dsh Web (async feedback stays inside the toolbox column).
+* **Don't** use UI sans-serif in the Monaco pane or in line-level diffs.
 * **Don't** use Session, Workspace, or Agent as visual labels in this design-system document.
