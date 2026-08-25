@@ -1,6 +1,6 @@
 /** Git-panel occupant of the details column Git tab. */
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type MutableRefObject, type ReactNode, type RefObject } from 'react'
 import {
   Button, IconCodeOutline16, IconFolderClose16, IconLoadingOutline16, IconPlusOutline16,
   IconRefreshOutline16, Tooltip, useScrollRevealScrollbar, type HighlightSpan,
@@ -602,16 +602,16 @@ function renderRepository(
 
 function DiffPreviewPane({ body }: { body: RepoBody }): ReactNode {
   const { t, selection, preview } = body
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null) as MutableRefObject<HTMLDivElement | null>
   const { ref: scrollRevealRef, active: scrollActive } = useScrollRevealScrollbar()
   const setPreviewScrollRef = useCallback((element: HTMLDivElement | null) => {
     scrollRef.current = element
     scrollRevealRef(element)
-  }, [scrollRevealRef])
+  }, [scrollRef, scrollRevealRef])
   useEffect(() => {
     if (preview.kind !== 'ready') return
     scrollRef.current?.scrollTo({ top: 0 })
-  }, [preview, selection])
+  }, [preview, scrollRef, selection])
   return (
     <div className={css.preview} role="region" aria-label={t('git.preview.region')}>
       {selection === null || preview.kind === 'idle'

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { GitDiffPreview, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import { gitDiffPreviewWithFullFile } from '../src/client/diff-preview-enrich.ts'
 
 describe('gitDiffPreviewWithFullFile', () => {
@@ -27,7 +27,7 @@ describe('gitDiffPreviewWithFullFile', () => {
       gitDiffPreview: vi.fn(async () => ({
         kind: 'text' as const,
         hunks: [{ header: '@@ -5 +5 @@', lines: [{ origin: 'add' as const, text: 'new' }] }],
-      })),
+      }) as GitDiffPreview),
       readFile: vi.fn(async () => ({ kind: 'text' as const, path: '/w/a.md', text: 'head\nnew\n' })),
     }
     await expect(gitDiffPreviewWithFullFile(
