@@ -1,8 +1,13 @@
 - img
 - textbox "Filter by filename"
-- button "New file" [disabled]:
+- button "Hide file tree":
   - img
-- button "New folder" [disabled]:
+- text: workspace
+- button "New file":
+  - img
+- button "New folder":
+  - img
+- button "Refresh":
   - img
 - tree "workspace":
   - treeitem "File .gitignore" [level=1]:
@@ -10,16 +15,14 @@
     - text: .gitignore
   - treeitem "Expand node_modules Folder node_modules" [level=1]:
     - button "Expand node_modules"
-    - img "Folder":
-      - img
+    - img "Folder"
     - text: node_modules
   - treeitem "File README.md" [level=1]:
     - img "File"
     - text: README.md
   - treeitem "Expand src Folder src" [level=1]:
     - button "Expand src"
-    - img "Folder":
-      - img
+    - img "Folder"
     - text: src
-- text: No file open Choose a file from the tree on the left, or create one
-- button "New file" [disabled]
+- separator "Resize file tree"
+- text: No file open Choose a file from the tree on the left

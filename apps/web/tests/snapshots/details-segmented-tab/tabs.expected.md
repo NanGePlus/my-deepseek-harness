@@ -1,3 +1,4 @@
 - tablist "Toolbox":
-  - tab "Tool details" [selected]
-  - tab "File editor"
+  - tab "File editor" [selected]
+  - tab "Git"
+  - tab "Tool details"

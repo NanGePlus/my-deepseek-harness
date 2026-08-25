@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`ui-conversation` 拥有 details **壳层**：在 `DetailsPanel` 中增加 segmented Tab（`Tool 详情` | `文件编辑器`），Tool 正文抽到 `ToolDetailsBody`，Tab 选择写入共享 per-session chat store（`detailsTab: 'tool' | 'editor'`）。选中 **文件编辑器** 时调用 `layout.openDetails()`，在栏已收起时也能展开，且不新增第四栏或 overlay。
+`ui-conversation` 拥有 details **壳层**：在 `DetailsPanel` 中增加 segmented Tab（`资源管理器` | `Git` | `工具详情`），Tool 正文抽到 `ToolDetailsBody`，Tab 选择写入共享 per-session chat store（`detailsTab: 'tool' | 'editor' | 'git'`）。选中 **资源管理器** 或 **Git** 时调用 `layout.openDetails()`，在栏已收起时也能展开，且不新增第四栏或 overlay。Git occupant 槽位见 [Toolbox three-tab Git slot](2026-08-25-details-three-tab-git.md)。
 
 `ui-file-editor` 向新子槽 `conversation.details.editor` 注入 `EditorSurface`。[文件树 issue](2026-08-20-editor-surface-file-tree.md) 拥有 Workspace 绑定、列表、过滤、图标与 Git 徽章；[打开三档、Tab 与保存](2026-08-20-editor-surface-open-tabs-save.md) 拥有缓冲与 Monaco。
 
@@ -25,12 +25,12 @@ Status: implemented
 ## 后果
 
 - Tab 选择保存在 chat store 中，跨 remount 保留，直至后续 issue 的 Session 守卫重置。
-- 浏览器 e2e 通过 `aria-label="Details panel"` 定位 details tablist，避免误捕对话视图 Tab。
+- 浏览器 e2e 通过 `aria-label="Toolbox"` 定位 details tablist，避免误捕对话视图 Tab。
 - web e2e 前须重建 `ui-conversation`、`ui-layout`、`ui-file-editor` 的 client bundle。
 
 ## 测试
 
-`packages/client/ui-conversation/tests/details-panel-tabs.client.spec.tsx` 覆盖默认文案、选中编辑器 Tab（展开 details + 渲染 editor 席位）、切回 Tool 详情。
+`packages/client/ui-conversation/tests/details-panel-tabs.client.spec.tsx` 覆盖默认文案、选中编辑器 Tab（展开 details + 渲染 editor 席位）、切回 Tool 详情。Git Tab 壳层由 [Toolbox three-tab Git slot](2026-08-25-details-three-tab-git.md) 拥有。
 
 `packages/client/ui-file-editor/tests/*` 覆盖槽位注入、[文件树笔记](2026-08-20-editor-surface-file-tree.md) 拥有的文件树各态，以及[打开／Tab／保存笔记](2026-08-20-editor-surface-open-tabs-save.md) 拥有的打开／保存各态。
 

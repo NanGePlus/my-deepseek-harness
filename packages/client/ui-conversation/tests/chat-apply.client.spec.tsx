@@ -97,6 +97,14 @@ describe('apply wiring', () => {
     await b.runtime.dispose()
   })
 
+  it('declares the details Git occupant alongside editor and tool seats', async () => {
+    const b = await bench()
+    expect(b.slots.spec('conversation.details.editor')).toEqual({ kind: 'single', scope: 'root' })
+    expect(b.slots.spec('conversation.details.git')).toEqual({ kind: 'single', scope: 'root' })
+    expect(b.slots.spec('conversation.details.tool')).toEqual({ kind: 'single', scope: 'session' })
+    await b.runtime.dispose()
+  })
+
   it('leaves per-Tool rows to the ui-tool plugin', async () => {
     const b = await bench()
     // The actual toolview declaration activates every registrant. The
@@ -118,6 +126,7 @@ describe('apply wiring', () => {
     expect(b.slots.entries('conversation.view')).toHaveLength(0)
     expect(b.slots.entries('conversation.chat.node')).toHaveLength(0)
     expect(b.slots.spec('conversation.chat.node')).toBeUndefined()
+    expect(b.slots.spec('conversation.details.git')).toBeUndefined()
     expect(b.slots.entries('details')).toHaveLength(0)
     expect(b.slots.entries('settings.general.item')).toHaveLength(0)
     expect(b.runtime.ctx.get('conversation')).toBeUndefined()

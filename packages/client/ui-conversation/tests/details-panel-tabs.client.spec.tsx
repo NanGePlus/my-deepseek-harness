@@ -70,6 +70,13 @@ function bench(overrides?: Partial<Pick<DetailsSlotProps, 'renderSlot'>>) {
   const closeDetails = vi.fn()
   const renderSlot: DetailsSlotProps['renderSlot'] = overrides?.renderSlot ?? ((key) => {
     if (key === 'conversation.details.editor') return <div data-testid="editor-surface-seat" />
+    if (key === 'conversation.details.git') {
+      return (
+        <div data-testid="git-panel-seat">
+          <textarea data-testid="git-commit-draft" defaultValue="wip message" />
+        </div>
+      )
+    }
     return null
   })
   const view = render(
@@ -96,36 +103,77 @@ function bench(overrides?: Partial<Pick<DetailsSlotProps, 'renderSlot'>>) {
 }
 
 describe('DetailsPanel segmented tabs', () => {
-  function toolPanel(view: ReturnType<typeof bench>['view']) {
-    return view.getAllByRole('tabpanel', { hidden: true })[1]!
+  function tabLabels(view: ReturnType<typeof bench>['view']): string[] {
+    return view.getAllByRole('tab').map(el => el.textContent ?? '')
   }
 
-  it('default: selects the file editor tab and renders its seat', () => {
+  function selectedTab(view: ReturnType<typeof bench>['view']): string {
+    return view.getByRole('tab', { selected: true }).textContent ?? ''
+  }
+
+  function panels(view: ReturnType<typeof bench>['view']) {
+    return view.getAllByRole('tabpanel', { hidden: true })
+  }
+
+  it('chrome-reduced: does not force-open the toolbox on mount', () => {
+    const { openDetails } = bench()
+    expect(openDetails).not.toHaveBeenCalled()
+  })
+
+  it('default: shows 资源管理器 | Git | 工具详情 with the editor selected', () => {
     const { view } = bench()
-    expect(view.getByRole('tab', { name: '工具详情' })).toBeTruthy()
-    expect(view.getByRole('tab', { name: '资源管理器' })).toBeTruthy()
-    expect(view.getByRole('tab', { name: '资源管理器' }).getAttribute('aria-selected')).toBe('true')
+    expect(tabLabels(view)).toEqual(['资源管理器', 'Git', '工具详情'])
+    expect(selectedTab(view)).toBe('资源管理器')
     expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
-    expect(toolPanel(view).getAttribute('aria-hidden')).toBe('true')
+    expect(view.getByTestId('git-panel-seat')).toBeTruthy()
+    expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('true')
+    expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('true')
   })
 
   it('tab-selected: selecting 资源管理器 keeps the editor surface visible', () => {
     const { view, chat, openDetails } = bench()
-    expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
     fireEvent.click(view.getByRole('tab', { name: '资源管理器' }))
     expect(chat.store.getSnapshot().detailsTab).toBe('editor')
     expect(openDetails).toHaveBeenCalledTimes(1)
+    expect(selectedTab(view)).toBe('资源管理器')
     expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
-    expect(toolPanel(view).getAttribute('aria-hidden')).toBe('true')
+    expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('true')
+    expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('true')
   })
 
-  it('tab-selected: switching back to 工具详情 hides the editor view without unmounting it', () => {
+  it('tab-selected: selecting Git shows only the Git panel and opens the toolbox', () => {
+    const { view, chat, openDetails } = bench()
+    fireEvent.click(view.getByRole('tab', { name: 'Git' }))
+    expect(chat.store.getSnapshot().detailsTab).toBe('git')
+    expect(openDetails).toHaveBeenCalledTimes(1)
+    expect(selectedTab(view)).toBe('Git')
+    expect(view.getByTestId('git-panel-seat')).toBeTruthy()
+    expect(panels(view)[0]!.getAttribute('aria-hidden')).toBe('true')
+    expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('false')
+    expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('true')
+  })
+
+  it('tab-selected: switching back to 工具详情 hides the other views without unmounting them', () => {
     const { view, chat } = bench()
     fireEvent.click(view.getByRole('tab', { name: '资源管理器' }))
     fireEvent.click(view.getByRole('tab', { name: '工具详情' }))
     expect(chat.store.getSnapshot().detailsTab).toBe('tool')
+    expect(selectedTab(view)).toBe('工具详情')
     expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
-    expect(view.getAllByRole('tabpanel', { hidden: true })[0]!.getAttribute('aria-hidden')).toBe('true')
+    expect(view.getByTestId('git-panel-seat')).toBeTruthy()
+    expect(panels(view)[0]!.getAttribute('aria-hidden')).toBe('true')
+    expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('true')
     expect(view.getByText('点击消息流中的工具行查看详情')).toBeTruthy()
+  })
+
+  it('tab-leave-git: leaving Git hides the panel and keeps the injected occupant and draft', () => {
+    const { view, chat } = bench()
+    fireEvent.click(view.getByRole('tab', { name: 'Git' }))
+    expect((view.getByTestId('git-commit-draft') as HTMLTextAreaElement).value).toBe('wip message')
+    fireEvent.click(view.getByRole('tab', { name: '资源管理器' }))
+    expect(chat.store.getSnapshot().detailsTab).toBe('editor')
+    expect(view.getByTestId('git-panel-seat')).toBeTruthy()
+    expect((view.getByTestId('git-commit-draft') as HTMLTextAreaElement).value).toBe('wip message')
+    expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('true')
   })
 })
