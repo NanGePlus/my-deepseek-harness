@@ -31,6 +31,12 @@ function expectOk<T>(response: RpcResponse<T>): T {
   return response.result.value
 }
 
+function requireHunkHeader(header: string | undefined): string {
+  expect(header).toBeDefined()
+  if (header === undefined) throw new Error('unreachable')
+  return header
+}
+
 function stubAgent(session: Session): Agent {
   return {
     id: session.id,
@@ -262,8 +268,7 @@ describe('host.gitStage hunk', () => {
     expect(preview.kind).toBe('text')
     if (preview.kind !== 'text') throw new Error('unreachable')
     expect(preview.hunks.length).toBeGreaterThanOrEqual(2)
-    const firstHunk = preview.hunks[0]?.header
-    expect(firstHunk).toBeDefined()
+    const firstHunk = requireHunkHeader(preview.hunks[0]?.header)
 
     const tree = expectOk(await api.host.gitStage(
       request({ workspaceId: workspace.workspaceId, path, hunkHeader: firstHunk }),
@@ -311,10 +316,8 @@ describe('host.gitUnstage hunk', () => {
     expect(preview.kind).toBe('text')
     if (preview.kind !== 'text') throw new Error('unreachable')
     expect(preview.hunks.length).toBeGreaterThanOrEqual(2)
-    const firstHunk = preview.hunks[0]?.header
-    const secondHunk = preview.hunks[1]?.header
-    expect(firstHunk).toBeDefined()
-    expect(secondHunk).toBeDefined()
+    const firstHunk = requireHunkHeader(preview.hunks[0]?.header)
+    const secondHunk = requireHunkHeader(preview.hunks[1]?.header)
 
     const tree = expectOk(await api.host.gitUnstage(
       request({ workspaceId: workspace.workspaceId, path, hunkHeader: firstHunk }),
@@ -357,8 +360,7 @@ describe('host.gitDiscard hunk', () => {
     expect(preview.kind).toBe('text')
     if (preview.kind !== 'text') throw new Error('unreachable')
     expect(preview.hunks.length).toBeGreaterThanOrEqual(2)
-    const firstHunk = preview.hunks[0]?.header
-    expect(firstHunk).toBeDefined()
+    const firstHunk = requireHunkHeader(preview.hunks[0]?.header)
 
     const tree = expectOk(await api.host.gitDiscard(
       request({ workspaceId: workspace.workspaceId, path, hunkHeader: firstHunk }),
@@ -668,7 +670,11 @@ describe('host Git write RPC set', () => {
     })
     try {
       const response = await api.host.gitStage(
-        request({ workspaceId: workspace.workspaceId, path, hunkHeader: preview.hunks[0]?.header }),
+        request({
+          workspaceId: workspace.workspaceId,
+          path,
+          hunkHeader: requireHunkHeader(preview.hunks[0]?.header),
+        }),
         new AbortController().signal,
       )
       expect(response.result).toMatchObject({
@@ -806,7 +812,11 @@ describe('host Git write RPC set', () => {
     expect(preview.kind).toBe('text')
     if (preview.kind !== 'text') throw new Error('unreachable')
     const tree = expectOk(await api.host.gitStage(
-      request({ workspaceId: workspace.workspaceId, path, hunkHeader: preview.hunks[0]?.header }),
+      request({
+        workspaceId: workspace.workspaceId,
+        path,
+        hunkHeader: requireHunkHeader(preview.hunks[0]?.header),
+      }),
       new AbortController().signal,
     ))
     expect(tree).toMatchObject({
