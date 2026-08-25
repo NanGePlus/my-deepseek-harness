@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-Web details 栏 **文件编辑器** Tab 的编辑界面：注入 `conversation.details.editor` 的 `editor-surface` occupant。左栏是 Workspace 文件树（懒加载列表、文件名过滤、类型图标、只读 Git 徽章）。右栏把文件打开为 Session 作用域 Tab：可编辑文本走 Monaco（Monaco 无法启动时回退为 textarea）、常见图片只读预览、或不可打开提示。dirty 文本只经显式 **保存** / ⌘S / Ctrl+S 落盘。
+Web details 栏 **文件编辑器** Tab 的编辑界面：注入 `conversation.details.editor` 的 `editor-surface` occupant。左栏是 Workspace 文件树（懒加载列表、文件名过滤、类型图标、只读 Git 徽章；资源管理器 Tab 从隐藏回到可见时重读 `gitStatus`）。右栏把文件打开为 Session 作用域 Tab：可编辑文本走 Monaco（Monaco 无法启动时回退为 textarea）、常见图片只读预览、或不可打开提示。dirty 文本只经显式 **保存** / ⌘S / Ctrl+S 落盘。
 
 文件树绑定到 `sessionIds` 包含当前 Session 的 Workspace。已加载层展示 Host 返回的全部行，包括隐藏名、`.git` 与 `node_modules`。仅在展开文件夹时调用 `listWorkspaceEntries`；已缓存层会复用。文件名过滤对已加载名称做大小写不敏感匹配，并保留匹配项的祖先文件夹；不会因过滤而递归拉取。单击文件即打开；再次单击已打开路径只聚焦该 Tab，不再次 `readFile`。双击文件夹即展开。
 

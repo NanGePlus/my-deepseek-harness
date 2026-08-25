@@ -15,6 +15,10 @@ async function bench() {
   const workspaces = {
     gitWorkingTree: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitInit: vi.fn(() => Promise.resolve({ repoRoot: '/w' })),
+    gitStage: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
+    gitUnstage: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
+    gitDiscard: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
+    gitCommit: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
   }
   ctx.provide('workspaces', workspaces)
   slots.register({
@@ -43,13 +47,37 @@ describe('ui-git apply', () => {
     const entry = b.slots.entries('conversation.details.git')[0]
     expect(entry?.component).toBe(GitPanel)
     expect(entry?.locale).toBe('gitPanel')
+    expect(entry?.store).toEqual(expect.objectContaining({
+      spec: expect.objectContaining({
+        actions: expect.objectContaining({
+          setDraft: expect.any(Function),
+          clearDraft: expect.any(Function),
+        }),
+      }),
+    }))
     const face = entry?.inject?.({} as never) as unknown as GitPanelInjected
     await expect(face.gitWorkingTree('ws' as WorkspaceId)).resolves.toEqual({
       availability: 'not-a-repository',
     })
     await expect(face.gitInit('ws' as WorkspaceId)).resolves.toEqual({ repoRoot: '/w' })
+    await expect(face.gitStage('ws' as WorkspaceId, '/w/a.ts')).resolves.toEqual({
+      availability: 'not-a-repository',
+    })
+    await expect(face.gitUnstage('ws' as WorkspaceId, '/w/a.ts')).resolves.toEqual({
+      availability: 'not-a-repository',
+    })
+    await expect(face.gitDiscard('ws' as WorkspaceId, '/w/a.ts')).resolves.toEqual({
+      availability: 'not-a-repository',
+    })
+    await expect(face.gitCommit('ws' as WorkspaceId, 'msg')).resolves.toEqual({
+      availability: 'not-a-repository',
+    })
     expect(b.workspaces.gitWorkingTree).toHaveBeenCalledWith('ws', undefined)
     expect(b.workspaces.gitInit).toHaveBeenCalledWith('ws', undefined)
+    expect(b.workspaces.gitStage).toHaveBeenCalledWith('ws', '/w/a.ts')
+    expect(b.workspaces.gitUnstage).toHaveBeenCalledWith('ws', '/w/a.ts')
+    expect(b.workspaces.gitDiscard).toHaveBeenCalledWith('ws', '/w/a.ts')
+    expect(b.workspaces.gitCommit).toHaveBeenCalledWith('ws', 'msg')
   })
 
   it('unregisters the Git occupant when the plugin fiber disposes', async () => {

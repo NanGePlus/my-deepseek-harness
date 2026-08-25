@@ -125,9 +125,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.details.tool': { kind: 'single'; scope: 'session'; owner: DetailsToolOwnerProps }
     /**
      * The file-editor surface rendered when the details segmented tab selects
-     * 「资源管理器」. One occupant; ui-file-editor injects here.
+     * 「资源管理器」. One occupant; ui-file-editor injects here. `visible` is
+     * true only while Explorer is the selected segment so Git badges re-read
+     * disk after Git-panel writes.
      */
-    'conversation.details.editor': { kind: 'single'; scope: 'root' }
+    'conversation.details.editor': { kind: 'single'; scope: 'root'; owner: DetailsEditorOwnerProps }
     /**
      * The Git panel rendered when the details segmented tab selects 「Git」.
      * One occupant; ui-git injects here. The shell hides this seat when the
@@ -424,6 +426,12 @@ export interface DetailsToolOwnerProps {
 /** Owner share of the toolbox Git occupant: whether the Git segment is selected. */
 export interface DetailsGitOwnerProps {
   /** True while the toolbox Git segment is selected. Hidden panels stay mounted. */
+  visible: boolean
+}
+
+/** Owner share of the toolbox Explorer occupant: whether the Explorer segment is selected. */
+export interface DetailsEditorOwnerProps {
+  /** True while the toolbox Explorer segment is selected. Hidden panels stay mounted. */
   visible: boolean
 }
 

@@ -6,6 +6,7 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { GitPanel, type GitPanelInjected } from './GitPanel.tsx'
+import { createGitPanelStore } from './stores.ts'
 import { en, zh, type GitPanelKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -31,9 +32,14 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('conversation.details.git', () => ctx.slots.register({
     name: 'conversation.details.git',
     locale: NS,
+    store: createGitPanelStore,
     inject: (): GitPanelInjected => ({
       gitWorkingTree: (workspaceId, signal) => ctx.workspaces.gitWorkingTree(workspaceId, signal),
       gitInit: (workspaceId, signal) => ctx.workspaces.gitInit(workspaceId, signal),
+      gitStage: (workspaceId, path) => ctx.workspaces.gitStage(workspaceId, path),
+      gitUnstage: (workspaceId, path) => ctx.workspaces.gitUnstage(workspaceId, path),
+      gitDiscard: (workspaceId, path) => ctx.workspaces.gitDiscard(workspaceId, path),
+      gitCommit: (workspaceId, message) => ctx.workspaces.gitCommit(workspaceId, message),
     }),
   }, GitPanel))
 }

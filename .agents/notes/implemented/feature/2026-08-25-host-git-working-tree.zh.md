@@ -12,7 +12,7 @@ Git 面板需要经 Host 做仓库发现、未暂存／已暂存变更列表、�
 
 `packages/host/apiproxy` 在现有 Host API seam 上新增三个有类型 Host RPC。Client 功能包只经 `WorkspaceRuntime`（以及对应的 `IWorkspaces`／`TestWorkspaces`）消费。没有任意 argv 的 git 通道。
 
-`host.gitWorkingTree({ workspaceId })` 从绑定 Workspace 用 `git rev-parse --show-toplevel` 向上发现仓库根，返回当前分支或 Git 对游离 HEAD 的说明，并列出未暂存与已暂存的磁盘变更。每行带相对仓库根的 POSIX `path` 以及 Host 绝对路径 `absolutePath`（可在绑定 Workspace 之外）。忽略路径不出现（默认 porcelain）。本机无 git 与不是仓库是成功响应里的 `availability` 值，不是 RPC 错误，以便面板渲染对应空态。其它 git 失败仍为 `internal`。
+`host.gitWorkingTree({ workspaceId })` 从绑定 Workspace 用 `git rev-parse --show-toplevel` 向上发现仓库根，返回当前分支或 Git 对游离 HEAD 的说明，并列出未暂存与已暂存的磁盘变更。每行带相对仓库根的 POSIX `path`、Host 绝对路径 `absolutePath`（可在绑定 Workspace 之外），以及 `kind`（`modified` / `untracked` / `deleted`），以便 Git 面板无需再打一轮预览即可选择丢弃确认文案。忽略路径不出现（默认 porcelain）。本机无 git 与不是仓库是成功响应里的 `availability` 值，不是 RPC 错误，以便面板渲染对应空态。其它 git 失败仍为 `internal`。
 
 `host.gitInit({ workspaceId })` 仅当整条祖先链都没有仓库时，在绑定 Workspace 根执行 `git init`。失败码：`git-unavailable`、`already-a-git-repository`（details 含 `repoRoot`）、`git-failed`（message 为 Git 原文）。不发布远程。
 

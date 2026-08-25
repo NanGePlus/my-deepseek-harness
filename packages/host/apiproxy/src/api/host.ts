@@ -52,12 +52,20 @@ export interface GitStatusListing {
   entries: GitStatusEntry[]
 }
 
+/**
+ * Nature of one working-tree change row. Untracked is a new path (`??` or
+ * index `A`); deleted is a tracked deletion (`D`); everything else is modified.
+ */
+export type GitWorkingTreeChangeKind = 'modified' | 'untracked' | 'deleted'
+
 /** One working-tree change row of host.gitWorkingTree. */
 export interface GitWorkingTreeChange {
   /** Path relative to the Git repository root (POSIX separators). */
   path: string
   /** Absolute host path. May lie outside the bound Workspace when the repo root is an ancestor. */
   absolutePath: string
+  /** Untracked, tracked deletion, or other tracked change — drives discard-confirm copy. */
+  kind: GitWorkingTreeChangeKind
 }
 
 /**

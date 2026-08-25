@@ -12,7 +12,7 @@ The toolbox Git tab declared in [the three-tab Git slot](2026-08-25-details-thre
 
 `@deepseek-ai/dsh-client-ui-git` is the Git-panel occupant of `conversation.details.git`. It follows the Workspace whose `sessionIds` include the current Session, calls `gitWorkingTree` / `gitInit` through injected `ctx.workspaces` closures, and does not import `ui-file-editor` internals.
 
-The shell passes owner `visible: true` only while the Git segment is selected. The occupant stays mounted when hidden. It reads disk when `visible` becomes true, when the bound Workspace changes, and after a successful init. It does not poll while the tab stays selected, so Agent or terminal writes are not live-followed. Lists render Host rows only (ignored paths never appear; unsaved edit buffers never appear). `git-unavailable` and `not-a-repository` are mutually exclusive overlays; only the latter offers **初始化仓库**. A clean repository shows 「没有要提交的更改」 and keeps the commit-message placeholder. The **提交** button stays disabled in this slice.
+The shell passes owner `visible: true` only while the Git segment is selected. The occupant stays mounted when hidden. It reads disk when `visible` becomes true, when the bound Workspace changes, and after a successful init. It does not poll while the tab stays selected, so Agent or terminal writes are not live-followed. Lists render Host rows only (ignored paths never appear; unsaved edit buffers never appear). `git-unavailable` and `not-a-repository` are mutually exclusive overlays; only the latter offers **初始化仓库**. A clean repository shows 「没有要提交的更改」 and keeps the commit-message field. Whole-file stage, discard, commit, and per-Session drafts are owned by [whole-file stage, discard, and commit](2026-08-25-ui-git-panel-stage-commit.md).
 
 First load uses a centered spinner. A later re-read of an already-shown repository uses the 2px list-top indeterminate bar and does not mask the lists.
 
@@ -22,14 +22,14 @@ First load uses a centered spinner. A later re-read of an already-shown reposito
 
 **Fetch on mount even while the Git tab is hidden.** Rejected: the occupant is always mounted, so a visibility-gated read is what implements "refresh when switching to Git" without polling (US-35 / US-36).
 
-**A shared disk-generation counter written by the file editor on explicit save.** Deferred: switching back to Git already re-reads disk; a cross-plugin epoch belongs with later write/guard slices if save-while-on-Git becomes observable.
+**A shared disk-generation counter written by the file editor on explicit save.** Deferred at bind/list time: switching back to Git already re-reads disk. Explorer badge refresh after Git-panel writes is owned by [whole-file stage, discard, and commit](2026-08-25-ui-git-panel-stage-commit.md), which re-reads `gitStatus` when Explorer becomes visible.
 
-**Wire stage, discard, commit, and diff preview in the same occupant change.** Rejected: Issue #56 is slice 1/4; those behaviors have their own issues.
+**Wire stage, discard, commit, and diff preview in the same occupant change.** Rejected: Issue #56 is slice 1/4; write actions now live in [whole-file stage, discard, and commit](2026-08-25-ui-git-panel-stage-commit.md).
 
 ## Consequences
 
 - `packages/bundle/web-app` registers `ui-git`. An empty Git seat is no longer the assembled web default.
-- Whole-file stage/discard/commit, hunk operations, and the Git action guard remain later slices; this occupant must not call those RPCs yet.
+- Whole-file stage/discard/commit are owned by [whole-file stage, discard, and commit](2026-08-25-ui-git-panel-stage-commit.md). Hunk operations and the Git action guard remain later slices.
 - The `ui-git` client bundle must rebuild before web e2e or `pnpm dsh web` shows the panel body.
 
 ## Testing

@@ -8,7 +8,7 @@ import {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ConversationSnapshot, SessionId, SessionListState, WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionProviderComponent } from '@deepseek-ai/dsh-client-ui-slots'
-import type { DetailsGitOwnerProps, DetailsSlotProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { DetailsEditorOwnerProps, DetailsGitOwnerProps, DetailsSlotProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import {
@@ -69,7 +69,12 @@ function bench(overrides?: Partial<Pick<DetailsSlotProps, 'renderSlot'>>) {
   const openDetails = vi.fn()
   const closeDetails = vi.fn()
   const renderSlot: DetailsSlotProps['renderSlot'] = overrides?.renderSlot ?? ((key, owner) => {
-    if (key === 'conversation.details.editor') return <div data-testid="editor-surface-seat" />
+    if (key === 'conversation.details.editor') {
+      const editorOwner = owner as unknown as DetailsEditorOwnerProps
+      return (
+        <div data-testid="editor-surface-seat" data-visible={String(editorOwner.visible)} />
+      )
+    }
     if (key === 'conversation.details.git') {
       const gitOwner = owner as unknown as DetailsGitOwnerProps
       return (
@@ -125,8 +130,8 @@ describe('DetailsPanel segmented tabs', () => {
     const { view } = bench()
     expect(tabLabels(view)).toEqual(['资源管理器', 'Git', '工具详情'])
     expect(selectedTab(view)).toBe('资源管理器')
-    expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
-    expect(view.getByTestId('git-panel-seat')).toBeTruthy()
+    expect(view.getByTestId('editor-surface-seat').getAttribute('data-visible')).toBe('true')
+    expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('false')
     expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('true')
     expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('true')
   })
@@ -137,7 +142,7 @@ describe('DetailsPanel segmented tabs', () => {
     expect(chat.store.getSnapshot().detailsTab).toBe('editor')
     expect(openDetails).toHaveBeenCalledTimes(1)
     expect(selectedTab(view)).toBe('资源管理器')
-    expect(view.getByTestId('editor-surface-seat')).toBeTruthy()
+    expect(view.getByTestId('editor-surface-seat').getAttribute('data-visible')).toBe('true')
     expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('true')
     expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('true')
   })
@@ -151,6 +156,7 @@ describe('DetailsPanel segmented tabs', () => {
     expect(selectedTab(view)).toBe('Git')
     expect(view.getByTestId('git-panel-seat')).toBeTruthy()
     expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('true')
+    expect(view.getByTestId('editor-surface-seat').getAttribute('data-visible')).toBe('false')
     expect(panels(view)[0]!.getAttribute('aria-hidden')).toBe('true')
     expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('false')
     expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('true')

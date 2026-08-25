@@ -2,13 +2,15 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useSyncExternalStore } from 'react'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
-  GitWorkingTreeResult, SessionId, SessionListState, WorkspaceId, WorkspaceListState, WorkspaceView,
+  GitWorkingTreeChange, GitWorkingTreeResult, SessionId, SessionListState, WorkspaceId, WorkspaceListState,
+  WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore, DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { GitPanel, type GitPanelProps } from '../src/client/GitPanel.tsx'
+import { createGitPanelStore } from '../src/client/stores.ts'
 import { zh } from '../src/client/locales.ts'
 
 afterEach(cleanup)
@@ -43,9 +45,9 @@ function workspacesState(items: WorkspaceView[]): WorkspaceListState {
   }
 }
 
-function sessionsState(current: SessionId): SessionListState {
+function sessionsState(current: SessionId | undefined): SessionListState {
   return {
-    ids: [current],
+    ids: current === undefined ? [] : [current],
     byId: {},
     current,
     phase: 'ready',
@@ -61,6 +63,14 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
   }
 }
 
+function change(
+  path: string,
+  kind: GitWorkingTreeChange['kind'],
+  root = '/repos/app',
+): GitWorkingTreeChange {
+  return { path, absolutePath: `${root}/${path}`, kind }
+}
+
 const CLEAN_REPO: GitWorkingTreeResult = {
   availability: 'repository',
   repoRoot: '/repos/app',
@@ -74,41 +84,74 @@ const DIRTY_REPO: GitWorkingTreeResult = {
   repoRoot: '/repos/app',
   branch: 'HEAD detached at abc1234',
   unstaged: [
-    { path: 'src/a.ts', absolutePath: '/repos/app/src/a.ts' },
-    { path: 'README.md', absolutePath: '/repos/app/README.md' },
+    change('src/a.ts', 'modified'),
+    change('README.md', 'modified'),
   ],
   staged: [
-    { path: 'src/a.ts', absolutePath: '/repos/app/src/a.ts' },
-    { path: 'docs/note.md', absolutePath: '/repos/app/docs/note.md' },
+    change('src/a.ts', 'modified'),
+    change('docs/note.md', 'modified'),
   ],
+}
+
+const DISCARD_REPO: GitWorkingTreeResult = {
+  availability: 'repository',
+  repoRoot: '/repos/app',
+  branch: 'main',
+  unstaged: [
+    change('tracked.ts', 'modified'),
+    change('new.ts', 'untracked'),
+    change('gone.ts', 'deleted'),
+  ],
+  staged: [],
 }
 
 function mount(over: {
   visible?: boolean
   items?: WorkspaceView[]
   sessionId?: SessionId
+  noCurrentSession?: boolean
   tree?: GitWorkingTreeResult | Promise<GitWorkingTreeResult>
   gitWorkingTree?: GitPanelProps['gitWorkingTree']
   gitInit?: GitPanelProps['gitInit']
+  gitStage?: GitPanelProps['gitStage']
+  gitUnstage?: GitPanelProps['gitUnstage']
+  gitDiscard?: GitPanelProps['gitDiscard']
+  gitCommit?: GitPanelProps['gitCommit']
 } = {}) {
   const gitWorkingTree = vi.fn(over.gitWorkingTree ?? (async () => {
     if (over.tree !== undefined) return over.tree
     return CLEAN_REPO
   }))
   const gitInit = vi.fn(over.gitInit ?? (async () => ({ repoRoot: ROOT })))
+  const gitStage = vi.fn(over.gitStage ?? (async () => CLEAN_REPO))
+  const gitUnstage = vi.fn(over.gitUnstage ?? (async () => CLEAN_REPO))
+  const gitDiscard = vi.fn(over.gitDiscard ?? (async () => CLEAN_REPO))
+  const gitCommit = vi.fn(over.gitCommit ?? (async () => CLEAN_REPO))
   const items = over.items ?? [workspace()]
   const workspacesStore = createSnapshotStore(workspacesState(items))
-  const sessionsStore = createSnapshotStore(sessionsState(over.sessionId ?? SID))
+  const sessionsStore = createSnapshotStore(sessionsState(
+    over.noCurrentSession ? undefined : (over.sessionId ?? SID),
+  ))
+  const panelStore = createGitPanelStore().create()
   const props = {
     visible: over.visible ?? true,
     t: makeTranslate(zh),
     useSessions: hookOf(sessionsStore),
     useWorkspaces: hookOf(workspacesStore),
+    useStore: hookOf(panelStore),
+    actions: panelStore.actions,
     gitWorkingTree,
     gitInit,
+    gitStage,
+    gitUnstage,
+    gitDiscard,
+    gitCommit,
   } as GitPanelProps
   const view = render(<GitPanel {...props} />)
-  return { view, props, sessionsStore, workspacesStore, gitWorkingTree, gitInit }
+  return {
+    view, props, sessionsStore, workspacesStore, panelStore,
+    gitWorkingTree, gitInit, gitStage, gitUnstage, gitDiscard, gitCommit,
+  }
 }
 
 describe('GitPanel', () => {
@@ -232,7 +275,7 @@ describe('GitPanel', () => {
           availability: 'repository' as const,
           repoRoot: '/repos/beta',
           branch: 'topic',
-          unstaged: [{ path: 'beta.ts', absolutePath: '/repos/beta/beta.ts' }],
+          unstaged: [change('beta.ts', 'modified', '/repos/beta')],
           staged: [],
         }
       }
@@ -274,7 +317,7 @@ describe('GitPanel', () => {
         availability: 'repository',
         repoRoot: '/repos/app',
         branch: 'main',
-        unstaged: [{ path: 'saved.ts', absolutePath: '/repos/app/saved.ts' }],
+        unstaged: [change('saved.ts', 'modified')],
         staged: [],
       },
     })
@@ -315,6 +358,13 @@ describe('GitPanel', () => {
     await act(async () => { await Promise.resolve() })
     expect(b.gitWorkingTree).not.toHaveBeenCalled()
     expect(screen.queryByText('加载中…')).toBeNull()
+  })
+
+  it('does not fetch without a current Session', async () => {
+    const b = mount({ noCurrentSession: true, items: [workspace()] })
+    await act(async () => { await Promise.resolve() })
+    expect(b.gitWorkingTree).not.toHaveBeenCalled()
+    expect(screen.queryByPlaceholderText('提交说明')).toBeNull()
   })
 
   it('drops a working-tree result that arrives after the read is aborted', async () => {
@@ -382,5 +432,332 @@ describe('GitPanel', () => {
     expect(glyph!.getAttribute('src')?.endsWith('/material-icons/file.svg')).toBe(true)
     fireEvent.error(glyph!)
     expect(glyph!.getAttribute('src')?.endsWith('/material-icons/file.svg')).toBe(true)
+  })
+
+  function rowOf(path: string): HTMLElement {
+    return screen.getByText(path).closest('li')!
+  }
+
+  it('default: unstaged rows expose stage and discard; staged rows only unstage', async () => {
+    mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    expect(within(rowOf('README.md')).getByRole('button', { name: '暂存' })).toBeTruthy()
+    expect(within(rowOf('README.md')).getByRole('button', { name: '丢弃' })).toBeTruthy()
+    expect(within(rowOf('docs/note.md')).getByRole('button', { name: '取消暂存' })).toBeTruthy()
+    expect(within(rowOf('docs/note.md')).queryByRole('button', { name: '丢弃' })).toBeNull()
+    expect(screen.getByRole('button', { name: '全部暂存' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '全部取消暂存' })).toBeTruthy()
+  })
+
+  it('stages one unstaged file into the staged list', async () => {
+    const staged = {
+      ...DIRTY_REPO,
+      unstaged: [change('src/a.ts', 'modified')],
+      staged: [
+        change('src/a.ts', 'modified'),
+        change('docs/note.md', 'modified'),
+        change('README.md', 'modified'),
+      ],
+    }
+    const gitStage = vi.fn(async () => staged)
+    mount({ tree: DIRTY_REPO, gitStage })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByRole('button', { name: '暂存' }))
+    await waitFor(() => {
+      expect(gitStage).toHaveBeenCalledWith(WID, '/repos/app/README.md')
+    })
+    await waitFor(() => {
+      expect(within(rowOf('README.md')).queryByRole('button', { name: '暂存' })).toBeNull()
+      expect(within(rowOf('README.md')).getByRole('button', { name: '取消暂存' })).toBeTruthy()
+    })
+  })
+
+  it('unstages one staged file without calling discard', async () => {
+    const unstaged = {
+      ...DIRTY_REPO,
+      unstaged: [
+        change('src/a.ts', 'modified'),
+        change('README.md', 'modified'),
+        change('docs/note.md', 'modified'),
+      ],
+      staged: [change('src/a.ts', 'modified')],
+    }
+    const gitUnstage = vi.fn(async () => unstaged)
+    const gitDiscard = vi.fn(async () => CLEAN_REPO)
+    mount({ tree: DIRTY_REPO, gitUnstage, gitDiscard })
+    await waitFor(() => { expect(screen.getByText('docs/note.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('docs/note.md')).getByRole('button', { name: '取消暂存' }))
+    await waitFor(() => {
+      expect(gitUnstage).toHaveBeenCalledWith(WID, '/repos/app/docs/note.md')
+    })
+    expect(gitDiscard).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(within(rowOf('docs/note.md')).getByRole('button', { name: '暂存' })).toBeTruthy()
+    })
+  })
+
+  it('stages every unstaged path from the section action', async () => {
+    const gitStage = vi.fn(async (workspaceId: WorkspaceId, path: string) => {
+      void workspaceId
+      if (path.endsWith('README.md')) {
+        return {
+          ...DIRTY_REPO,
+          unstaged: [change('src/a.ts', 'modified')],
+          staged: [
+            ...DIRTY_REPO.staged,
+            change('README.md', 'modified'),
+          ],
+        }
+      }
+      return {
+        ...DIRTY_REPO,
+        unstaged: [],
+        staged: [
+          change('src/a.ts', 'modified'),
+          change('docs/note.md', 'modified'),
+          change('README.md', 'modified'),
+        ],
+      }
+    })
+    mount({ tree: DIRTY_REPO, gitStage })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '全部暂存' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '全部暂存' }))
+    await waitFor(() => { expect(gitStage).toHaveBeenCalledTimes(2) })
+    expect(gitStage.mock.calls.map(call => call[1])).toEqual([
+      '/repos/app/src/a.ts',
+      '/repos/app/README.md',
+    ])
+  })
+
+  it('unstages every staged path from the section action', async () => {
+    const gitUnstage = vi.fn(async () => ({
+      ...DIRTY_REPO,
+      unstaged: [
+        change('src/a.ts', 'modified'),
+        change('README.md', 'modified'),
+        change('docs/note.md', 'modified'),
+      ],
+      staged: [],
+    }))
+    mount({ tree: DIRTY_REPO, gitUnstage })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '全部取消暂存' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '全部取消暂存' }))
+    await waitFor(() => { expect(gitUnstage).toHaveBeenCalledTimes(2) })
+    expect(gitUnstage.mock.calls.map(call => call[1])).toEqual([
+      '/repos/app/src/a.ts',
+      '/repos/app/docs/note.md',
+    ])
+  })
+
+  it('row-busy: shows a 16px spinner on the row while staging', async () => {
+    let settle!: (tree: GitWorkingTreeResult) => void
+    const gitStage = vi.fn(() => new Promise<GitWorkingTreeResult>((resolve) => { settle = resolve }))
+    mount({ tree: DIRTY_REPO, gitStage })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByRole('button', { name: '暂存' }))
+    await waitFor(() => {
+      expect(within(rowOf('README.md')).getByRole('status', { name: '正在暂存' })).toBeTruthy()
+    })
+    await act(async () => { settle(DIRTY_REPO) })
+  })
+
+  it('discard-confirm: tracked modification copy, cancel does not call Host', async () => {
+    const gitDiscard = vi.fn(async () => CLEAN_REPO)
+    mount({ tree: DISCARD_REPO, gitDiscard })
+    await waitFor(() => { expect(screen.getByText('tracked.ts')).toBeTruthy() })
+    fireEvent.click(within(rowOf('tracked.ts')).getByRole('button', { name: '丢弃' }))
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '丢弃更改' }))
+    expect(within(dialog).getByText(/tracked\.ts/)).toBeTruthy()
+    expect(within(dialog).getByText('将把磁盘内容恢复为暂存区或 HEAD')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(gitDiscard).not.toHaveBeenCalled()
+  })
+
+  it('discard-confirm: untracked copy and confirmed discard deletes from disk via Host', async () => {
+    const gitDiscard = vi.fn(async () => ({
+      ...DISCARD_REPO,
+      unstaged: [
+        change('tracked.ts', 'modified'),
+        change('gone.ts', 'deleted'),
+      ],
+    }))
+    mount({ tree: DISCARD_REPO, gitDiscard })
+    await waitFor(() => { expect(screen.getByText('new.ts')).toBeTruthy() })
+    fireEvent.click(within(rowOf('new.ts')).getByRole('button', { name: '丢弃' }))
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '丢弃未跟踪文件' }))
+    expect(within(dialog).getByText('将从磁盘删除该路径')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: '丢弃' }))
+    await waitFor(() => {
+      expect(gitDiscard).toHaveBeenCalledWith(WID, '/repos/app/new.ts')
+    })
+    await waitFor(() => { expect(screen.queryByText('new.ts')).toBeNull() })
+  })
+
+  it('discard-confirm: tracked deletion restores the file to disk', async () => {
+    const gitDiscard = vi.fn(async () => ({
+      ...DISCARD_REPO,
+      unstaged: [
+        change('tracked.ts', 'modified'),
+        change('new.ts', 'untracked'),
+      ],
+    }))
+    mount({ tree: DISCARD_REPO, gitDiscard })
+    await waitFor(() => { expect(screen.getByText('gone.ts')).toBeTruthy() })
+    fireEvent.click(within(rowOf('gone.ts')).getByRole('button', { name: '丢弃' }))
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '丢弃更改' }))
+    expect(within(dialog).getByText('将把文件恢复到磁盘')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: '丢弃' }))
+    await waitFor(() => {
+      expect(gitDiscard).toHaveBeenCalledWith(WID, '/repos/app/gone.ts')
+    })
+  })
+
+  it('commit-disabled: empty staged or empty message keeps 提交 disabled', async () => {
+    mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByPlaceholderText('提交说明')).toBeTruthy() })
+    const input = screen.getByPlaceholderText('提交说明')
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(true)
+    fireEvent.change(input, { target: { value: '   ' } })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(true)
+    expect(screen.getByText('请填写提交说明')).toBeTruthy()
+    fireEvent.change(input, { target: { value: 'ready' } })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(false)
+  })
+
+  it('commit-disabled: a clean staged list stays disabled after typing a message', async () => {
+    mount({ tree: CLEAN_REPO })
+    await waitFor(() => { expect(screen.getByPlaceholderText('提交说明')).toBeTruthy() })
+    fireEvent.change(screen.getByPlaceholderText('提交说明'), { target: { value: 'nothing staged' } })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(true)
+    expect(screen.queryByText('请填写提交说明')).toBeNull()
+  })
+
+  it('commit-in-progress: disables the submit button and shows a spinner', async () => {
+    let settle!: (tree: GitWorkingTreeResult) => void
+    const gitCommit = vi.fn(() => new Promise<GitWorkingTreeResult>((resolve) => { settle = resolve }))
+    mount({ tree: DIRTY_REPO, gitCommit })
+    await waitFor(() => { expect(screen.getByPlaceholderText('提交说明')).toBeTruthy() })
+    fireEvent.change(screen.getByPlaceholderText('提交说明'), { target: { value: 'wip' } })
+    fireEvent.click(screen.getByRole('button', { name: '提交' }))
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(true)
+      expect(screen.getByRole('status', { name: '正在提交' })).toBeTruthy()
+    })
+    await act(async () => { settle(CLEAN_REPO) })
+  })
+
+  it('commits the current index and clears this Session draft', async () => {
+    const gitCommit = vi.fn(async () => CLEAN_REPO)
+    mount({ tree: DIRTY_REPO, gitCommit })
+    await waitFor(() => { expect(screen.getByPlaceholderText('提交说明')).toBeTruthy() })
+    const input = screen.getByPlaceholderText('提交说明') as HTMLTextAreaElement
+    fireEvent.change(input, { target: { value: 'ship it' } })
+    fireEvent.click(screen.getByRole('button', { name: '提交' }))
+    await waitFor(() => {
+      expect(gitCommit).toHaveBeenCalledWith(WID, 'ship it')
+    })
+    await waitFor(() => {
+      expect((screen.getByPlaceholderText('提交说明') as HTMLTextAreaElement).value).toBe('')
+      expect(screen.getByText('没有要提交的更改')).toBeTruthy()
+    })
+  })
+
+  it('commit-error: shows Git text plus 重试 and keeps the draft', async () => {
+    const gitCommit = vi.fn()
+      .mockRejectedValueOnce(new DirectoryBrowseError({
+        code: 'git-failed',
+        message: 'Author identity unknown',
+        details: {},
+      }))
+      .mockResolvedValueOnce(CLEAN_REPO)
+    mount({ tree: DIRTY_REPO, gitCommit })
+    await waitFor(() => { expect(screen.getByPlaceholderText('提交说明')).toBeTruthy() })
+    fireEvent.change(screen.getByPlaceholderText('提交说明'), { target: { value: 'identity' } })
+    fireEvent.click(screen.getByRole('button', { name: '提交' }))
+    await waitFor(() => { expect(screen.getByText('Author identity unknown')).toBeTruthy() })
+    expect(screen.queryByLabelText('user.name')).toBeNull()
+    expect(screen.queryByLabelText('user.email')).toBeNull()
+    expect((screen.getByPlaceholderText('提交说明') as HTMLTextAreaElement).value).toBe('identity')
+    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    await waitFor(() => { expect(gitCommit).toHaveBeenCalledTimes(2) })
+    await waitFor(() => {
+      expect((screen.getByPlaceholderText('提交说明') as HTMLTextAreaElement).value).toBe('')
+    })
+  })
+
+  it('keeps the commit draft when hiding the Git tab', async () => {
+    const b = mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByPlaceholderText('提交说明')).toBeTruthy() })
+    fireEvent.change(screen.getByPlaceholderText('提交说明'), { target: { value: 'wip message' } })
+    b.view.rerender(<GitPanel {...b.props} visible={false} />)
+    b.view.rerender(<GitPanel {...b.props} visible={true} />)
+    await waitFor(() => {
+      expect((screen.getByPlaceholderText('提交说明') as HTMLTextAreaElement).value).toBe('wip message')
+    })
+  })
+
+  it('stores commit drafts per Session and does not clear the other Session', async () => {
+    const other = workspace({
+      workspaceId: WID2,
+      path: '/w/beta',
+      title: 'beta',
+      sessionIds: [SID2],
+    })
+    const gitWorkingTree = vi.fn(async (workspaceId: WorkspaceId) => {
+      if (workspaceId === WID2) {
+        return {
+          availability: 'repository' as const,
+          repoRoot: '/repos/beta',
+          branch: 'topic',
+          unstaged: [],
+          staged: [change('beta.ts', 'modified', '/repos/beta')],
+        }
+      }
+      return DIRTY_REPO
+    })
+    const b = mount({ gitWorkingTree, items: [workspace(), other] })
+    await waitFor(() => { expect(screen.getByPlaceholderText('提交说明')).toBeTruthy() })
+    fireEvent.change(screen.getByPlaceholderText('提交说明'), { target: { value: 'alpha draft' } })
+    act(() => {
+      b.sessionsStore.update((draft) => {
+        draft.ids = [SID, SID2]
+        draft.current = SID2
+      })
+    })
+    b.view.rerender(<GitPanel {...b.props} />)
+    await waitFor(() => { expect(screen.getByText('beta.ts')).toBeTruthy() })
+    expect((screen.getByPlaceholderText('提交说明') as HTMLTextAreaElement).value).toBe('')
+    fireEvent.change(screen.getByPlaceholderText('提交说明'), { target: { value: 'beta draft' } })
+    act(() => {
+      b.sessionsStore.update((draft) => { draft.current = SID })
+    })
+    b.view.rerender(<GitPanel {...b.props} />)
+    await waitFor(() => {
+      expect((screen.getByPlaceholderText('提交说明') as HTMLTextAreaElement).value).toBe('alpha draft')
+    })
+  })
+
+  it('shows a Host write failure in the panel without filling identity', async () => {
+    const gitStage = vi.fn(async () => {
+      throw new DirectoryBrowseError({ code: 'git-failed', message: 'index.lock', details: {} })
+    })
+    mount({ tree: DIRTY_REPO, gitStage })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByRole('button', { name: '暂存' }))
+    await waitFor(() => { expect(screen.getByText('index.lock')).toBeTruthy() })
+    expect(screen.queryByLabelText('user.name')).toBeNull()
+    expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
+  })
+
+  it('stops staging remaining files after a section-wide stage failure', async () => {
+    const gitStage = vi.fn(async () => {
+      throw new DirectoryBrowseError({ code: 'git-failed', message: 'index.lock', details: {} })
+    })
+    mount({ tree: DIRTY_REPO, gitStage })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '全部暂存' }))
+    await waitFor(() => { expect(screen.getByText('index.lock')).toBeTruthy() })
+    expect(gitStage).toHaveBeenCalledTimes(1)
   })
 })

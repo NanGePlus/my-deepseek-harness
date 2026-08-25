@@ -201,12 +201,12 @@ describe('host.gitWorkingTree', () => {
     expect(tree.availability).toBe('repository')
     if (tree.availability !== 'repository') throw new Error('unreachable')
     expect(tree.unstaged).toEqual([
-      { path: 'removed.txt', absolutePath: join(workspace.path, 'removed.txt') },
-      { path: 'tracked.txt', absolutePath: join(workspace.path, 'tracked.txt') },
-      { path: 'untracked.txt', absolutePath: join(workspace.path, 'untracked.txt') },
+      { path: 'removed.txt', absolutePath: join(workspace.path, 'removed.txt'), kind: 'deleted' },
+      { path: 'tracked.txt', absolutePath: join(workspace.path, 'tracked.txt'), kind: 'modified' },
+      { path: 'untracked.txt', absolutePath: join(workspace.path, 'untracked.txt'), kind: 'untracked' },
     ])
     expect(tree.staged).toEqual([
-      { path: 'staged.txt', absolutePath: join(workspace.path, 'staged.txt') },
+      { path: 'staged.txt', absolutePath: join(workspace.path, 'staged.txt'), kind: 'untracked' },
     ])
   })
 
@@ -227,7 +227,7 @@ describe('host.gitWorkingTree', () => {
     ))
     expect(tree.availability).toBe('repository')
     if (tree.availability !== 'repository') throw new Error('unreachable')
-    const row = { path: 'partial.txt', absolutePath: join(workspace.path, 'partial.txt') }
+    const row = { path: 'partial.txt', absolutePath: join(workspace.path, 'partial.txt'), kind: 'modified' as const }
     expect(tree.unstaged).toEqual([row])
     expect(tree.staged).toEqual([row])
   })
@@ -250,7 +250,11 @@ describe('host.gitWorkingTree', () => {
     if (tree.availability !== 'repository') throw new Error('unreachable')
     expect(tree.repoRoot).toBe(realpathSync.native(repoRoot))
     expect(tree.unstaged).toEqual([
-      { path: 'outside.txt', absolutePath: join(realpathSync.native(repoRoot), 'outside.txt') },
+      {
+        path: 'outside.txt',
+        absolutePath: join(realpathSync.native(repoRoot), 'outside.txt'),
+        kind: 'modified',
+      },
     ])
   })
 
@@ -331,8 +335,8 @@ describe('host.gitWorkingTree', () => {
     expect(tree.availability).toBe('repository')
     if (tree.availability !== 'repository') throw new Error('unreachable')
     expect(tree.staged).toEqual([
-      { path: 'a-early.txt', absolutePath: join(workspace.path, 'a-early.txt') },
-      { path: 'z-late.txt', absolutePath: join(workspace.path, 'z-late.txt') },
+      { path: 'a-early.txt', absolutePath: join(workspace.path, 'a-early.txt'), kind: 'untracked' },
+      { path: 'z-late.txt', absolutePath: join(workspace.path, 'z-late.txt'), kind: 'untracked' },
     ])
   })
 
@@ -812,7 +816,7 @@ describe('host.gitDiffPreview', () => {
     expect(tree.availability).toBe('repository')
     if (tree.availability !== 'repository') throw new Error('unreachable')
     expect(tree.unstaged).toEqual([
-      { path: 'conflict.txt', absolutePath: join(workspace.path, 'conflict.txt') },
+      { path: 'conflict.txt', absolutePath: join(workspace.path, 'conflict.txt'), kind: 'modified' },
     ])
 
     const preview = expectOk(await api.host.gitDiffPreview(

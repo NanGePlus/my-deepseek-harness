@@ -7,7 +7,9 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, relative, resolve, sep } from 'node:path'
 import { runNativeCommand, type NativeCommandRunner } from '@deepseek-ai/dsh-native-command'
-import type { GitDiffHunk, GitDiffPreview, GitDiffSide, GitWorkingTreeChange, GitWorkingTreeResult } from './api/host.ts'
+import type {
+  GitDiffHunk, GitDiffPreview, GitDiffSide, GitWorkingTreeChange, GitWorkingTreeChangeKind, GitWorkingTreeResult,
+} from './api/host.ts'
 import { parsePorcelainPath } from './git-status.ts'
 import { pathWithinWorkspace } from './list-workspace-entries.ts'
 
@@ -76,6 +78,17 @@ async function readCurrentBranch(
 const UNMERGED_PAIRS = new Set(['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU'])
 
 /**
+ * Map one porcelain status letter onto the Git-panel change kind.
+ * @param letter - index or worktree letter from a porcelain v1 line.
+ * @returns untracked for `?`/`A`, deleted for `D`, otherwise modified.
+ */
+function porcelainKind(letter: string): GitWorkingTreeChangeKind {
+  if (letter === '?' || letter === 'A') return 'untracked'
+  if (letter === 'D') return 'deleted'
+  return 'modified'
+}
+
+/**
  * Split `git status --porcelain` into unstaged and staged change rows.
  * Ignored paths never appear in default porcelain output. Unmerged paths
  * are listed as unstaged only.
@@ -97,14 +110,21 @@ export function parseWorkingTreePorcelain(
     /* v8 ignore next -- porcelain never emits an empty path after the status prefix. */
     if (relativePath === '') continue
     const absolutePath = resolve(root, relativePath)
-    const row: GitWorkingTreeChange = { path: relativePath, absolutePath }
     const pair = `${indexStatus}${workTreeStatus}`
     if (UNMERGED_PAIRS.has(pair) || (indexStatus === '?' && workTreeStatus === '?')) {
-      unstaged.push(row)
+      unstaged.push({
+        path: relativePath,
+        absolutePath,
+        kind: porcelainKind(indexStatus === '?' ? indexStatus : workTreeStatus),
+      })
       continue
     }
-    if (indexStatus !== ' ' && indexStatus !== '?') staged.push(row)
-    if (workTreeStatus !== ' ' && workTreeStatus !== '?') unstaged.push(row)
+    if (indexStatus !== ' ' && indexStatus !== '?') {
+      staged.push({ path: relativePath, absolutePath, kind: porcelainKind(indexStatus) })
+    }
+    if (workTreeStatus !== ' ' && workTreeStatus !== '?') {
+      unstaged.push({ path: relativePath, absolutePath, kind: porcelainKind(workTreeStatus) })
+    }
   }
   unstaged.sort((left, right) => left.path.localeCompare(right.path))
   staged.sort((left, right) => left.path.localeCompare(right.path))
