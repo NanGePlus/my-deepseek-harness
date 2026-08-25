@@ -132,6 +132,8 @@ Dark 模式下 `editor-hover-tint` 为 `rgba(255,255,255,0.08)` 叠于 `#151517`
 * **默认态：** 背景 `--dsw-alias-bg-base`；边框 `--dsw-alias-border-l2`；文字 `--dsw-alias-label-primary`；圆角 6px；高 28px（默认单行）。
 * **聚焦态：** 边框 `--dsw-alias-brand-primary`；无外发光或 1px 等价 ghost。
 * **错误态：** 边框 `semantic-error`（`#EC1313`）；说明文案 `semantic-error`；用于重名冲突等校验失败。
+* **禁用态：** 文字 `--dsw-alias-label-caption`；边框 `--dsw-alias-border-l2`；背景 `--dsw-alias-bg-overlay`；无聚焦描边；cursor not-allowed。
+* **多行：** 填充、边框、文字、圆角及聚焦 / 错误 / 禁用 Token 与单行相同；最小高度 72px；内边距 8px 10px；字号 13px/18px（`--dsw-font-family`）；溢出滚动；无边角拖拽缩放。占位符色为 `label-caption`；本文不写产品占位文案。
 
 ### 卡片容器
 
