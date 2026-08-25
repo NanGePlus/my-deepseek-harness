@@ -2,6 +2,7 @@
 // column content seats. Reads selection and tab state from the current
 // session chat store. Leaving a tab hides its panel and does not unmount it.
 
+import { useCallback, useState } from 'react'
 import clsx from 'clsx'
 import type { DetailsSlotProps } from '../contract/slots.ts'
 import { ToolDetailsBody } from './ToolDetailsBody.tsx'
@@ -27,6 +28,16 @@ export function DetailsPanel({
   const currentSessionId = useSessions(list => list.current)
   const sessionId = boundSessionId ?? currentSessionId
   const flushBody = detailsTab === 'editor' || detailsTab === 'git'
+  const [dirtyPaths, setDirtyPathsState] = useState<readonly string[]>([])
+  /** Keep the same array when contents match so the Git occupant does not re-render. */
+  const setDirtyPaths = useCallback((paths: readonly string[]) => {
+    setDirtyPathsState((current) => {
+      if (current.length === paths.length && current.every((path, index) => path === paths[index])) {
+        return current
+      }
+      return [...paths]
+    })
+  }, [])
 
   return (
     <div className={css.root}>
@@ -55,14 +66,20 @@ export function DetailsPanel({
           role="tabpanel"
           aria-hidden={detailsTab !== 'editor'}
         >
-          {renderSlot('conversation.details.editor', { visible: detailsTab === 'editor' })}
+          {renderSlot('conversation.details.editor', {
+            visible: detailsTab === 'editor',
+            setDirtyPaths,
+          })}
         </div>
         <div
           className={clsx(css.tabPanel, detailsTab !== 'git' && css.tabPanelHidden)}
           role="tabpanel"
           aria-hidden={detailsTab !== 'git'}
         >
-          {renderSlot('conversation.details.git', { visible: detailsTab === 'git' })}
+          {renderSlot('conversation.details.git', {
+            visible: detailsTab === 'git',
+            dirtyPaths,
+          })}
         </div>
         <div
           className={clsx(css.tabPanel, detailsTab !== 'tool' && css.tabPanelHidden)}

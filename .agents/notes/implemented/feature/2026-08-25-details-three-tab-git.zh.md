@@ -12,7 +12,7 @@ Git 面板 V2 需要在资源管理器与工具详情旁增加第三段工具箱
 
 `ui-conversation` 拥有工具箱 Tab 壳层：`DetailsPanel` 渲染 **资源管理器 | Git | 工具详情**，per-session chat store 的 `detailsTab` 为 `'editor' | 'git' | 'tool'`。同时只选中一段。选中 **资源管理器** 或 **Git** 时调用 `layout.openDetails()`，栏已收起也能展开；壳层不新增第四栏或 overlay。
 
-Git occupant 是子槽 `conversation.details.git`（`kind: 'single'`，`scope: 'root'`，owner `{ visible }`）。`ui-git` 注入此处。Explorer occupant `conversation.details.editor` 带同样的 `{ visible }` owner，以便用户从 Git 切回时文件树 Git 状态标记按磁盘重读（[整文件暂存、丢弃与提交](2026-08-25-ui-git-panel-stage-commit.md)）。三个 tabpanel 保持挂载；未选中的面板为 `display: none`（`aria-hidden`）。仅在该段被选中时 `visible` 为 true。切走 Git 不取消暂存、不清空提交说明草稿——那属于 Git occupant，隐藏面板才能保留它们。
+Git occupant 是子槽 `conversation.details.git`（`kind: 'single'`，`scope: 'root'`，owner `{ visible, dirtyPaths }`）。`ui-git` 注入此处。Explorer occupant `conversation.details.editor` 带 `{ visible, setDirtyPaths }`：`visible` 让用户从 Git 切回时文件树 Git 状态标记按磁盘重读（[整文件暂存、丢弃与提交](2026-08-25-ui-git-panel-stage-commit.md)）；`setDirtyPaths` 发布 dirty Tab 的 Host 绝对路径，供 [Git 操作守卫](2026-08-25-ui-git-panel-action-guard.md) 使用。`DetailsPanel` 持有该列表；它不是 runtime 对象层事实。三个 tabpanel 保持挂载；未选中的面板为 `display: none`（`aria-hidden`）。仅在该段被选中时 `visible` 为 true。切走 Git 不取消暂存、不清空提交说明草稿——那属于 Git occupant，隐藏面板才能保留它们。
 
 `ui-git` 把 occupant 注册进此席位。右栏拖宽与 concession 仍在 `ui-layout`。
 
@@ -35,7 +35,7 @@ Git occupant 是子槽 `conversation.details.git`（`kind: 'single'`，`scope: '
 
 ## 测试
 
-`packages/client/ui-conversation/tests/details-panel-tabs.client.spec.tsx` 覆盖默认顺序、同时只选中一段、选中 Git 展开工具箱、以及切走 Git 后 occupant 与草稿仍挂载。
+`packages/client/ui-conversation/tests/details-panel-tabs.client.spec.tsx` 覆盖默认顺序、同时只选中一段、选中 Git 展开工具箱、切走 Git 后 occupant 与草稿仍挂载，以及 Explorer 的 `setDirtyPaths` 到达 Git 的 `dirtyPaths`。
 
 `packages/client/ui-conversation/tests/chat-apply.client.spec.tsx` 覆盖 `conversation.details.git` 的声明及其随 fiber dispose 折叠。
 

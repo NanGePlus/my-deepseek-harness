@@ -131,7 +131,7 @@ interface DiscardTarget {
  * @returns the Git panel surface.
  */
 export function GitPanel({
-  t, visible, useSessions, useWorkspaces, useStore, actions,
+  t, visible, dirtyPaths, useSessions, useWorkspaces, useStore, actions,
   gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit,
 }: GitPanelProps) {
   const currentSessionId = useSessions(state => state.current)
@@ -153,6 +153,7 @@ export function GitPanel({
   const [busyKind, setBusyKind] = useState<'stage' | 'unstage' | 'discard' | null>(null)
   const [commitPending, setCommitPending] = useState(false)
   const [discardTarget, setDiscardTarget] = useState<DiscardTarget | null>(null)
+  const [guardTarget, setGuardTarget] = useState<GitWorkingTreeChange | null>(null)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [preview, setPreview] = useState<PreviewState>({ kind: 'idle' })
 
@@ -203,6 +204,13 @@ export function GitPanel({
   }, [visible, workspaceId, selection, gitDiffPreview, previewEpoch])
 
   const writing = busyPath !== null || commitPending
+  const isDirty = (path: string): boolean => dirtyPaths.includes(path)
+
+  const openGuard = (row: GitWorkingTreeChange): boolean => {
+    if (!isDirty(row.absolutePath)) return false
+    setGuardTarget(row)
+    return true
+  }
 
   const applyTree = (tree: GitWorkingTreeResult): void => {
     setWriteError(null)
@@ -282,7 +290,7 @@ export function GitPanel({
     <div className={css.root} data-surface="git-panel">
       {renderBody({
         view, t, onInit, initError, initPending, writeError, commitError, message, busyPath, busyKind,
-        commitPending, discardTarget, writing, selection, preview,
+        commitPending, discardTarget, guardTarget, writing, dirtyPaths, selection, preview,
         onMessage: (value) => {
           /* v8 ignore next -- the commit field only renders for a current Session. */
           if (currentSessionId === undefined) return
@@ -297,6 +305,7 @@ export function GitPanel({
         onStage: (row, hunkHeader) => {
           /* v8 ignore next -- row actions only render after a Workspace-bound repository read. */
           if (workspaceId === undefined) return
+          if (openGuard(row)) return
           void runPathWrite(
             row.absolutePath,
             'stage',
@@ -315,6 +324,11 @@ export function GitPanel({
         onStageAll: (rows) => {
           /* v8 ignore next -- section actions only render after a Workspace-bound repository read. */
           if (workspaceId === undefined) return
+          const blocked = rows.find(row => isDirty(row.absolutePath))
+          if (blocked !== undefined) {
+            setGuardTarget(blocked)
+            return
+          }
           void runSection(rows, 'stage', path => gitStage(workspaceId, path))
         },
         onUnstageAll: (rows) => {
@@ -323,6 +337,7 @@ export function GitPanel({
           void runSection(rows, 'unstage', path => gitUnstage(workspaceId, path))
         },
         onAskDiscard: (row, hunkHeader) => {
+          if (openGuard(row)) return
           setDiscardTarget(hunkHeader === undefined ? { row } : { row, hunkHeader })
         },
         onCancelDiscard: () => { setDiscardTarget(null) },
@@ -337,6 +352,7 @@ export function GitPanel({
             () => invokeWrite(gitDiscard, workspaceId, target.row.absolutePath, target.hunkHeader),
           )
         },
+        onCancelGuard: () => { setGuardTarget(null) },
         onCommit, onRetryCommit: onCommit,
       })}
     </div>
@@ -356,7 +372,9 @@ interface RepoBody {
   busyKind: 'stage' | 'unstage' | 'discard' | null
   commitPending: boolean
   discardTarget: DiscardTarget | null
+  guardTarget: GitWorkingTreeChange | null
   writing: boolean
+  dirtyPaths: readonly string[]
   selection: Selection | null
   preview: PreviewState
   onMessage: (value: string) => void
@@ -368,6 +386,7 @@ interface RepoBody {
   onAskDiscard: (row: GitWorkingTreeChange, hunkHeader?: string) => void
   onCancelDiscard: () => void
   onConfirmDiscard: () => void
+  onCancelGuard: () => void
   onCommit: () => void
   onRetryCommit: () => void
 }
@@ -436,12 +455,13 @@ function renderRepository(
   refreshing: boolean,
   body: RepoBody,
 ): ReactNode {
-  const { t, message, writeError, commitError, commitPending, discardTarget } = body
+  const { t, message, writeError, commitError, commitPending, discardTarget, guardTarget } = body
   const clean = tree.unstaged.length === 0 && tree.staged.length === 0
   const messageEmpty = message.trim() === ''
   const stagedEmpty = tree.staged.length === 0
+  const stagedDirty = tree.staged.some(row => body.dirtyPaths.includes(row.absolutePath))
   const showEmptyHint = !stagedEmpty && messageEmpty
-  const commitDisabled = stagedEmpty || messageEmpty || commitPending || body.writing
+  const commitDisabled = stagedEmpty || messageEmpty || commitPending || body.writing || stagedDirty
   return (
     <div className={css.split}>
       <div className={css.ops}>
@@ -509,6 +529,13 @@ function renderRepository(
           onConfirm={body.onConfirmDiscard}
         />
       )}
+      {guardTarget !== null && (
+        <GuardDialog
+          target={guardTarget}
+          t={t}
+          onCancel={body.onCancelGuard}
+        />
+      )}
     </div>
   )
 }
@@ -552,19 +579,20 @@ function WholeFilePreviewActions({
   body: RepoBody
 }): ReactNode {
   const { t } = body
+  const guarded = body.dirtyPaths.includes(row.absolutePath)
   if (side === 'unstaged') {
     return (
       <span className={css.rowActions}>
         <IconAction
           label={t('git.stage')}
-          disabled={body.writing}
+          disabled={body.writing || guarded}
           onClick={() => { body.onStage(row) }}
         >
           <IconPlusOutline16 size={14} />
         </IconAction>
         <IconAction
           label={t('git.discard')}
-          disabled={body.writing}
+          disabled={body.writing || guarded}
           onClick={() => { body.onAskDiscard(row) }}
         >
           <IconRefreshOutline16 size={14} />
@@ -632,6 +660,7 @@ function DiffHunkBlock({
   body: RepoBody
 }): ReactNode {
   const { t } = body
+  const guarded = body.dirtyPaths.includes(selection.row.absolutePath)
   return (
     <div className={css.hunk}>
       <div className={css.hunkHead}>
@@ -640,12 +669,12 @@ function DiffHunkBlock({
             <>
               <HunkAction
                 label={t('git.hunk.stage')}
-                disabled={body.writing}
+                disabled={body.writing || guarded}
                 onClick={() => { body.onStage(selection.row, hunk.header) }}
               />
               <HunkAction
                 label={t('git.hunk.discard')}
-                disabled={body.writing}
+                disabled={body.writing || guarded}
                 onClick={() => { body.onAskDiscard(selection.row, hunk.header) }}
               />
             </>
@@ -684,7 +713,7 @@ function HunkAction({
       className={css.hunkAction}
       aria-label={label}
       aria-disabled={disabled || undefined}
-      onClick={disabled ? undefined : onClick}
+      onClick={onClick}
     >
       {label}
     </button>
@@ -700,6 +729,7 @@ function ChangeSection({
   body: RepoBody
 }) {
   const { t } = body
+  const sectionGuarded = id === 'unstaged' && rows.some(row => body.dirtyPaths.includes(row.absolutePath))
   const sectionAction = id === 'unstaged'
     ? { label: t('git.stageAll'), onClick: () => { body.onStageAll(rows) } }
     : { label: t('git.unstageAll'), onClick: () => { body.onUnstageAll(rows) } }
@@ -710,7 +740,7 @@ function ChangeSection({
         {rows.length > 0 && (
           <IconAction
             label={sectionAction.label}
-            disabled={body.writing}
+            disabled={body.writing || sectionGuarded}
             onClick={sectionAction.onClick}
           >
             {id === 'unstaged' ? <IconPlusOutline16 size={14} /> : <IconMinus size={14} />}
@@ -736,6 +766,7 @@ function ChangeRow({
   const { t } = body
   const selected = body.selection?.side === id && body.selection.row.absolutePath === row.absolutePath
   const busy = body.busyPath === row.absolutePath
+  const guarded = body.dirtyPaths.includes(row.absolutePath)
   const busyLabel = body.busyKind === 'unstage'
     ? t('git.busy.unstage')
     : body.busyKind === 'discard'
@@ -776,14 +807,14 @@ function ChangeRow({
                 <>
                   <IconAction
                     label={t('git.stage')}
-                    disabled={body.writing}
+                    disabled={body.writing || guarded}
                     onClick={() => { body.onStage(row) }}
                   >
                     <IconPlusOutline16 size={14} />
                   </IconAction>
                   <IconAction
                     label={t('git.discard')}
-                    disabled={body.writing}
+                    disabled={body.writing || guarded}
                     onClick={() => { body.onAskDiscard(row) }}
                   >
                     <IconRefreshOutline16 size={14} />
@@ -802,6 +833,33 @@ function ChangeRow({
           </span>
         )}
     </li>
+  )
+}
+
+function GuardDialog({
+  target, t, onCancel,
+}: {
+  target: GitWorkingTreeChange
+  t: GitPanelProps['t']
+  onCancel: () => void
+}) {
+  const title = t('git.guard.title')
+  return (
+    <div className={css.dialogRoot}>
+      <div
+        className={css.dialogCard}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        <h2 className={css.dialogTitle}>{title}</h2>
+        <p className={css.dialogPath}>{target.absolutePath}</p>
+        <p className={css.dialogBody}>{t('git.guard.body')}</p>
+        <div className={css.dialogActions}>
+          <Button variant="outline" size="sm" onClick={onCancel}>{t('git.guard.cancel')}</Button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -859,7 +917,6 @@ function IconAction({
       aria-disabled={disabled || undefined}
       onClick={(event: MouseEvent<HTMLButtonElement>) => {
         event.stopPropagation()
-        if (disabled) return
         onClick()
       }}
     >

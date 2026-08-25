@@ -185,6 +185,7 @@ function mount(over: {
   renamePath?: EditorSurfaceProps['renamePath']
   createWorkspaceDirectory?: EditorSurfaceProps['createWorkspaceDirectory']
   watchPath?: EditorSurfaceProps['watchPath']
+  setDirtyPaths?: EditorSurfaceProps['setDirtyPaths']
 } = {}) {
   const listWorkspaceEntries = vi.fn(over.list ?? (async (_id: WorkspaceId, path: string) => listingFor(path)))
   const gitStatus = vi.fn(over.git ?? (async () => ({
@@ -229,6 +230,7 @@ function mount(over: {
     lspCloseDocument,
     lspHoverDocument,
     dirtyGuard: editorDirtyGuard,
+    setDirtyPaths: over.setDirtyPaths ?? (() => {}),
   } as EditorSurfaceProps
   const view = render(<EditorSurface {...props} />)
   return {
@@ -2129,5 +2131,18 @@ describe('EditorSurface dirty guard', () => {
     const dialog = await waitFor(() => screen.getByRole('dialog', { name: '未保存的更改' }))
     fireEvent.click(within(dialog).getByRole('button', { name: '保存' }))
     await waitFor(() => { expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull() })
+  })
+
+  it('publishes dirty editor-tab paths and clears them after save', async () => {
+    const setDirtyPaths = vi.fn()
+    mount({ setDirtyPaths })
+    await dirtyReadme()
+    await waitFor(() => {
+      expect(setDirtyPaths).toHaveBeenCalledWith([README])
+    })
+    saveShortcut()
+    await waitFor(() => {
+      expect(setDirtyPaths).toHaveBeenCalledWith([])
+    })
   })
 })

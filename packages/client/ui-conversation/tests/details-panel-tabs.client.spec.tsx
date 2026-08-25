@@ -185,4 +185,40 @@ describe('DetailsPanel segmented tabs', () => {
     expect((view.getByTestId('git-commit-draft') as HTMLTextAreaElement).value).toBe('wip message')
     expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('true')
   })
+
+  it('git-action-guard: Explorer writes dirty paths and Git reads them', () => {
+    const { view } = bench({
+      renderSlot: (key, owner) => {
+        if (key === 'conversation.details.editor') {
+          const editorOwner = owner as unknown as DetailsEditorOwnerProps
+          return (
+            <>
+              <button
+                type="button"
+                data-testid="publish-dirty"
+                onClick={() => { editorOwner.setDirtyPaths(['/w/alpha/README.md']) }}
+              />
+              <button
+                type="button"
+                data-testid="publish-dirty-other"
+                onClick={() => { editorOwner.setDirtyPaths(['/w/alpha/OTHER.md']) }}
+              />
+            </>
+          )
+        }
+        if (key === 'conversation.details.git') {
+          const gitOwner = owner as unknown as DetailsGitOwnerProps
+          return <div data-testid="git-dirty" data-paths={gitOwner.dirtyPaths.join(',')} />
+        }
+        return null
+      },
+    })
+    expect(view.getByTestId('git-dirty').getAttribute('data-paths')).toBe('')
+    fireEvent.click(view.getByTestId('publish-dirty'))
+    expect(view.getByTestId('git-dirty').getAttribute('data-paths')).toBe('/w/alpha/README.md')
+    fireEvent.click(view.getByTestId('publish-dirty'))
+    expect(view.getByTestId('git-dirty').getAttribute('data-paths')).toBe('/w/alpha/README.md')
+    fireEvent.click(view.getByTestId('publish-dirty-other'))
+    expect(view.getByTestId('git-dirty').getAttribute('data-paths')).toBe('/w/alpha/OTHER.md')
+  })
 })

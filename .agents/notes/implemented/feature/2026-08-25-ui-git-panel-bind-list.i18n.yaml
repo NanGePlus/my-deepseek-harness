@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-25-ui-git-panel-bind-list.md
-2026-08-25-ui-git-panel-bind-list.md: 3e9e750f9ff6a9c53d34e20a0c52594212129c9d
-2026-08-25-ui-git-panel-bind-list.zh.md: ef787abd87aa2bfbd6ceb299f27211a2d2531485
+2026-08-25-ui-git-panel-bind-list.md: b8a1acc652ac5cfcc21d258befeb754b30c479ca
+2026-08-25-ui-git-panel-bind-list.zh.md: c3933e1ee43d3849be38db17492f2562e4a5247b
