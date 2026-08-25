@@ -113,7 +113,8 @@
 | `fix/file-editor-v1-qa-validation` | PR [#48](https://github.com/NanGePlus/my-deepseek-harness/pull/48)：**工具箱**文案与 capsule 入口、Tab 样式对齐对话区；**Markdown 预览 WYSIWYG**（TipTap）与 IME/wrap 修复；**Add to Chat file-context pill**（Markdown 源码 + 全语言 Monaco → composer pill；发送展开进 prompt；**已发送用户气泡** pill 投影并可点击打开编辑器） | 已合并入 `custom/main` |
 | `fix/file-editor-v1-qa` | Tab 批量关闭、删除/重命名/同名冲突、文件夹重命名 Tab 同步、Markdown 默认源码、空状态 UI | 已并入 `custom/main` 或与本线并行，合并前需 reconcile |
 | `fix/file-editor-v1-verify-fix` | 大文件 + 目录 listing 性能修复 | 已合并入 `custom/main` |
-| `docs/git-panel-v2-prd` | Git 面板 V2：父 PRD [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)；切片 #52–#59 | 规格已提交，实现未开工 |
+| `docs/git-panel-v2-prd` | Git 面板 V2：父 PRD [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)；切片 #52–#59 | PR [#60](https://github.com/NanGePlus/my-deepseek-harness/pull/60) 已合并入 `custom/main` |
+| `issue/52-d-global-git-panel-design-close` | [#52](https://github.com/NanGePlus/my-deepseek-harness/issues/52) `#D-global`：验收关闭 Git 面板 DESIGN.md | 进行中 |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
@@ -148,4 +149,5 @@
 | 2026-08-23 | 文件树自动刷新 | 保存 / `watchPath` 外部变更 / Workspace 根监听后重载 listing；改 `ui-file-editor` 后需 `run bundle` |
 | 2026-08-25 | 起草 Git 面板 V2 PRD | `docs/prd/git-panel-v2.md`；领域见 `CONTEXT.md`，ADR-0003/0004 |
 | 2026-08-25 | 发布 Git 面板 V2 Issue | 父 PRD [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)；#52 `#D-global`；#53/#54 Host Git RPC；#55 app-shell 三段 Tab；#56–#59 `git-panel` 四刀 |
-| 2026-08-25 | 提交 Git 面板 V2 规格 | 分支 `docs/git-panel-v2-prd`：PRD、ADR-0003/0004、`CONTEXT.md`、DESIGN 多行/禁用原语 |
+| 2026-08-25 | 提交 Git 面板 V2 规格 | 分支 `docs/git-panel-v2-prd`：PRD、ADR-0003/0004、`CONTEXT.md`、DESIGN 多行/禁用原语；PR [#60](https://github.com/NanGePlus/my-deepseek-harness/pull/60) 已合并 |
+| 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/52-d-global-git-panel-design-close` | Issue [#52](https://github.com/NanGePlus/my-deepseek-harness/issues/52) `#D-global` 验收关闭；Git 面板消费既有品牌板，不新增 §5 原语 |
