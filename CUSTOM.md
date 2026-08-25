@@ -124,7 +124,7 @@
 | `issue/52-d-global-git-panel-design-close` | [#52](https://github.com/NanGePlus/my-deepseek-harness/issues/52) `#D-global`：验收关闭 Git 面板 DESIGN.md | 进行中 |
 | `issue/53-host-git-rpc-inspect` | [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53) Host Git RPC：仓库发现、变更列表、差异预览与初始化 | 已合并入 `custom/main`（PR [#62](https://github.com/NanGePlus/my-deepseek-harness/pull/62)） |
 | `issue/54-host-git-rpc-write` | [#54](https://github.com/NanGePlus/my-deepseek-harness/issues/54) Host Git RPC：暂存、取消暂存、丢弃与提交 | 已合并入 `custom/main`（PR [#63](https://github.com/NanGePlus/my-deepseek-harness/pull/63)） |
-| `issue/55-app-shell-details-three-tab` | [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55) app-shell：工具箱三段 Tab 与 Git 槽位 | 进行中 |
+| `issue/55-app-shell-details-three-tab` | [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55) app-shell：工具箱三段 Tab 与 Git 槽位 | 已合并入 `custom/main`（PR [#64](https://github.com/NanGePlus/my-deepseek-harness/pull/64)） |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
@@ -164,3 +164,4 @@
 | 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/53-host-git-rpc-inspect` | Issue [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53) Host Git 只读 RPC；不改 V1 `gitStatus`，不暴露任意 argv |
 | 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/54-host-git-rpc-write` | Issue [#54](https://github.com/NanGePlus/my-deepseek-harness/issues/54) Host Git 写 RPC：暂存 / 取消暂存 / 丢弃 / 提交；按块 patch 由 Host 拼装；不暴露任意 argv |
 | 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/55-app-shell-details-three-tab` | Issue [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55) 工具箱三段 Tab（资源管理器 \| Git \| 工具详情）；声明 `conversation.details.git`；切走 Git 只隐藏不卸载 |
+| 2026-08-25 | PR [#64](https://github.com/NanGePlus/my-deepseek-harness/pull/64) 合并入 `custom/main` | 关闭 Issue [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55)；保留分支 `issue/55-app-shell-details-three-tab` |
