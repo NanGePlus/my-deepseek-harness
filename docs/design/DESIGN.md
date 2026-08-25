@@ -132,6 +132,8 @@ Every component is a generic UI primitive for the file-editor UI to consume. Col
 * **Default:** background `--dsw-alias-bg-base`; border `--dsw-alias-border-l2`; text `--dsw-alias-label-primary`; radius 6px; height 28px (default single line).
 * **Focus:** border `--dsw-alias-brand-primary`; no outer glow; 1px-equivalent ghost at most.
 * **Error:** border `semantic-error` (`#EC1313`); helper copy `semantic-error`; used for validation failures such as a name collision.
+* **Disabled:** text `--dsw-alias-label-caption`; border `--dsw-alias-border-l2`; background `--dsw-alias-bg-overlay`; no focus stroke; cursor not-allowed.
+* **Multiline:** same fill, border, text, radius, focus, error, and disabled tokens as the single line; min-height 72px; padding 8px 10px; type 13px/18px (`--dsw-font-family`); overflow auto; no corner resize handle. Placeholder color is `label-caption`; this document does not specify product placeholder copy.
 
 ### Card container
 

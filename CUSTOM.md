@@ -7,13 +7,14 @@
 - 运行方式：从源码 `pnpm install` / `pnpm run build:lib:host` + client bundle + `pnpm run build:web` / `pnpm dsh web`
 - Node：^22.19 或 >=24；pnpm@11.7.0（Corepack）
 - 扩展策略：V1 文件编辑器因需改 Host RPC 与 **工具箱**（details 栏）壳层，**直接改 `packages/`**；长期仍优先树外插件 / 组合包，不改 `vendor/`
-- 领域与决策：`CONTEXT.md`、`docs/adr/0001-file-editor-host-rpc.md`、`docs/adr/0002-file-editor-details-tab.md`、`docs/prd/file-editor-v1.md`
+- 领域与决策：`CONTEXT.md`、`docs/adr/0001–0002`（文件编辑器）、`docs/adr/0003–0004`（Git 面板）、`docs/prd/file-editor-v1.md`、`docs/prd/git-panel-v2.md`
 
 ## 产品
 - 产品名：（待填写）
 - 默认 profile：`web`
 - 模型提供方：DeepSeek / 其它 / 自定义 OpenAI 兼容端点
 - **V1 定制重点**：Web **工具箱**（原 details 栏）内嵌 Workspace 文件编辑器（文件树 + Monaco 多 Tab），与 Agent 对话并列、不占用中栏
+- **V2 定制重点（规划中，未落地）**：工具箱增加 **Git 面板**（工作区变更 + 差异预览）；PRD 见 `docs/prd/git-panel-v2.md` 与 Issue [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)
 
 ## 已实现定制功能（相对上游 master）
 
@@ -112,6 +113,7 @@
 | `fix/file-editor-v1-qa-validation` | PR [#48](https://github.com/NanGePlus/my-deepseek-harness/pull/48)：**工具箱**文案与 capsule 入口、Tab 样式对齐对话区；**Markdown 预览 WYSIWYG**（TipTap）与 IME/wrap 修复；**Add to Chat file-context pill**（Markdown 源码 + 全语言 Monaco → composer pill；发送展开进 prompt；**已发送用户气泡** pill 投影并可点击打开编辑器） | 已合并入 `custom/main` |
 | `fix/file-editor-v1-qa` | Tab 批量关闭、删除/重命名/同名冲突、文件夹重命名 Tab 同步、Markdown 默认源码、空状态 UI | 已并入 `custom/main` 或与本线并行，合并前需 reconcile |
 | `fix/file-editor-v1-verify-fix` | 大文件 + 目录 listing 性能修复 | 已合并入 `custom/main` |
+| `docs/git-panel-v2-prd` | Git 面板 V2：父 PRD [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)；切片 #52–#59 | 规格已提交，实现未开工 |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
@@ -144,3 +146,6 @@
 | 2026-08-23 | 开 PR [#48](https://github.com/NanGePlus/my-deepseek-harness/pull/48) → `custom/main` | 分支 `fix/file-editor-v1-qa-validation`；7 commit（预览/IME + Add to Chat 全链路） |
 | 2026-08-23 | PR #48 合并入 `custom/main` | 保留分支 `fix/file-editor-v1-qa-validation` |
 | 2026-08-23 | 文件树自动刷新 | 保存 / `watchPath` 外部变更 / Workspace 根监听后重载 listing；改 `ui-file-editor` 后需 `run bundle` |
+| 2026-08-25 | 起草 Git 面板 V2 PRD | `docs/prd/git-panel-v2.md`；领域见 `CONTEXT.md`，ADR-0003/0004 |
+| 2026-08-25 | 发布 Git 面板 V2 Issue | 父 PRD [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)；#52 `#D-global`；#53/#54 Host Git RPC；#55 app-shell 三段 Tab；#56–#59 `git-panel` 四刀 |
+| 2026-08-25 | 提交 Git 面板 V2 规格 | 分支 `docs/git-panel-v2-prd`：PRD、ADR-0003/0004、`CONTEXT.md`、DESIGN 多行/禁用原语 |
