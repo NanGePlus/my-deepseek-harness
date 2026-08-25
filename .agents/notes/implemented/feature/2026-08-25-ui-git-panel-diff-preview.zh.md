@@ -21,7 +21,7 @@ Status: implemented
 
 合并冲突文件按工作区变更处理，预览种类相同；面板没有 Accept Current、abort 或 continue。按块丢弃复用整文件丢弃对话框和该行 `kind` 文案。写响应替换列表；若选中路径仍在该段，则重读预览。
 
-`apply` 经 `ctx.workspaces` 转发 `gitDiffPreview` 与可选 hunk header。本 occupant 不含 Git 操作守卫。
+`apply` 经 `ctx.workspaces` 转发 `gitDiffPreview` 与可选 hunk header。Git 操作守卫由 [Git 操作守卫](2026-08-25-ui-git-panel-action-guard.md) 拥有。
 
 ## 曾考虑的方案
 
@@ -36,7 +36,7 @@ Status: implemented
 ## 后果
 
 - [整文件暂存、丢弃与提交](2026-08-25-ui-git-panel-stage-commit.md) 仍拥有列表行整文件写入、草稿与 Explorer 徽章刷新；本笔记拥有预览、hunk header 与 Host 预览种类。
-- Git 操作守卫仍属后续 git-panel 切片。
+- Git 操作守卫由 [Git 操作守卫](2026-08-25-ui-git-panel-action-guard.md) 拥有。
 - `pnpm dsh web` 要看到预览栏，须重建 `ui-git` 的 client bundle。
 
 ## 测试

@@ -208,7 +208,7 @@ const DARK_ATTRIBUTE = 'data-ds-dark-theme'
  * @param props - root runtime share, locale, Workspace-partitioned tab store, and Host callbacks.
  */
 export function EditorSurface({
-  t, visible = true, useSessions, useWorkspaces, useStore, actions, dirtyGuard,
+  t, visible = true, setDirtyPaths, useSessions, useWorkspaces, useStore, actions, dirtyGuard,
   listWorkspaceEntries, gitStatus, readFile, writeFile,
   deletePath, renamePath, createWorkspaceDirectory, watchPath,
   lspSyncDocument, lspCloseDocument, lspHoverDocument, insertFileContextToComposer,
@@ -277,6 +277,11 @@ export function EditorSurface({
   const [lspDiagnostics, setLspDiagnostics] = useState<ReadonlyMap<string, readonly HostLspDiagnostic[]>>(new Map())
   const tabsRef = useRef(tabs)
   tabsRef.current = tabs
+
+  useEffect(() => {
+    // Host-absolute dirty text-tab paths for the Git action guard; empty when none are dirty.
+    setDirtyPaths(tabs.filter(tabIsDirty).map(tab => tab.path))
+  }, [tabs, setDirtyPaths])
 
   useEffect(() => {
     setLspDiagnostics(new Map())

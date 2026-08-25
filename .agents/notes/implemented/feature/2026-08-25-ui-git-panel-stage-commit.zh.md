@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`ui-git` 经注入的 `ctx.workspaces` 闭包调用 [Host Git 工作区写 RPC](2026-08-25-host-git-write.md)：整文件 `gitStage` / `gitUnstage` / `gitDiscard` / `gitCommit`。写响应直接替换面板列表，occupant 不再跟一次 `gitWorkingTree`。这些 RPC 上的 hunk header 由 [差异预览与按块操作](2026-08-25-ui-git-panel-diff-preview.md) 拥有。本 occupant 不含 Git 操作守卫。
+`ui-git` 经注入的 `ctx.workspaces` 闭包调用 [Host Git 工作区写 RPC](2026-08-25-host-git-write.md)：整文件 `gitStage` / `gitUnstage` / `gitDiscard` / `gitCommit`。写响应直接替换面板列表，occupant 不再跟一次 `gitWorkingTree`。这些 RPC 上的 hunk header 由 [差异预览与按块操作](2026-08-25-ui-git-panel-diff-preview.md) 拥有。Git 操作守卫由 [Git 操作守卫](2026-08-25-ui-git-panel-action-guard.md) 拥有。
 
 未暂存行提供 **暂存** 与 **丢弃**；已暂存行只提供 **取消暂存**。段标题提供 **全部暂存** / **全部取消暂存**。丢弃打开面板内 `bg-layer-3` 对话框（不是全视口遮罩）：已跟踪修改用「丢弃更改」/ 恢复为暂存区或 HEAD；未跟踪用「丢弃未跟踪文件」/ 从磁盘删除；已跟踪删除用「丢弃更改」/ 把文件恢复到磁盘。Host `GitWorkingTreeChange.kind`（`modified` / `untracked` / `deleted`）选择文案。
 
@@ -33,7 +33,7 @@ Status: implemented
 ## 后果
 
 - [绑定/列表/初始化](2026-08-25-ui-git-panel-bind-list.md) 仍拥有发现、空态与按可见性的 inspect 读取；本笔记拥有整文件写入、草稿与 Explorer 徽章刷新。
-- 按块操作由 [差异预览与按块操作](2026-08-25-ui-git-panel-diff-preview.md) 拥有。Git 操作守卫仍属后续 git-panel 切片。
+- 按块操作由 [差异预览与按块操作](2026-08-25-ui-git-panel-diff-preview.md) 拥有。Git 操作守卫由 [Git 操作守卫](2026-08-25-ui-git-panel-action-guard.md) 拥有。
 - `pnpm dsh web` 要看到写操作和 Explorer `visible`，须重建 `ui-git` 以及 `ui-conversation` / `ui-file-editor` 的 client bundle。
 
 ## 测试

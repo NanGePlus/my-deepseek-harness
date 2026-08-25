@@ -29,7 +29,7 @@ First load uses a centered spinner. A later re-read of an already-shown reposito
 ## Consequences
 
 - `packages/bundle/web-app` registers `ui-git`. An empty Git seat is no longer the assembled web default.
-- Whole-file stage/discard/commit are owned by [whole-file stage, discard, and commit](2026-08-25-ui-git-panel-stage-commit.md). Hunk operations are owned by [diff preview and hunk operations](2026-08-25-ui-git-panel-diff-preview.md). The Git action guard remains a later slice.
+- Whole-file stage/discard/commit are owned by [whole-file stage, discard, and commit](2026-08-25-ui-git-panel-stage-commit.md). Hunk operations are owned by [diff preview and hunk operations](2026-08-25-ui-git-panel-diff-preview.md). The Git action guard is owned by [Git action guard](2026-08-25-ui-git-panel-action-guard.md).
 - The `ui-git` client bundle must rebuild before web e2e or `pnpm dsh web` shows the panel body.
 
 ## Testing

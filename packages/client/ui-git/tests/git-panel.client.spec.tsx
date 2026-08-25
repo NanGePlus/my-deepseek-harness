@@ -151,6 +151,7 @@ const PREVIEW_KINDS_REPO: GitWorkingTreeResult = {
 
 function mount(over: {
   visible?: boolean
+  dirtyPaths?: readonly string[]
   items?: WorkspaceView[]
   sessionId?: SessionId
   noCurrentSession?: boolean
@@ -181,6 +182,7 @@ function mount(over: {
   const panelStore = createGitPanelStore().create()
   const props = {
     visible: over.visible ?? true,
+    dirtyPaths: over.dirtyPaths ?? [],
     t: makeTranslate(zh),
     useSessions: hookOf(sessionsStore),
     useWorkspaces: hookOf(workspacesStore),
@@ -1238,5 +1240,146 @@ describe('GitPanel', () => {
     b.view.rerender(<GitPanel {...b.props} visible={true} />)
     await waitFor(() => { expect(screen.getByText('选择一个文件以查看差异')).toBeTruthy() })
     expect(screen.queryByText('docs/note.md')).toBeNull()
+  })
+
+  it('dirty-disabled: dirty unstaged stage/discard are aria-disabled; unstage stays enabled', async () => {
+    mount({ tree: DIRTY_REPO, dirtyPaths: ['/repos/app/README.md', '/repos/app/docs/note.md'] })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    expect(within(rowOf('README.md')).getByRole('button', { name: '暂存' }).getAttribute('aria-disabled')).toBe('true')
+    expect(within(rowOf('README.md')).getByRole('button', { name: '丢弃' }).getAttribute('aria-disabled')).toBe('true')
+    expect(within(rowOf('src/a.ts')).getByRole('button', { name: '暂存' }).getAttribute('aria-disabled')).toBeNull()
+    expect(within(rowOf('docs/note.md')).getByRole('button', { name: '取消暂存' }).getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('commit-blocked: a dirty staged path keeps 提交 disabled after a message', async () => {
+    mount({ tree: DIRTY_REPO, dirtyPaths: ['/repos/app/docs/note.md'] })
+    await waitFor(() => { expect(screen.getByPlaceholderText('提交说明')).toBeTruthy() })
+    fireEvent.change(screen.getByPlaceholderText('提交说明'), { target: { value: 'ready' } })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(true)
+  })
+
+  it('guard-dialog: staging a dirty path opens the guard and does not call Host', async () => {
+    const gitStage = vi.fn(async () => CLEAN_REPO)
+    mount({ tree: DIRTY_REPO, dirtyPaths: ['/repos/app/README.md'], gitStage })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByRole('button', { name: '暂存' }))
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '文件有未保存的编辑' }))
+    expect(within(dialog).getByText('/repos/app/README.md')).toBeTruthy()
+    expect(within(dialog).getByText('请先显式保存、丢弃该编辑缓冲或关闭该标签页。不会自动保存。')).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: '取消' })).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: '保存' })).toBeNull()
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('dialog', { name: '文件有未保存的编辑' })).toBeNull()
+    expect(gitStage).not.toHaveBeenCalled()
+  })
+
+  it('guard-dialog: discarding a dirty path opens the guard instead of the discard confirm', async () => {
+    const gitDiscard = vi.fn(async () => CLEAN_REPO)
+    mount({ tree: DIRTY_REPO, dirtyPaths: ['/repos/app/README.md'], gitDiscard })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByRole('button', { name: '丢弃' }))
+    expect(screen.queryByRole('dialog', { name: '丢弃更改' })).toBeNull()
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '文件有未保存的编辑' }))
+    expect(within(dialog).getByText('/repos/app/README.md')).toBeTruthy()
+    expect(gitDiscard).not.toHaveBeenCalled()
+  })
+
+  it('unstages a dirty staged path without opening the guard', async () => {
+    const gitUnstage = vi.fn(async () => CLEAN_REPO)
+    mount({ tree: DIRTY_REPO, dirtyPaths: ['/repos/app/docs/note.md'], gitUnstage })
+    await waitFor(() => { expect(screen.getByText('docs/note.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('docs/note.md')).getByRole('button', { name: '取消暂存' }))
+    await waitFor(() => {
+      expect(gitUnstage).toHaveBeenCalledWith(WID, '/repos/app/docs/note.md')
+    })
+    expect(screen.queryByRole('dialog', { name: '文件有未保存的编辑' })).toBeNull()
+  })
+
+  it('guard-dialog: staging a dirty hunk opens the guard and does not call Host', async () => {
+    const gitStage = vi.fn(async () => CLEAN_REPO)
+    mount({ tree: DIRTY_REPO, dirtyPaths: ['/repos/app/README.md'], gitStage })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    const preview = await waitFor(() => previewPane())
+    fireEvent.click(within(preview).getByRole('button', { name: '暂存' }))
+    expect(await screen.findByRole('dialog', { name: '文件有未保存的编辑' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(within(preview).getAllByRole('button', { name: '暂存块' })[0]!)
+    expect(await screen.findByRole('dialog', { name: '文件有未保存的编辑' })).toBeTruthy()
+    expect(gitStage).not.toHaveBeenCalled()
+  })
+
+  it('guard-dialog: discarding a dirty hunk opens the guard and does not call Host', async () => {
+    const gitDiscard = vi.fn(async () => CLEAN_REPO)
+    mount({ tree: DIRTY_REPO, dirtyPaths: ['/repos/app/README.md'], gitDiscard })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    const preview = await waitFor(() => previewPane())
+    fireEvent.click(within(preview).getAllByRole('button', { name: '丢弃块' })[0]!)
+    expect(await screen.findByRole('dialog', { name: '文件有未保存的编辑' })).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: '丢弃更改' })).toBeNull()
+    expect(gitDiscard).not.toHaveBeenCalled()
+  })
+
+  it('unstages a dirty hunk without opening the guard', async () => {
+    const gitUnstage = vi.fn(async () => DIRTY_REPO)
+    const gitDiffPreview = vi.fn(async () => STAGED_TEXT_PREVIEW)
+    mount({
+      tree: DIRTY_REPO,
+      dirtyPaths: ['/repos/app/docs/note.md'],
+      gitUnstage,
+      gitDiffPreview,
+    })
+    await waitFor(() => { expect(screen.getByText('docs/note.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('docs/note.md')).getByText('docs/note.md'))
+    const preview = await waitFor(() => previewPane())
+    fireEvent.click(within(preview).getByRole('button', { name: '取消暂存块' }))
+    await waitFor(() => {
+      expect(gitUnstage).toHaveBeenCalledWith(WID, '/repos/app/docs/note.md', '@@ -1,3 +1,3 @@')
+    })
+    expect(screen.queryByRole('dialog', { name: '文件有未保存的编辑' })).toBeNull()
+  })
+
+  it('guard-dialog: stage-all with a dirty path opens the guard and stages nothing', async () => {
+    const gitStage = vi.fn(async () => CLEAN_REPO)
+    mount({ tree: DIRTY_REPO, dirtyPaths: ['/repos/app/README.md'], gitStage })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '全部暂存' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '全部暂存' }))
+    expect(await screen.findByRole('dialog', { name: '文件有未保存的编辑' })).toBeTruthy()
+    expect(gitStage).not.toHaveBeenCalled()
+  })
+
+  it('session switch with a commit-message draft does not open the Git action guard', async () => {
+    const other = workspace({
+      workspaceId: WID2,
+      path: '/w/beta',
+      title: 'beta',
+      sessionIds: [SID2],
+    })
+    const gitWorkingTree = vi.fn(async (workspaceId: WorkspaceId) => {
+      if (workspaceId === WID2) {
+        return {
+          availability: 'repository' as const,
+          repoRoot: '/repos/beta',
+          branch: 'topic',
+          unstaged: [],
+          staged: [change('beta.ts', 'modified', '/repos/beta')],
+        }
+      }
+      return DIRTY_REPO
+    })
+    const b = mount({ gitWorkingTree, items: [workspace(), other] })
+    await waitFor(() => { expect(screen.getByPlaceholderText('提交说明')).toBeTruthy() })
+    fireEvent.change(screen.getByPlaceholderText('提交说明'), { target: { value: 'alpha draft' } })
+    act(() => {
+      b.sessionsStore.update((draft) => {
+        draft.ids = [SID, SID2]
+        draft.current = SID2
+      })
+    })
+    b.view.rerender(<GitPanel {...b.props} />)
+    await waitFor(() => { expect(screen.getByText('beta.ts')).toBeTruthy() })
+    expect(screen.queryByRole('dialog', { name: '文件有未保存的编辑' })).toBeNull()
+    expect((screen.getByPlaceholderText('提交说明') as HTMLTextAreaElement).value).toBe('')
   })
 })

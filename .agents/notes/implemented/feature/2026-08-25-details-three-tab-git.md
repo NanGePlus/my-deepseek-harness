@@ -12,7 +12,7 @@ Git panel V2 needs a third toolbox segment beside the explorer and Tool details 
 
 `ui-conversation` owns the toolbox tab chrome: `DetailsPanel` renders **资源管理器 | Git | 工具详情**, and the per-session chat store `detailsTab` is `'editor' | 'git' | 'tool'`. Only one segment is selected. Selecting **资源管理器** or **Git** calls `layout.openDetails()` so a collapsed column opens; the shell does not add a fourth column or overlay.
 
-The Git occupant is child slot `conversation.details.git` (`kind: 'single'`, `scope: 'root'`, owner `{ visible }`). `ui-git` injects here. The Explorer occupant `conversation.details.editor` carries the same `{ visible }` owner so file-tree Git badges re-read disk when the user returns from Git ([whole-file stage, discard, and commit](2026-08-25-ui-git-panel-stage-commit.md)). All three tabpanels stay mounted; an unselected panel is `display: none` (`aria-hidden`). `visible` is true only while that segment is selected. Leaving Git does not unstage and does not clear a commit-message draft — those belong to the Git occupant, and hiding the panel is what preserves them.
+The Git occupant is child slot `conversation.details.git` (`kind: 'single'`, `scope: 'root'`, owner `{ visible, dirtyPaths }`). `ui-git` injects here. The Explorer occupant `conversation.details.editor` carries `{ visible, setDirtyPaths }`: `visible` lets file-tree Git badges re-read disk when the user returns from Git ([whole-file stage, discard, and commit](2026-08-25-ui-git-panel-stage-commit.md)); `setDirtyPaths` publishes Host-absolute dirty tab paths for the [Git action guard](2026-08-25-ui-git-panel-action-guard.md). `DetailsPanel` holds that list; it is not a runtime object-layer fact. All three tabpanels stay mounted; an unselected panel is `display: none` (`aria-hidden`). `visible` is true only while that segment is selected. Leaving Git does not unstage and does not clear a commit-message draft — those belong to the Git occupant, and hiding the panel is what preserves them.
 
 `ui-git` registers the occupant into this seat. Right-column drag and concession stay in `ui-layout`.
 
@@ -35,7 +35,7 @@ The Git occupant is child slot `conversation.details.git` (`kind: 'single'`, `sc
 
 ## Testing
 
-`packages/client/ui-conversation/tests/details-panel-tabs.client.spec.tsx` covers default order, single selection, Git selection opening the toolbox, and leaving Git while the occupant and draft stay mounted.
+`packages/client/ui-conversation/tests/details-panel-tabs.client.spec.tsx` covers default order, single selection, Git selection opening the toolbox, leaving Git while the occupant and draft stay mounted, and Explorer `setDirtyPaths` reaching Git `dirtyPaths`.
 
 `packages/client/ui-conversation/tests/chat-apply.client.spec.tsx` covers the `conversation.details.git` declaration and its collapse on fiber dispose.
 

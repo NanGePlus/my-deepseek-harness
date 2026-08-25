@@ -11,7 +11,7 @@ import { en, zh, type GitPanelKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** Git panel copy (empty states, lists, commit, preview, hunk actions). */
+    /** Git panel copy (empty states, lists, commit, preview, hunk actions, action guard). */
     gitPanel: GitPanelKey
   }
 }

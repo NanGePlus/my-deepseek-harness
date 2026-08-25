@@ -21,7 +21,7 @@ The preview toolbar repeats the whole-file actions of the selected side. Host `G
 
 A merge-conflict file is a working-tree change with the same preview kinds; the pane has no Accept Current, abort, or continue controls. Hunk discard reuses the whole-file discard dialog and the row's `kind` copy. Write responses replace the lists and re-fetch the preview when the selected path remains on that side.
 
-`apply` forwards `gitDiffPreview` and optional hunk headers through `ctx.workspaces`. The Git action guard is not in this occupant.
+`apply` forwards `gitDiffPreview` and optional hunk headers through `ctx.workspaces`. The Git action guard is owned by [Git action guard](2026-08-25-ui-git-panel-action-guard.md).
 
 ## Alternatives considered
 
@@ -36,7 +36,7 @@ A merge-conflict file is a working-tree change with the same preview kinds; the 
 ## Consequences
 
 - [Whole-file stage, discard, and commit](2026-08-25-ui-git-panel-stage-commit.md) still owns list-row whole-file writes, drafts, and Explorer badge refresh; this note owns preview, hunk headers, and the Host preview kinds.
-- The Git action guard remains a later git-panel slice.
+- The Git action guard is owned by [Git action guard](2026-08-25-ui-git-panel-action-guard.md).
 - The `ui-git` client bundle must rebuild before `pnpm dsh web` shows the preview pane.
 
 ## Testing

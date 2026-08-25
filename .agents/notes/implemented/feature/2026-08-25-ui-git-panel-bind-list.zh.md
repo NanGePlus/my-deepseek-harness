@@ -29,7 +29,7 @@ Status: implemented
 ## 后果
 
 - `packages/bundle/web-app` 注册 `ui-git`。空的 Git 席位不再是组装后的 Web 默认态。
-- 整文件暂存/丢弃/提交由 [整文件暂存、丢弃与提交](2026-08-25-ui-git-panel-stage-commit.md) 拥有。按块操作由 [差异预览与按块操作](2026-08-25-ui-git-panel-diff-preview.md) 拥有。Git 操作守卫仍属后续切片。
+- 整文件暂存/丢弃/提交由 [整文件暂存、丢弃与提交](2026-08-25-ui-git-panel-stage-commit.md) 拥有。按块操作由 [差异预览与按块操作](2026-08-25-ui-git-panel-diff-preview.md) 拥有。Git 操作守卫由 [Git 操作守卫](2026-08-25-ui-git-panel-action-guard.md) 拥有。
 - web e2e 或 `pnpm dsh web` 要看到面板正文，须先重建 `ui-git` 的 client bundle。
 
 ## 测试

@@ -37,6 +37,9 @@ export const zh = {
   'git.hunk.stage': '暂存块',
   'git.hunk.unstage': '取消暂存块',
   'git.hunk.discard': '丢弃块',
+  'git.guard.title': '文件有未保存的编辑',
+  'git.guard.body': '请先显式保存、丢弃该编辑缓冲或关闭该标签页。不会自动保存。',
+  'git.guard.cancel': '取消',
 } as const
 
 /** English dictionary, checked complete against the zh key set. */
@@ -78,6 +81,9 @@ export const en = {
   'git.hunk.stage': 'Stage hunk',
   'git.hunk.unstage': 'Unstage hunk',
   'git.hunk.discard': 'Discard hunk',
+  'git.guard.title': 'File has unsaved edits',
+  'git.guard.body': 'Save, discard the edit buffer, or close that tab first. The panel does not auto-save.',
+  'git.guard.cancel': 'Cancel',
 } as const
 
 /** The gitPanel namespace key union. */

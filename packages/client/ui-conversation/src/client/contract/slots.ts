@@ -127,7 +127,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * The file-editor surface rendered when the details segmented tab selects
      * 「资源管理器」. One occupant; ui-file-editor injects here. `visible` is
      * true only while Explorer is the selected segment so Git badges re-read
-     * disk after Git-panel writes.
+     * disk after Git-panel writes. `setDirtyPaths` publishes dirty tab paths
+     * for the Git action guard; it is not a runtime object-layer fact.
      */
     'conversation.details.editor': { kind: 'single'; scope: 'root'; owner: DetailsEditorOwnerProps }
     /**
@@ -135,7 +136,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * One occupant; ui-git injects here. The shell hides this seat when the
      * tab is not selected and does not unmount it. `visible` is true only
      * while Git is the selected segment so the occupant can re-read disk
-     * when the user returns to the tab.
+     * when the user returns to the tab. `dirtyPaths` is the read-only dirty
+     * editor-tab set written by the Explorer occupant.
      */
     'conversation.details.git': { kind: 'single'; scope: 'root'; owner: DetailsGitOwnerProps }
     /**
@@ -427,12 +429,22 @@ export interface DetailsToolOwnerProps {
 export interface DetailsGitOwnerProps {
   /** True while the toolbox Git segment is selected. Hidden panels stay mounted. */
   visible: boolean
+  /**
+   * Host-absolute paths of dirty editor tabs for the bound Workspace.
+   * Read-only; the Git occupant must not write this list.
+   */
+  dirtyPaths: readonly string[]
 }
 
 /** Owner share of the toolbox Explorer occupant: whether the Explorer segment is selected. */
 export interface DetailsEditorOwnerProps {
   /** True while the toolbox Explorer segment is selected. Hidden panels stay mounted. */
   visible: boolean
+  /**
+   * Publish the current dirty editor-tab Host-absolute paths.
+   * @param paths - dirty text-tab paths; empty when none are dirty.
+   */
+  setDirtyPaths: (paths: readonly string[]) => void
 }
 
 /**
