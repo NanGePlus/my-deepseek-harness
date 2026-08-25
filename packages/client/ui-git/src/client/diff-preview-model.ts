@@ -5,7 +5,6 @@ import { charDiffPair, type CharSpan } from './inline-char-diff.ts'
 import { lineNumbersForHunk, parseHunkHeader } from './hunk-line-numbers.ts'
 
 export type DiffPreviewRow =
-  | { kind: 'header'; header: string; hunkHeader: string }
   | {
     kind: 'line'
     origin: GitDiffLine['origin']
@@ -55,20 +54,29 @@ export function buildDiffPreviewRows(preview: GitDiffPreview): DiffPreviewRow[] 
 }
 
 function buildTrackedTextRows(hunks: readonly GitDiffHunk[], fileText: string): DiffPreviewRow[] {
-  const rows: DiffPreviewRow[] = []
   const fileLines = contentLines(fileText)
-  let lastNewLine = 0
+  if (fileLines.length === 0) return buildHunksOnlyRows(hunks)
+
+  const rows: DiffPreviewRow[] = []
+  let nextNewLine = 1
   for (const hunk of hunks) {
     const range = parseHunkHeader(hunk.header)
-    if (range !== undefined && range.newStart > lastNewLine + 1) {
-      appendGapContextRows(rows, fileLines, lastNewLine + 1, range.newStart - 1)
+    if (range === undefined) {
+      appendHunkLineRows(rows, hunk)
+      continue
     }
-    rows.push({ kind: 'header', header: hunk.header, hunkHeader: hunk.header })
+    appendGapContextRows(rows, fileLines, nextNewLine, range.newStart - 1)
     appendHunkLineRows(rows, hunk)
-    lastNewLine = Math.max(lastNewLine, endNewLine(hunk.header, hunk.lines))
+    nextNewLine = endNewLine(hunk.header, hunk.lines) + 1
   }
-  if (fileLines.length > lastNewLine) {
-    appendGapContextRows(rows, fileLines, lastNewLine + 1, fileLines.length)
+  appendGapContextRows(rows, fileLines, nextNewLine, fileLines.length)
+  return rows
+}
+
+function buildHunksOnlyRows(hunks: readonly GitDiffHunk[]): DiffPreviewRow[] {
+  const rows: DiffPreviewRow[] = []
+  for (const hunk of hunks) {
+    appendHunkLineRows(rows, hunk)
   }
   return rows
 }
@@ -79,6 +87,7 @@ function appendGapContextRows(
   fromLine: number,
   toLine: number,
 ): void {
+  if (fromLine > toLine) return
   for (let lineNum = fromLine; lineNum <= toLine; lineNum++) {
     const text = fileLines[lineNum - 1]
     if (text === undefined) continue

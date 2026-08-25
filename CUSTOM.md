@@ -86,7 +86,9 @@
 | `packages/host/apiproxy/` | 文件编辑器 Host RPC、listing 性能、`readFile` 大小上限；**2026-08-25** Git 面板只读 RPC（`gitWorkingTree` / `gitInit` / `gitDiffPreview`）；**2026-08-25** Git 面板写 RPC（`gitStage` / `gitUnstage` / `gitDiscard` / `gitCommit`）；**2026-08-25** `GitWorkingTreeChange.kind`（modified / untracked / deleted）；**2026-08-25** porcelain 引号路径 UTF-8 八进制解码；Git UI 过滤 `.DS_Store`；**2026-08-25** `gitDiffPreview` 的 `text` 形态附带 `fileText`（工作区/暂存区全文） | 2026-08 |
 | `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat；**2026-08-23** 保存/外部变更后文件树自动刷新；**2026-08-25** 资源管理器 `visible` 切回后重读 Git 徽章；**2026-08-25** 经 `setDirtyPaths` 发布 dirty Tab 路径供 Git 操作守卫 | 2026-08 |
 | `packages/client/ui-conversation/` | 工具箱 segmented Tab、Tool 详情与编辑器 Tab 协调；**2026-08-22** 工具箱文案、capsule 入口、Tab 样式对齐对话区；**2026-08-23** 已发送用户消息 file-context pill 展示投影；**2026-08-25** 工具箱三段 Tab（资源管理器 \| Git \| 工具详情）与 `conversation.details.git` 槽位；**2026-08-25** Git 槽传入 `visible` 供面板按切 Tab 重读；**2026-08-25** Explorer 槽传入 `visible` 供切回后重读 Git 徽章；**2026-08-25** dirty 路径集合：Explorer 写入、Git 只读 | 2026-08 |
-| `packages/client/ui-git/` | **新包**：工具箱 Git 面板 occupant（绑定 Workspace、两段变更列表、四种空态、初始化）；**2026-08-25** 整文件暂存 / 取消暂存 / 丢弃确认 / 提交与按 Session 草稿；**2026-08-25** 单击行差异预览与按块暂存 / 取消暂存 / 丢弃；**2026-08-25** Git 操作守卫（dirty 路径禁暂存/丢弃/提交，取消暂存不受限）；**2026-08-25** 左侧操作区背景对齐资源管理器文件树（`sidebar-fill`）、默认 180px 宽、可拖拽调整与预览区分栏；**2026-08-25** 差异预览：`@@` 头、全文补齐、字符级高亮、右侧 minimap | 2026-08 |
+| `packages/client/ui-git/` | **新包**：工具箱 Git 面板 occupant（绑定 Workspace、两段变更列表、四种空态、初始化）；**2026-08-25** 整文件暂存 / 取消暂存 / 丢弃确认 / 提交与按 Session 草稿；**2026-08-25** 单击行差异预览与按块暂存 / 取消暂存 / 丢弃；**2026-08-25** Git 操作守卫（dirty 路径禁暂存/丢弃/提交，取消暂存不受限）；**2026-08-25** 左侧操作区背景对齐资源管理器文件树（`sidebar-fill`）、默认 180px 宽、可拖拽调整与预览区分栏；**2026-08-25** 差异预览：全文补齐、字符级高亮、右侧 minimap、scroll-reveal 滚动条、shiki 语法高亮（不展示 `@@` hunk 头行） | 2026-08 |
+| `packages/client/ui-primitives/` | **2026-08-25** 导出 `highlightLines` / `subscribeGrammarLoaded` / `HighlightSpan` 供 Git 差异预览复用 shiki 高亮 | 2026-08 |
+| `packages/client/web/` | **2026-08-25** seed 显式 pin `highlightLines` / `grammarLoadCount` / `subscribeGrammarLoaded`，供 Git 差异预览等平台插件消费 | 2026-08 |
 | `packages/client/runtime/` | `WorkspaceRuntime` 转发新 Host RPC；**2026-08-25** 转发 Git 面板只读 RPC；**2026-08-25** 转发 Git 面板写 RPC | 2026-08 |
 | `packages/client/ui-primitives/` | Mermaid 块、ZoomPanLightbox、Markdown 图片 | 2026-08 |
 | `packages/client/ui-tool/` | Tool 行 selection → details 跳转 | 2026-08 |
@@ -191,4 +193,12 @@
 | 2026-08-25 | Git 面板段标题文案 | **更改 / 暂存的更改** → **未选入提交 / 已选入提交** |
 | 2026-08-25 | Git 面板差异预览 VS Code 布局 | 行号 + ± 前缀 + 行背景色；块操作改为 gutter 图标（aria 仍用暂存块/丢弃块） |
 | 2026-08-25 | Git 面板差异预览增强 | 展示 `@@` hunk 头、用 `fileText` 补齐 hunk 间未改行、相邻 -/+ 行字符级高亮、右侧 minimap 与滚动同步；大文件预览限 2000 行并压缩 minimap，避免布局撑爆白屏 |
+| 2026-08-25 | Git 面板差异预览修复 | `fileText` 按文件行号从第 1 行起补齐 hunk 前/后未改行；minimap 按文件行号分桶（不再按渲染行 index），色块位置与改动行对齐；Host 未返回 `fileText` 时用 `readFile` 回退补齐 |
+| 2026-08-25 | Git 面板差异预览换行 | 预览行 `pre-wrap` 按宽度自动折行，不再单行截断 |
+| 2026-08-25 | Git 面板 minimap 对齐 | 每处改动一对标记：红块左上（8×3px）、绿块在其右下错开；单独增删同色块 |
 | 2026-08-25 | Git 面板分支文案 | **分支** → **提交到分支** |
+| 2026-08-25 | Git 面板差异预览 polish | minimap 红绿标记放大（12×5px）；预览区 scroll-reveal 滚动条对齐资源管理器；编程语言文件 shiki 语法高亮（与 read 卡片同链路），字符级 diff 高亮叠加其上 |
+| 2026-08-25 | Git 面板差异预览白屏修复 | web seed 显式 pin `highlightLines` 等平台导出，避免 tree-shake 后插件 `require` 得到 `undefined`；`ui-primitives` 需 tsc+tsdown；预览高亮缺导出时降级为纯文本 |
+| 2026-08-25 | Git 面板变更列表光标 | 文件行悬浮/点击用手势指针，对齐资源管理器文件树 |
+| 2026-08-25 | Git 面板差异预览去掉 hunk 头 | 不再展示 `@@` 行；按块暂存/丢弃仍用 hunk 头调用 Host |
+| 2026-08-25 | Git 面板图标按钮 tooltip | 列表行/预览 gutter/区块头图标 hover 显示与资源管理器一致的底部文字提示（500ms 延迟） |

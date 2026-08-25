@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from 'react'
 import {
   Button, IconCodeOutline16, IconFolderClose16, IconLoadingOutline16, IconPlusOutline16,
-  IconRefreshOutline16,
+  IconRefreshOutline16, Tooltip, useScrollRevealScrollbar, type HighlightSpan,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -15,12 +15,17 @@ import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { changeKindLetter, splitChangePath } from './change-path-label.ts'
 import { fileIconUrlForPath, FILE_ICON_BASE_URL } from './file-icon.ts'
 import { buildDiffPreviewRows, type DiffPreviewRow } from './diff-preview-model.ts'
+import { DIFF_ROW_ATTR } from './DiffMinimap.tsx'
 import type { CharSpan } from './inline-char-diff.ts'
 import { DiffMinimap } from './DiffMinimap.tsx'
+import { useDiffSyntaxHighlights } from './diff-syntax-highlight.ts'
+import { mergeLineHighlight } from './merge-line-highlight.ts'
 import { clampOpsWidth, OPS_WIDTH_DEFAULT } from './git-panel-layout.ts'
 import { GitSplitHandle } from './GitSplitHandle.tsx'
 import type { createGitPanelStore } from './stores.ts'
 import css from './GitPanel.module.css'
+
+const ICON_TOOLTIP_DELAY_MS = 500
 
 /** Host Git callbacks closed over `ctx.workspaces` in apply. */
 export interface GitPanelInjected {
@@ -598,6 +603,15 @@ function renderRepository(
 function DiffPreviewPane({ body }: { body: RepoBody }): ReactNode {
   const { t, selection, preview } = body
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { ref: scrollRevealRef, active: scrollActive } = useScrollRevealScrollbar()
+  const setPreviewScrollRef = useCallback((element: HTMLDivElement | null) => {
+    scrollRef.current = element
+    scrollRevealRef(element)
+  }, [scrollRevealRef])
+  useEffect(() => {
+    if (preview.kind !== 'ready') return
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [preview, selection])
   return (
     <div className={css.preview} role="region" aria-label={t('git.preview.region')}>
       {selection === null || preview.kind === 'idle'
@@ -609,7 +623,10 @@ function DiffPreviewPane({ body }: { body: RepoBody }): ReactNode {
               <WholeFilePreviewActions side={selection.side} row={selection.row} body={body} />
             </div>
             <div className={css.previewScrollWrap}>
-              <div className={css.previewBody} ref={scrollRef}>
+              <div
+                className={scrollActive ? `${css.previewBody} ${css.previewBodyActive}` : css.previewBody}
+                ref={setPreviewScrollRef}
+              >
                 {preview.kind === 'loading' && (
                   <div className={css.previewFeedback} role="status" aria-label={t('git.loading')}>
                     <span className={css.spinner} aria-hidden="true">
@@ -690,6 +707,10 @@ function DiffPreviewContent({
   selection: Selection
   body: RepoBody
 }): ReactNode {
+  const rows = preview.kind === 'binary' || preview.kind === 'deleted-binary'
+    ? []
+    : buildDiffPreviewRows(preview)
+  const syntaxByRow = useDiffSyntaxHighlights(rows, selection.row.absolutePath)
   switch (preview.kind) {
     case 'binary':
     case 'deleted-binary':
@@ -700,33 +721,30 @@ function DiffPreviewContent({
           </div>
         </div>
       )
-    default: {
-      const rows = buildDiffPreviewRows(preview)
+    default:
       return rows.map((row, index) => (
         <DiffPreviewRowView
           key={index}
           row={row}
           selection={selection}
           body={body}
+          syntaxSpans={syntaxByRow.get(index)}
         />
       ))
-    }
   }
 }
 
 function DiffPreviewRowView({
-  row, selection, body,
+  row, selection, body, syntaxSpans,
 }: {
   row: DiffPreviewRow
   selection: Selection
   body: RepoBody
+  syntaxSpans?: readonly HighlightSpan[] | undefined
 }): ReactNode {
-  if (row.kind === 'header') {
-    return <div className={css.hunkHeader}>{row.header}</div>
-  }
   if (row.kind === 'truncated') {
     return (
-      <div className={css.previewTruncated} role="note">
+      <div className={css.previewTruncated} role="note" {...{ [DIFF_ROW_ATTR]: '' }}>
         {body.t('git.preview.truncated', { count: row.omitted })}
       </div>
     )
@@ -747,6 +765,7 @@ function DiffPreviewRowView({
       origin={row.origin}
       text={row.text}
       charSpans={row.charSpans}
+      syntaxSpans={syntaxSpans}
       gutterActions={gutter}
     />
   )
@@ -794,42 +813,49 @@ function HunkGutterActions({
 }
 
 function DiffLineRow({
-  lineNum, origin, text, charSpans, gutterActions,
+  lineNum, origin, text, charSpans, syntaxSpans, gutterActions,
 }: {
   lineNum: number
   origin: GitDiffLine['origin']
   text: string
   charSpans?: CharSpan[] | undefined
+  syntaxSpans?: readonly HighlightSpan[] | undefined
   gutterActions?: ReactNode
 }): ReactNode {
   const prefix = origin === 'add' ? '+' : origin === 'del' ? '-' : ' '
   return (
-    <div className={`${css.diffRow} ${diffRowClass(origin)}`}>
+    <div className={`${css.diffRow} ${diffRowClass(origin)}`} {...{ [DIFF_ROW_ATTR]: '' }}>
       <div className={css.diffGutterActions}>{gutterActions}</div>
       <div className={css.diffLineNum} aria-hidden="true">{lineNum > 0 ? String(lineNum) : ''}</div>
       <div className={css.diffPrefix} aria-hidden="true">{prefix}</div>
-      <DiffLineContent origin={origin} text={text} charSpans={charSpans} />
+      <DiffLineContent origin={origin} text={text} charSpans={charSpans} syntaxSpans={syntaxSpans} />
     </div>
   )
 }
 
 function DiffLineContent({
-  origin, text, charSpans,
+  origin, text, charSpans, syntaxSpans,
 }: {
   origin: GitDiffLine['origin']
   text: string
   charSpans?: CharSpan[] | undefined
+  syntaxSpans?: readonly HighlightSpan[] | undefined
 }): ReactNode {
   const baseClass = `${css.diffContent} ${diffLineClass(origin)}`
-  if (charSpans === undefined || charSpans.every(span => span.kind === 'same')) {
+  const merged = mergeLineHighlight(text, syntaxSpans, charSpans)
+  const plain = merged.length === 1
+    && merged[0]?.charKind === 'same'
+    && merged[0]?.style === undefined
+  if (plain) {
     return <div className={baseClass}>{text}</div>
   }
   return (
     <div className={baseClass}>
-      {charSpans.map((span, index) => (
+      {merged.map((span, index) => (
         <span
           key={index}
-          className={charSpanClass(origin, span.kind)}
+          className={charSpanClass(origin, span.charKind)}
+          style={span.style}
         >
           {span.text}
         </span>
@@ -1053,18 +1079,22 @@ function IconAction({
   children: ReactNode
 }) {
   return (
-    <button
-      type="button"
-      className={css.iconButton}
-      aria-label={label}
-      aria-disabled={disabled || undefined}
-      onClick={(event: MouseEvent<HTMLButtonElement>) => {
-        event.stopPropagation()
-        onClick()
-      }}
-    >
-      {children}
-    </button>
+    <Tooltip label={label} side="bottom" delayMs={ICON_TOOLTIP_DELAY_MS} disabled={disabled}>
+      <button
+        type="button"
+        className={css.iconButton}
+        aria-label={label}
+        disabled={disabled}
+        aria-disabled={disabled || undefined}
+        onClick={(event: MouseEvent<HTMLButtonElement>) => {
+          event.stopPropagation()
+          if (disabled) return
+          onClick()
+        }}
+      >
+        {children}
+      </button>
+    </Tooltip>
   )
 }
 

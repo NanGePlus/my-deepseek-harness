@@ -229,14 +229,16 @@
   cursor: pointer;
 }
 
-.iconButton:hover:not([aria-disabled='true']) {
+.iconButton:hover:not([aria-disabled='true']):not(:disabled) {
   background: var(--editor-hover-tint);
   color: var(--dsw-alias-label-primary);
 }
 
-.iconButton[aria-disabled='true'] {
+.iconButton[aria-disabled='true'],
+.iconButton:disabled {
   color: var(--dsw-alias-label-caption);
   cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .rowActions {
@@ -364,6 +366,7 @@
   align-items: center;
   gap: 6px;
   padding: 0 4px;
+  cursor: pointer;
 }
 
 .row:hover {
@@ -491,50 +494,63 @@
   flex-direction: column;
   overflow: auto;
   background: var(--dsw-alias-bg-base);
+  /* Scroll-reveal: hidden until the user scrolls (useScrollRevealScrollbar). */
+  --dsh-scrollbar-thumb: transparent;
+  --dsh-scrollbar-thumb-hover: transparent;
 }
 
-.hunkHeader {
-  padding: 4px 12px 4px 88px;
-  font-family: var(--ds-font-family-code);
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-label-caption);
-  background: color-mix(in srgb, var(--dsw-alias-label-caption) 8%, var(--dsw-alias-bg-base));
-  user-select: none;
-  white-space: pre;
+.previewBodyActive {
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 .minimap {
   flex: none;
-  width: 12px;
+  width: 22px;
   padding: 0 2px 0 0;
-  background: var(--dsw-alias-bg-base);
+  background: transparent;
   min-height: 0;
   align-self: stretch;
 }
 
 .minimapTrack {
   position: relative;
-  display: flex;
-  flex-direction: column;
   width: 100%;
   height: 100%;
   min-height: 0;
   cursor: pointer;
+  background: transparent;
 }
 
-.minimapContext,
+.minimapMarkerAnchor {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.minimapMarkerPair {
+  position: relative;
+  width: 18px;
+  height: 10px;
+}
+
+.minimapMarkerPair .minimapDel {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.minimapMarkerPair .minimapAdd {
+  position: absolute;
+  top: 5px;
+  left: 9px;
+}
+
 .minimapAdd,
-.minimapDel,
-.minimapHeader,
-.minimapTruncated {
-  flex: 1;
-  min-height: 1px;
-  width: 100%;
-}
-
-.minimapContext {
-  background: color-mix(in srgb, var(--dsw-alias-label-caption) 35%, transparent);
+.minimapDel {
+  flex: none;
+  width: 12px;
+  height: 5px;
 }
 
 .minimapAdd {
@@ -543,23 +559,6 @@
 
 .minimapDel {
   background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 75%, transparent);
-}
-
-.minimapHeader {
-  background: color-mix(in srgb, var(--dsw-alias-label-caption) 55%, transparent);
-}
-
-.minimapTruncated {
-  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 55%, transparent);
-}
-
-.minimapViewport {
-  position: absolute;
-  right: 0;
-  left: 0;
-  border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 35%, transparent);
-  background: color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
-  pointer-events: none;
 }
 
 .diffCharInsert {
@@ -589,7 +588,7 @@
 .diffRow {
   display: flex;
   min-height: 20px;
-  align-items: stretch;
+  align-items: flex-start;
   font-family: var(--ds-font-family-code);
   font-size: 13px;
   line-height: 20px;
@@ -601,7 +600,7 @@
   width: 28px;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 2px;
   padding: 0 2px;
   background: var(--dsw-alias-bg-base);
@@ -629,9 +628,9 @@
   flex: 1;
   min-width: 0;
   padding-right: 12px;
-  white-space: pre;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .diffContextRow {

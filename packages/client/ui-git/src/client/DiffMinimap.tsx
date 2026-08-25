@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from 'react'
 import type { DiffPreviewRow } from './diff-preview-model.ts'
-import { buildMinimapBuckets, type MinimapTone } from './diff-minimap-model.ts'
+import { buildMinimapMarkers, type MinimapMarker } from './diff-minimap-model.ts'
 import css from './GitPanel.module.css'
 
+/** Marker attribute on each minimap-tracked preview row element. */
+export const DIFF_ROW_ATTR = 'data-diff-row'
+
 /**
- * Render a VS Code-style minimap beside the diff preview.
- * @param rows - flattened preview rows driving line colors.
- * @param scrollRef - scrollport whose position the minimap mirrors.
+ * Render change markers beside the diff preview (red/green blocks only).
+ * @param rows - flattened preview rows driving marker positions.
+ * @param scrollRef - scrollport that click-to-scroll targets.
  */
 export function DiffMinimap({
   rows,
@@ -18,38 +21,52 @@ export function DiffMinimap({
   scrollRef: RefObject<HTMLDivElement | null>
 }): ReactNode {
   const trackRef = useRef<HTMLDivElement>(null)
-  const [viewport, setViewport] = useState({ topRatio: 0, heightRatio: 1 })
-  const buckets = useMemo(() => buildMinimapBuckets(rows), [rows])
+  const [rowWeights, setRowWeights] = useState<number[] | undefined>()
 
-  const syncViewport = useCallback(() => {
+  const measureRows = useCallback(() => {
     const scrollEl = scrollRef.current
-    if (scrollEl === null || scrollEl.scrollHeight <= 0) {
-      setViewport({ topRatio: 0, heightRatio: 1 })
+    if (scrollEl === null) return
+    const rowEls = scrollEl.querySelectorAll(`[${DIFF_ROW_ATTR}]`)
+    if (rowEls.length === 0) {
+      setRowWeights(undefined)
       return
     }
-    setViewport({
-      topRatio: scrollEl.scrollTop / scrollEl.scrollHeight,
-      heightRatio: Math.min(1, scrollEl.clientHeight / scrollEl.scrollHeight),
-    })
+    setRowWeights(Array.from(rowEls, el => el.getBoundingClientRect().height))
   }, [scrollRef])
 
   useEffect(() => {
+    let outerFrame = 0
+    let innerFrame = 0
+    outerFrame = requestAnimationFrame(() => {
+      innerFrame = requestAnimationFrame(measureRows)
+    })
     const scrollEl = scrollRef.current
-    if (scrollEl === null) return undefined
-    syncViewport()
-    scrollEl.addEventListener('scroll', syncViewport, { passive: true })
-    if (typeof ResizeObserver === 'undefined') {
+    if (scrollEl === null) {
       return () => {
-        scrollEl.removeEventListener('scroll', syncViewport)
+        cancelAnimationFrame(outerFrame)
+        cancelAnimationFrame(innerFrame)
       }
     }
-    const observer = new ResizeObserver(syncViewport)
+    if (typeof ResizeObserver === 'undefined') return () => {
+      cancelAnimationFrame(outerFrame)
+      cancelAnimationFrame(innerFrame)
+    }
+    const observer = new ResizeObserver(measureRows)
     observer.observe(scrollEl)
+    for (const el of scrollEl.querySelectorAll(`[${DIFF_ROW_ATTR}]`)) {
+      observer.observe(el)
+    }
     return () => {
-      scrollEl.removeEventListener('scroll', syncViewport)
+      cancelAnimationFrame(outerFrame)
+      cancelAnimationFrame(innerFrame)
       observer.disconnect()
     }
-  }, [scrollRef, syncViewport, rows])
+  }, [measureRows, rows, scrollRef])
+
+  const markers = useMemo(
+    () => buildMinimapMarkers(rows, rowWeights),
+    [rows, rowWeights],
+  )
 
   const onTrackClick = (event: MouseEvent<HTMLDivElement>): void => {
     const scrollEl = scrollRef.current
@@ -59,40 +76,35 @@ export function DiffMinimap({
     scrollEl.scrollTop = ratio * scrollEl.scrollHeight
   }
 
-  if (buckets.length === 0) return null
+  if (markers.length === 0) return null
 
   return (
     <div className={css.minimap} aria-hidden="true">
       <div className={css.minimapTrack} ref={trackRef} onClick={onTrackClick}>
-        {buckets.map((tone, index) => (
-          <div
-            key={index}
-            className={minimapToneClass(tone)}
-          />
+        {markers.map((marker, index) => (
+          <MinimapMarkerView key={index} marker={marker} />
         ))}
-        <div
-          className={css.minimapViewport}
-          style={{
-            top: `${viewport.topRatio * 100}%`,
-            height: `${viewport.heightRatio * 100}%`,
-          }}
-        />
       </div>
     </div>
   )
 }
 
-function minimapToneClass(tone: MinimapTone): string {
-  switch (tone) {
-    case 'header':
-      return css.minimapHeader as string
-    case 'add':
-      return css.minimapAdd as string
-    case 'del':
-      return css.minimapDel as string
-    case 'truncated':
-      return css.minimapTruncated as string
-    case 'context':
-      return css.minimapContext as string
-  }
+function MinimapMarkerView({ marker }: { marker: MinimapMarker }): ReactNode {
+  return (
+    <div
+      className={css.minimapMarkerAnchor}
+      style={{ top: `${marker.topRatio * 100}%` }}
+    >
+      {marker.del && marker.add
+        ? (
+          <div className={css.minimapMarkerPair}>
+            <div className={css.minimapDel} />
+            <div className={css.minimapAdd} />
+          </div>
+        )
+        : marker.del
+          ? <div className={css.minimapDel} />
+          : <div className={css.minimapAdd} />}
+    </div>
+  )
 }

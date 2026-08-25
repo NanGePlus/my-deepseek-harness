@@ -506,6 +506,19 @@ describe('GitPanel', () => {
     expect(screen.getByRole('button', { name: '全部取消暂存' })).toBeTruthy()
   })
 
+  it('shows a hover tooltip on row icon actions', async () => {
+    mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    vi.useFakeTimers()
+    try {
+      fireEvent.mouseEnter(within(rowOf('README.md')).getByRole('button', { name: '暂存' }))
+      act(() => { vi.advanceTimersByTime(500) })
+      expect(screen.getByRole('tooltip').textContent).toBe('暂存')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('stages one unstaged file into the staged list', async () => {
     const staged = {
       ...DIRTY_REPO,
@@ -848,7 +861,7 @@ describe('GitPanel', () => {
     expect(within(preview).getByText('line4')).toBeTruthy()
     expect(within(preview).getByText('pad')).toBeTruthy()
     expect(within(preview).getAllByText('tail-').length).toBeGreaterThanOrEqual(1)
-    expect(within(preview).getByText('@@ -1,3 +1,3 @@')).toBeTruthy()
+    expect(within(preview).queryByText('@@ -1,3 +1,3 @@')).toBeNull()
     expect(within(preview).getAllByRole('button', { name: '暂存块' })).toHaveLength(2)
     expect(within(preview).getAllByRole('button', { name: '丢弃块' })).toHaveLength(2)
     expect(within(preview).queryByRole('button', { name: '取消暂存块' })).toBeNull()
