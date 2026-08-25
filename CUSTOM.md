@@ -14,7 +14,7 @@
 - 默认 profile：`web`
 - 模型提供方：DeepSeek / 其它 / 自定义 OpenAI 兼容端点
 - **V1 定制重点**：Web **工具箱**（原 details 栏）内嵌 Workspace 文件编辑器（文件树 + Monaco 多 Tab），与 Agent 对话并列、不占用中栏
-- **V2 定制重点（进行中）**：工具箱增加 **Git 面板**（工作区变更 + 差异预览）；PRD 见 `docs/prd/git-panel-v2.md` 与 Issue [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)。Host Git 只读 RPC 见 Issue [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53)；写 RPC（暂存 / 取消暂存 / 丢弃 / 提交）见 Issue [#54](https://github.com/NanGePlus/my-deepseek-harness/issues/54)；工具箱三段 Tab 见 Issue [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55)；Git 面板绑定/列表/空态/初始化见 Issue [#56](https://github.com/NanGePlus/my-deepseek-harness/issues/56)；整文件暂存/丢弃/提交见 Issue [#57](https://github.com/NanGePlus/my-deepseek-harness/issues/57)
+- **V2 定制重点（进行中）**：工具箱增加 **Git 面板**（工作区变更 + 差异预览）；PRD 见 `docs/prd/git-panel-v2.md` 与 Issue [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)。Host Git 只读 RPC 见 Issue [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53)；写 RPC（暂存 / 取消暂存 / 丢弃 / 提交）见 Issue [#54](https://github.com/NanGePlus/my-deepseek-harness/issues/54)；工具箱三段 Tab 见 Issue [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55)；Git 面板绑定/列表/空态/初始化见 Issue [#56](https://github.com/NanGePlus/my-deepseek-harness/issues/56)；整文件暂存/丢弃/提交见 Issue [#57](https://github.com/NanGePlus/my-deepseek-harness/issues/57)；差异预览与按块操作见 Issue [#58](https://github.com/NanGePlus/my-deepseek-harness/issues/58)
 
 ## 已实现定制功能（相对上游 master）
 
@@ -76,7 +76,7 @@
 | 名称 | 形态 | 作用 | 日期 |
 |------|------|------|------|
 | `@deepseek-ai/dsh-client-ui-file-editor` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-file-editor` | 工具箱内文件编辑器 surface | 2026-08 |
-| `@deepseek-ai/dsh-client-ui-git` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-git` | 工具箱 Git 面板：仓库绑定、两段列表、空态、刷新与初始化；整文件暂存 / 取消暂存 / 丢弃（须确认）/ 提交；提交说明草稿按 Session | 2026-08 |
+| `@deepseek-ai/dsh-client-ui-git` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-git` | 工具箱 Git 面板：仓库绑定、两段列表、空态、刷新与初始化；整文件暂存 / 取消暂存 / 丢弃（须确认）/ 提交；提交说明草稿按 Session；单击行在面板内差异预览；已跟踪文本可按块暂存 / 取消暂存 / 丢弃 | 2026-08 |
 | `@deepseek-ai/dsh-lsp-editor` | Host 面新包 + apiproxy 接线 | 编辑器 LSP 文档 sync / hover / close | 2026-08 |
 
 ## 我改过的官方文件（尽量为空）
@@ -85,7 +85,7 @@
 | `packages/host/apiproxy/` | 文件编辑器 Host RPC、listing 性能、`readFile` 大小上限；**2026-08-25** Git 面板只读 RPC（`gitWorkingTree` / `gitInit` / `gitDiffPreview`）；**2026-08-25** Git 面板写 RPC（`gitStage` / `gitUnstage` / `gitDiscard` / `gitCommit`）；**2026-08-25** `GitWorkingTreeChange.kind`（modified / untracked / deleted） | 2026-08 |
 | `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat；**2026-08-23** 保存/外部变更后文件树自动刷新；**2026-08-25** 资源管理器 `visible` 切回后重读 Git 徽章 | 2026-08 |
 | `packages/client/ui-conversation/` | 工具箱 segmented Tab、Tool 详情与编辑器 Tab 协调；**2026-08-22** 工具箱文案、capsule 入口、Tab 样式对齐对话区；**2026-08-23** 已发送用户消息 file-context pill 展示投影；**2026-08-25** 工具箱三段 Tab（资源管理器 \| Git \| 工具详情）与 `conversation.details.git` 槽位；**2026-08-25** Git 槽传入 `visible` 供面板按切 Tab 重读；**2026-08-25** Explorer 槽传入 `visible` 供切回后重读 Git 徽章 | 2026-08 |
-| `packages/client/ui-git/` | **新包**：工具箱 Git 面板 occupant（绑定 Workspace、两段变更列表、四种空态、初始化）；**2026-08-25** 整文件暂存 / 取消暂存 / 丢弃确认 / 提交与按 Session 草稿 | 2026-08 |
+| `packages/client/ui-git/` | **新包**：工具箱 Git 面板 occupant（绑定 Workspace、两段变更列表、四种空态、初始化）；**2026-08-25** 整文件暂存 / 取消暂存 / 丢弃确认 / 提交与按 Session 草稿；**2026-08-25** 单击行差异预览与按块暂存 / 取消暂存 / 丢弃 | 2026-08 |
 | `packages/client/runtime/` | `WorkspaceRuntime` 转发新 Host RPC；**2026-08-25** 转发 Git 面板只读 RPC；**2026-08-25** 转发 Git 面板写 RPC | 2026-08 |
 | `packages/client/ui-primitives/` | Mermaid 块、ZoomPanLightbox、Markdown 图片 | 2026-08 |
 | `packages/client/ui-tool/` | Tool 行 selection → details 跳转 | 2026-08 |
@@ -130,6 +130,7 @@
 | `issue/55-app-shell-details-three-tab` | [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55) app-shell：工具箱三段 Tab 与 Git 槽位 | 已合并入 `custom/main`（PR [#64](https://github.com/NanGePlus/my-deepseek-harness/pull/64)） |
 | `issue/56-git-panel-bind-list` | [#56](https://github.com/NanGePlus/my-deepseek-harness/issues/56) `ui-git`：仓库绑定、两段列表、空态、刷新与初始化 | 已合并入 `custom/main`（PR [#65](https://github.com/NanGePlus/my-deepseek-harness/pull/65)） |
 | `issue/57-git-panel-stage-commit` | [#57](https://github.com/NanGePlus/my-deepseek-harness/issues/57) `ui-git`：整文件暂存、丢弃、提交说明与提交 | 已合并入 `custom/main`（PR [#66](https://github.com/NanGePlus/my-deepseek-harness/pull/66)） |
+| `issue/58-git-panel-diff-preview` | [#58](https://github.com/NanGePlus/my-deepseek-harness/issues/58) `ui-git`：差异预览与按块操作 | 进行中 |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
@@ -176,3 +177,5 @@
 | 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/57-git-panel-stage-commit` | Issue [#57](https://github.com/NanGePlus/my-deepseek-harness/issues/57) 整文件暂存、丢弃、提交说明与提交；按块与守卫留待后续切片 |
 | 2026-08-25 | 实现 Issue #57 Git 面板 2/4 切片 | 整文件暂存 / 取消暂存 / 丢弃确认 / 提交；草稿按 Session；Host `GitWorkingTreeChange.kind`；资源管理器切回后重读 Git 徽章 |
 | 2026-08-25 | PR [#66](https://github.com/NanGePlus/my-deepseek-harness/pull/66) 合并入 `custom/main` | 关闭 Issue [#57](https://github.com/NanGePlus/my-deepseek-harness/issues/57)；保留分支 `issue/57-git-panel-stage-commit` |
+| 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/58-git-panel-diff-preview` | Issue [#58](https://github.com/NanGePlus/my-deepseek-harness/issues/58) 差异预览与按块操作；Git 操作守卫留待后续切片 |
+| 2026-08-25 | 实现 Issue #58 Git 面板 3/4 切片 | 单击行在面板内预览；已跟踪文本按块暂存 / 取消暂存 / 丢弃确认；未跟踪 / 二进制 / 删除仅整文件操作 |

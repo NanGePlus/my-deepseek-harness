@@ -5,8 +5,8 @@ import { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
-  GitWorkingTreeChange, GitWorkingTreeResult, SessionId, SessionListState, WorkspaceId, WorkspaceListState,
-  WorkspaceView,
+  GitDiffPreview, GitWorkingTreeChange, GitWorkingTreeResult, SessionId, SessionListState,
+  WorkspaceId, WorkspaceListState, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore, DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { GitPanel, type GitPanelProps } from '../src/client/GitPanel.tsx'
@@ -105,6 +105,50 @@ const DISCARD_REPO: GitWorkingTreeResult = {
   staged: [],
 }
 
+const TEXT_PREVIEW: GitDiffPreview = {
+  kind: 'text',
+  hunks: [
+    {
+      header: '@@ -1,3 +1,3 @@',
+      lines: [
+        { origin: 'context', text: 'keep' },
+        { origin: 'del', text: 'old' },
+        { origin: 'add', text: 'new' },
+      ],
+    },
+    {
+      header: '@@ -8,2 +8,2 @@',
+      lines: [
+        { origin: 'del', text: 'tail-old' },
+        { origin: 'add', text: 'tail-new' },
+      ],
+    },
+  ],
+}
+
+const STAGED_TEXT_PREVIEW: GitDiffPreview = {
+  kind: 'text',
+  hunks: [TEXT_PREVIEW.hunks[0]!],
+}
+
+const PREVIEW_KINDS_REPO: GitWorkingTreeResult = {
+  availability: 'repository',
+  repoRoot: '/repos/app',
+  branch: 'main',
+  unstaged: [
+    change('src/a.ts', 'modified'),
+    change('new.ts', 'untracked'),
+    change('photo.bin', 'modified'),
+    change('gone.ts', 'deleted'),
+    change('blob.bin', 'deleted'),
+    change('conflict.ts', 'modified'),
+    change('outside.ts', 'modified', '/repos'),
+  ],
+  staged: [
+    change('src/a.ts', 'modified'),
+  ],
+}
+
 function mount(over: {
   visible?: boolean
   items?: WorkspaceView[]
@@ -113,6 +157,7 @@ function mount(over: {
   tree?: GitWorkingTreeResult | Promise<GitWorkingTreeResult>
   gitWorkingTree?: GitPanelProps['gitWorkingTree']
   gitInit?: GitPanelProps['gitInit']
+  gitDiffPreview?: GitPanelProps['gitDiffPreview']
   gitStage?: GitPanelProps['gitStage']
   gitUnstage?: GitPanelProps['gitUnstage']
   gitDiscard?: GitPanelProps['gitDiscard']
@@ -123,6 +168,7 @@ function mount(over: {
     return CLEAN_REPO
   }))
   const gitInit = vi.fn(over.gitInit ?? (async () => ({ repoRoot: ROOT })))
+  const gitDiffPreview = vi.fn(over.gitDiffPreview ?? (async () => TEXT_PREVIEW))
   const gitStage = vi.fn(over.gitStage ?? (async () => CLEAN_REPO))
   const gitUnstage = vi.fn(over.gitUnstage ?? (async () => CLEAN_REPO))
   const gitDiscard = vi.fn(over.gitDiscard ?? (async () => CLEAN_REPO))
@@ -142,6 +188,7 @@ function mount(over: {
     actions: panelStore.actions,
     gitWorkingTree,
     gitInit,
+    gitDiffPreview,
     gitStage,
     gitUnstage,
     gitDiscard,
@@ -150,7 +197,7 @@ function mount(over: {
   const view = render(<GitPanel {...props} />)
   return {
     view, props, sessionsStore, workspacesStore, panelStore,
-    gitWorkingTree, gitInit, gitStage, gitUnstage, gitDiscard, gitCommit,
+    gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit,
   }
 }
 
@@ -434,8 +481,12 @@ describe('GitPanel', () => {
     expect(glyph!.getAttribute('src')?.endsWith('/material-icons/file.svg')).toBe(true)
   })
 
-  function rowOf(path: string): HTMLElement {
-    return screen.getByText(path).closest('li')!
+  function rowOf(path: string, index = 0): HTMLElement {
+    return screen.getAllByText(path)[index]!.closest('li')!
+  }
+
+  function previewPane(): HTMLElement {
+    return screen.getByRole('region', { name: '差异预览' })
   }
 
   it('default: unstaged rows expose stage and discard; staged rows only unstage', async () => {
@@ -759,5 +810,433 @@ describe('GitPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '全部暂存' }))
     await waitFor(() => { expect(screen.getByText('index.lock')).toBeTruthy() })
     expect(gitStage).toHaveBeenCalledTimes(1)
+  })
+
+  it('default-preview: clicking a row loads the panel preview and does not open an editor tab', async () => {
+    const b = mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    await waitFor(() => {
+      expect(b.gitDiffPreview).toHaveBeenCalledWith(
+        WID, '/repos/app/README.md', 'unstaged', expect.any(AbortSignal),
+      )
+    })
+    const preview = previewPane()
+    expect(within(preview).getByText('README.md')).toBeTruthy()
+    expect(within(preview).getByRole('button', { name: '暂存' })).toBeTruthy()
+    expect(within(preview).getByRole('button', { name: '丢弃' })).toBeTruthy()
+    expect(screen.queryByText('选择一个文件以查看差异')).toBeNull()
+    expect(screen.queryByRole('button', { name: '在编辑器中打开' })).toBeNull()
+    expect(screen.getAllByText('README.md').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('docs/note.md')).toBeTruthy()
+  })
+
+  it('tracked-text: shows line-level hunks with stage/discard-hunk actions on the unstaged side', async () => {
+    mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    const preview = await waitFor(() => previewPane())
+    expect(within(preview).getByText('keep')).toBeTruthy()
+    expect(within(preview).getByText('old')).toBeTruthy()
+    expect(within(preview).getByText('new')).toBeTruthy()
+    expect(within(preview).getAllByRole('button', { name: '暂存块' })).toHaveLength(2)
+    expect(within(preview).getAllByRole('button', { name: '丢弃块' })).toHaveLength(2)
+    expect(within(preview).queryByRole('button', { name: '取消暂存块' })).toBeNull()
+  })
+
+  it('tracked-text: staged preview exposes unstage-hunk and never discard-hunk', async () => {
+    const gitDiffPreview = vi.fn(async () => STAGED_TEXT_PREVIEW)
+    mount({ tree: DIRTY_REPO, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('docs/note.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('docs/note.md')).getByText('docs/note.md'))
+    const preview = await waitFor(() => previewPane())
+    expect(gitDiffPreview).toHaveBeenCalledWith(
+      WID, '/repos/app/docs/note.md', 'staged', expect.any(AbortSignal),
+    )
+    expect(within(preview).getByRole('button', { name: '取消暂存块' })).toBeTruthy()
+    expect(within(preview).queryByRole('button', { name: '暂存块' })).toBeNull()
+    expect(within(preview).queryByRole('button', { name: '丢弃块' })).toBeNull()
+    expect(within(preview).getByRole('button', { name: '取消暂存' })).toBeTruthy()
+    expect(within(preview).queryByRole('button', { name: '丢弃' })).toBeNull()
+  })
+
+  it('partial-staged: the same path in both lists loads the matching side', async () => {
+    const gitDiffPreview = vi.fn(async (
+      _id: WorkspaceId, _path: string, side: 'unstaged' | 'staged',
+    ) => side === 'staged' ? STAGED_TEXT_PREVIEW : TEXT_PREVIEW)
+    mount({ tree: DIRTY_REPO, gitDiffPreview })
+    await waitFor(() => { expect(screen.getAllByText('src/a.ts')).toHaveLength(2) })
+    fireEvent.click(within(rowOf('src/a.ts', 0)).getByText('src/a.ts'))
+    await waitFor(() => {
+      expect(gitDiffPreview).toHaveBeenLastCalledWith(
+        WID, '/repos/app/src/a.ts', 'unstaged', expect.any(AbortSignal),
+      )
+    })
+    expect(within(previewPane()).getAllByRole('button', { name: '暂存块' })).toHaveLength(2)
+    fireEvent.click(within(rowOf('src/a.ts', 1)).getByText('src/a.ts'))
+    await waitFor(() => {
+      expect(gitDiffPreview).toHaveBeenLastCalledWith(
+        WID, '/repos/app/src/a.ts', 'staged', expect.any(AbortSignal),
+      )
+    })
+    expect(within(previewPane()).getByRole('button', { name: '取消暂存块' })).toBeTruthy()
+    expect(within(previewPane()).queryByRole('button', { name: '暂存块' })).toBeNull()
+  })
+
+  it('stages one unstaged hunk and keeps the path on both lists', async () => {
+    const gitStage = vi.fn(async () => ({
+      ...DIRTY_REPO,
+      unstaged: [
+        change('src/a.ts', 'modified'),
+        change('README.md', 'modified'),
+      ],
+      staged: [
+        change('src/a.ts', 'modified'),
+        change('docs/note.md', 'modified'),
+        change('README.md', 'modified'),
+      ],
+    }))
+    const gitDiffPreview = vi.fn()
+      .mockResolvedValueOnce(TEXT_PREVIEW)
+      .mockResolvedValueOnce(STAGED_TEXT_PREVIEW)
+    mount({ tree: DIRTY_REPO, gitStage, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    const preview = await waitFor(() => previewPane())
+    fireEvent.click(within(preview).getAllByRole('button', { name: '暂存块' })[0]!)
+    await waitFor(() => {
+      expect(gitStage).toHaveBeenCalledWith(WID, '/repos/app/README.md', '@@ -1,3 +1,3 @@')
+    })
+    await waitFor(() => { expect(screen.getAllByText('README.md').length).toBeGreaterThanOrEqual(2) })
+  })
+
+  it('unstages one staged hunk without calling discard', async () => {
+    const gitUnstage = vi.fn(async () => DIRTY_REPO)
+    const gitDiscard = vi.fn(async () => CLEAN_REPO)
+    const gitDiffPreview = vi.fn(async () => STAGED_TEXT_PREVIEW)
+    mount({ tree: DIRTY_REPO, gitUnstage, gitDiscard, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('docs/note.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('docs/note.md')).getByText('docs/note.md'))
+    const preview = await waitFor(() => previewPane())
+    fireEvent.click(within(preview).getByRole('button', { name: '取消暂存块' }))
+    await waitFor(() => {
+      expect(gitUnstage).toHaveBeenCalledWith(WID, '/repos/app/docs/note.md', '@@ -1,3 +1,3 @@')
+    })
+    expect(gitDiscard).not.toHaveBeenCalled()
+  })
+
+  it('discard-hunk: confirms then discards only that unstaged hunk', async () => {
+    const gitDiscard = vi.fn(async () => DIRTY_REPO)
+    mount({ tree: DIRTY_REPO, gitDiscard })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    const preview = await waitFor(() => previewPane())
+    fireEvent.click(within(preview).getAllByRole('button', { name: '丢弃块' })[0]!)
+    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '丢弃更改' }))
+    expect(within(dialog).getByText(/README\.md/)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: '丢弃' }))
+    await waitFor(() => {
+      expect(gitDiscard).toHaveBeenCalledWith(WID, '/repos/app/README.md', '@@ -1,3 +1,3 @@')
+    })
+  })
+
+  it('discard-hunk: cancel does not call Host', async () => {
+    const gitDiscard = vi.fn(async () => CLEAN_REPO)
+    mount({ tree: DIRTY_REPO, gitDiscard })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    const preview = await waitFor(() => previewPane())
+    fireEvent.click(within(preview).getAllByRole('button', { name: '丢弃块' })[0]!)
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(gitDiscard).not.toHaveBeenCalled()
+  })
+
+  it('untracked-text: previews the whole file as additions and only offers whole-file actions', async () => {
+    const gitDiffPreview = vi.fn(async () => ({
+      kind: 'untracked-text' as const,
+      text: 'brand new\nline two\n',
+    }))
+    mount({ tree: PREVIEW_KINDS_REPO, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('new.ts')).toBeTruthy() })
+    fireEvent.click(within(rowOf('new.ts')).getByText('new.ts'))
+    const preview = await waitFor(() => previewPane())
+    expect(within(preview).getByText('brand new')).toBeTruthy()
+    expect(within(preview).getByText('line two')).toBeTruthy()
+    expect(within(preview).queryByRole('button', { name: '暂存块' })).toBeNull()
+    expect(within(preview).queryByRole('button', { name: '丢弃块' })).toBeNull()
+    expect(within(preview).getByRole('button', { name: '暂存' })).toBeTruthy()
+    expect(within(preview).getByRole('button', { name: '丢弃' })).toBeTruthy()
+  })
+
+  it('binary: shows 二进制文件有差异 and only whole-file actions', async () => {
+    const gitDiffPreview = vi.fn(async () => ({ kind: 'binary' as const }))
+    mount({ tree: PREVIEW_KINDS_REPO, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('photo.bin')).toBeTruthy() })
+    fireEvent.click(within(rowOf('photo.bin')).getByText('photo.bin'))
+    const preview = await waitFor(() => previewPane())
+    expect(within(preview).getByText('二进制文件有差异')).toBeTruthy()
+    expect(within(preview).queryByRole('button', { name: '暂存块' })).toBeNull()
+    expect(within(preview).getByRole('button', { name: '暂存' })).toBeTruthy()
+    expect(within(preview).getByRole('button', { name: '丢弃' })).toBeTruthy()
+  })
+
+  it('deletion: shows deleted text and only whole-file actions', async () => {
+    const gitDiffPreview = vi.fn(async () => ({
+      kind: 'deleted-text' as const,
+      text: 'gone line\n',
+    }))
+    mount({ tree: PREVIEW_KINDS_REPO, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('gone.ts')).toBeTruthy() })
+    fireEvent.click(within(rowOf('gone.ts')).getByText('gone.ts'))
+    const preview = await waitFor(() => previewPane())
+    expect(within(preview).getByText('gone line')).toBeTruthy()
+    expect(within(preview).queryByRole('button', { name: '暂存块' })).toBeNull()
+    expect(within(preview).queryByRole('button', { name: '丢弃块' })).toBeNull()
+    expect(within(preview).getByRole('button', { name: '暂存' })).toBeTruthy()
+    expect(within(preview).getByRole('button', { name: '丢弃' })).toBeTruthy()
+  })
+
+  it('deletion: deleted binary uses the binary card', async () => {
+    const gitDiffPreview = vi.fn(async () => ({ kind: 'deleted-binary' as const }))
+    mount({ tree: PREVIEW_KINDS_REPO, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('blob.bin')).toBeTruthy() })
+    fireEvent.click(within(rowOf('blob.bin')).getByText('blob.bin'))
+    const preview = await waitFor(() => previewPane())
+    expect(within(preview).getByText('二进制文件有差异')).toBeTruthy()
+    expect(within(preview).queryByRole('button', { name: '暂存块' })).toBeNull()
+  })
+
+  it('outside-bound-workspace: previews and stages a path outside the bound Workspace', async () => {
+    const gitStage = vi.fn(async () => PREVIEW_KINDS_REPO)
+    const gitDiffPreview = vi.fn(async () => TEXT_PREVIEW)
+    mount({ tree: PREVIEW_KINDS_REPO, gitStage, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('outside.ts')).toBeTruthy() })
+    fireEvent.click(within(rowOf('outside.ts')).getByText('outside.ts'))
+    const preview = await waitFor(() => previewPane())
+    expect(gitDiffPreview).toHaveBeenCalledWith(
+      WID, '/repos/outside.ts', 'unstaged', expect.any(AbortSignal),
+    )
+    expect(within(preview).getByText('outside.ts')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '在编辑器中打开' })).toBeNull()
+    fireEvent.click(within(preview).getByRole('button', { name: '暂存' }))
+    await waitFor(() => {
+      expect(gitStage).toHaveBeenCalledWith(WID, '/repos/outside.ts')
+    })
+  })
+
+  it('merge-conflict: shows the working-tree diff without merge-editor controls', async () => {
+    const gitDiffPreview = vi.fn(async () => TEXT_PREVIEW)
+    mount({ tree: PREVIEW_KINDS_REPO, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('conflict.ts')).toBeTruthy() })
+    fireEvent.click(within(rowOf('conflict.ts')).getByText('conflict.ts'))
+    const preview = await waitFor(() => previewPane())
+    expect(within(preview).getByText('keep')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Accept Current' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Abort' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
+    expect(within(preview).getByRole('button', { name: '暂存' })).toBeTruthy()
+    expect(within(preview).getByRole('button', { name: '丢弃' })).toBeTruthy()
+  })
+
+  it('shows a preview Host failure inside the preview pane', async () => {
+    const gitDiffPreview = vi.fn(async () => {
+      throw new DirectoryBrowseError({ code: 'git-failed', message: 'diff exploded', details: {} })
+    })
+    mount({ tree: DIRTY_REPO, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    await waitFor(() => { expect(within(previewPane()).getByText('diff exploded')).toBeTruthy() })
+    expect(screen.getAllByText('README.md').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('drops a preview result that arrives after the selection is superseded', async () => {
+    let settleFirst!: (preview: GitDiffPreview) => void
+    const gitDiffPreview = vi.fn((_id: WorkspaceId, path: string) => {
+      if (path.endsWith('README.md')) {
+        return new Promise<GitDiffPreview>((resolve) => { settleFirst = resolve })
+      }
+      return Promise.resolve(STAGED_TEXT_PREVIEW)
+    })
+    mount({ tree: DIRTY_REPO, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    fireEvent.click(within(rowOf('docs/note.md')).getByText('docs/note.md'))
+    await waitFor(() => {
+      expect(within(previewPane()).getByRole('button', { name: '取消暂存块' })).toBeTruthy()
+    })
+    await act(async () => { settleFirst(TEXT_PREVIEW) })
+    expect(within(previewPane()).queryByRole('button', { name: '暂存块' })).toBeNull()
+    expect(within(previewPane()).getByText('docs/note.md')).toBeTruthy()
+  })
+
+  it('does not refetch when clicking the already selected row', async () => {
+    const b = mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    await waitFor(() => { expect(within(previewPane()).getByText('keep')).toBeTruthy() })
+    expect(b.gitDiffPreview).toHaveBeenCalledTimes(1)
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    await act(async () => { await Promise.resolve() })
+    expect(b.gitDiffPreview).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not start a preview read while the Git tab is hidden', async () => {
+    const b = mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    await waitFor(() => { expect(within(previewPane()).getByText('keep')).toBeTruthy() })
+    const calls = b.gitDiffPreview.mock.calls.length
+    b.view.rerender(<GitPanel {...b.props} visible={false} />)
+    await act(async () => { await Promise.resolve() })
+    expect(b.gitDiffPreview.mock.calls.length).toBe(calls)
+    expect(within(previewPane()).getByText('keep')).toBeTruthy()
+  })
+
+  it('ignores an AbortError from a superseded preview read', async () => {
+    const gitDiffPreview = vi.fn(async () => {
+      const error = new Error('preview aborted')
+      error.name = 'AbortError'
+      throw error
+    })
+    mount({ tree: DIRTY_REPO, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    await act(async () => { await Promise.resolve() })
+    expect(screen.queryByText('preview aborted')).toBeNull()
+  })
+
+  it('preview toolbar: whole-file discard confirms and unstage does not call discard', async () => {
+    const gitDiscard = vi.fn(async () => DIRTY_REPO)
+    const gitUnstage = vi.fn(async () => DIRTY_REPO)
+    mount({ tree: DIRTY_REPO, gitDiscard, gitUnstage })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    const unstagedPreview = await waitFor(() => previewPane())
+    fireEvent.click(within(unstagedPreview).getByRole('button', { name: '丢弃' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '丢弃' }))
+    await waitFor(() => {
+      expect(gitDiscard).toHaveBeenCalledWith(WID, '/repos/app/README.md')
+    })
+    fireEvent.click(within(rowOf('docs/note.md')).getByText('docs/note.md'))
+    const stagedPreview = await waitFor(() => previewPane())
+    fireEvent.click(within(stagedPreview).getByRole('button', { name: '取消暂存' }))
+    await waitFor(() => {
+      expect(gitUnstage).toHaveBeenCalledWith(WID, '/repos/app/docs/note.md')
+    })
+    expect(gitDiscard).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a second click on a disabled section action while a write is in flight', async () => {
+    let settle!: (tree: GitWorkingTreeResult) => void
+    const gitStage = vi.fn(() => new Promise<GitWorkingTreeResult>((resolve) => { settle = resolve }))
+    mount({ tree: DIRTY_REPO, gitStage })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByRole('button', { name: '暂存' }))
+    await waitFor(() => {
+      expect(within(rowOf('README.md')).getByRole('status', { name: '正在暂存' })).toBeTruthy()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '全部暂存' }))
+    expect(gitStage).toHaveBeenCalledTimes(1)
+    await act(async () => { settle(DIRTY_REPO) })
+  })
+
+  it('untracked-text: an empty file still renders as a whole-file addition', async () => {
+    const gitDiffPreview = vi.fn(async () => ({ kind: 'untracked-text' as const, text: '' }))
+    mount({ tree: PREVIEW_KINDS_REPO, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('new.ts')).toBeTruthy() })
+    fireEvent.click(within(rowOf('new.ts')).getByText('new.ts'))
+    await waitFor(() => { expect(within(previewPane()).getByRole('button', { name: '暂存' })).toBeTruthy() })
+    expect(within(previewPane()).queryByRole('button', { name: '暂存块' })).toBeNull()
+  })
+
+  it('deletion: text without a trailing newline still renders', async () => {
+    const gitDiffPreview = vi.fn(async () => ({ kind: 'deleted-text' as const, text: 'gone line' }))
+    mount({ tree: PREVIEW_KINDS_REPO, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('gone.ts')).toBeTruthy() })
+    fireEvent.click(within(rowOf('gone.ts')).getByText('gone.ts'))
+    const preview = await waitFor(() => previewPane())
+    expect(within(preview).getByText('gone line')).toBeTruthy()
+  })
+
+  it('clears the preview when a later working-tree read is not a repository', async () => {
+    const gitWorkingTree = vi.fn()
+      .mockResolvedValueOnce(DIRTY_REPO)
+      .mockResolvedValueOnce({ availability: 'not-a-repository' })
+    const b = mount({ gitWorkingTree })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    await waitFor(() => { expect(within(previewPane()).getByText('keep')).toBeTruthy() })
+    b.view.rerender(<GitPanel {...b.props} visible={false} />)
+    b.view.rerender(<GitPanel {...b.props} visible={true} />)
+    await waitFor(() => { expect(screen.getByText('不是 Git 仓库')).toBeTruthy() })
+  })
+
+  it('keeps an unstaged selection after the working tree refreshes', async () => {
+    const gitWorkingTree = vi.fn()
+      .mockResolvedValueOnce(DIRTY_REPO)
+      .mockResolvedValueOnce(DIRTY_REPO)
+    const b = mount({ gitWorkingTree })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    await waitFor(() => {
+      expect(within(previewPane()).getAllByRole('button', { name: '暂存块' }).length).toBeGreaterThan(0)
+    })
+    b.view.rerender(<GitPanel {...b.props} visible={false} />)
+    b.view.rerender(<GitPanel {...b.props} visible={true} />)
+    await waitFor(() => { expect(gitWorkingTree).toHaveBeenCalledTimes(2) })
+    await waitFor(() => {
+      expect(within(previewPane()).getAllByRole('button', { name: '暂存块' }).length).toBeGreaterThan(0)
+    })
+  })
+
+  it('keeps a staged selection after the working tree refreshes', async () => {
+    const gitWorkingTree = vi.fn()
+      .mockResolvedValueOnce(DIRTY_REPO)
+      .mockResolvedValueOnce(DIRTY_REPO)
+    const gitDiffPreview = vi.fn(async () => STAGED_TEXT_PREVIEW)
+    const b = mount({ gitWorkingTree, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('docs/note.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('docs/note.md')).getByText('docs/note.md'))
+    await waitFor(() => { expect(within(previewPane()).getByRole('button', { name: '取消暂存块' })).toBeTruthy() })
+    b.view.rerender(<GitPanel {...b.props} visible={false} />)
+    b.view.rerender(<GitPanel {...b.props} visible={true} />)
+    await waitFor(() => { expect(gitWorkingTree).toHaveBeenCalledTimes(2) })
+    await waitFor(() => { expect(within(previewPane()).getByRole('button', { name: '取消暂存块' })).toBeTruthy() })
+  })
+
+  it('clears an unstaged preview when that path leaves the refreshed list', async () => {
+    const gitWorkingTree = vi.fn()
+      .mockResolvedValueOnce(DIRTY_REPO)
+      .mockResolvedValueOnce({
+        ...DIRTY_REPO,
+        unstaged: [change('src/a.ts', 'modified')],
+      })
+    const b = mount({ gitWorkingTree })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('README.md')).getByText('README.md'))
+    await waitFor(() => { expect(within(previewPane()).getByText('keep')).toBeTruthy() })
+    b.view.rerender(<GitPanel {...b.props} visible={false} />)
+    b.view.rerender(<GitPanel {...b.props} visible={true} />)
+    await waitFor(() => { expect(screen.getByText('选择一个文件以查看差异')).toBeTruthy() })
+    expect(screen.queryByText('README.md')).toBeNull()
+  })
+
+  it('clears a staged preview when that path leaves the refreshed list', async () => {
+    const gitWorkingTree = vi.fn()
+      .mockResolvedValueOnce(DIRTY_REPO)
+      .mockResolvedValueOnce({
+        ...DIRTY_REPO,
+        staged: [change('src/a.ts', 'modified')],
+      })
+    const gitDiffPreview = vi.fn(async () => STAGED_TEXT_PREVIEW)
+    const b = mount({ gitWorkingTree, gitDiffPreview })
+    await waitFor(() => { expect(screen.getByText('docs/note.md')).toBeTruthy() })
+    fireEvent.click(within(rowOf('docs/note.md')).getByText('docs/note.md'))
+    await waitFor(() => { expect(within(previewPane()).getByRole('button', { name: '取消暂存块' })).toBeTruthy() })
+    b.view.rerender(<GitPanel {...b.props} visible={false} />)
+    b.view.rerender(<GitPanel {...b.props} visible={true} />)
+    await waitFor(() => { expect(screen.getByText('选择一个文件以查看差异')).toBeTruthy() })
+    expect(screen.queryByText('docs/note.md')).toBeNull()
   })
 })

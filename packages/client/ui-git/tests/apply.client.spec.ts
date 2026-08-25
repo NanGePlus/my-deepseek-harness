@@ -15,6 +15,7 @@ async function bench() {
   const workspaces = {
     gitWorkingTree: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitInit: vi.fn(() => Promise.resolve({ repoRoot: '/w' })),
+    gitDiffPreview: vi.fn(() => Promise.resolve({ kind: 'binary' as const })),
     gitStage: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitUnstage: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitDiscard: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
@@ -60,13 +61,16 @@ describe('ui-git apply', () => {
       availability: 'not-a-repository',
     })
     await expect(face.gitInit('ws' as WorkspaceId)).resolves.toEqual({ repoRoot: '/w' })
-    await expect(face.gitStage('ws' as WorkspaceId, '/w/a.ts')).resolves.toEqual({
+    await expect(face.gitDiffPreview('ws' as WorkspaceId, '/w/a.ts', 'unstaged')).resolves.toEqual({
+      kind: 'binary',
+    })
+    await expect(face.gitStage('ws' as WorkspaceId, '/w/a.ts', '@@ -1,1 +1,1 @@')).resolves.toEqual({
       availability: 'not-a-repository',
     })
     await expect(face.gitUnstage('ws' as WorkspaceId, '/w/a.ts')).resolves.toEqual({
       availability: 'not-a-repository',
     })
-    await expect(face.gitDiscard('ws' as WorkspaceId, '/w/a.ts')).resolves.toEqual({
+    await expect(face.gitDiscard('ws' as WorkspaceId, '/w/a.ts', '@@ -2,1 +2,1 @@')).resolves.toEqual({
       availability: 'not-a-repository',
     })
     await expect(face.gitCommit('ws' as WorkspaceId, 'msg')).resolves.toEqual({
@@ -74,9 +78,10 @@ describe('ui-git apply', () => {
     })
     expect(b.workspaces.gitWorkingTree).toHaveBeenCalledWith('ws', undefined)
     expect(b.workspaces.gitInit).toHaveBeenCalledWith('ws', undefined)
-    expect(b.workspaces.gitStage).toHaveBeenCalledWith('ws', '/w/a.ts')
-    expect(b.workspaces.gitUnstage).toHaveBeenCalledWith('ws', '/w/a.ts')
-    expect(b.workspaces.gitDiscard).toHaveBeenCalledWith('ws', '/w/a.ts')
+    expect(b.workspaces.gitDiffPreview).toHaveBeenCalledWith('ws', '/w/a.ts', 'unstaged', undefined)
+    expect(b.workspaces.gitStage).toHaveBeenCalledWith('ws', '/w/a.ts', '@@ -1,1 +1,1 @@')
+    expect(b.workspaces.gitUnstage).toHaveBeenCalledWith('ws', '/w/a.ts', undefined)
+    expect(b.workspaces.gitDiscard).toHaveBeenCalledWith('ws', '/w/a.ts', '@@ -2,1 +2,1 @@')
     expect(b.workspaces.gitCommit).toHaveBeenCalledWith('ws', 'msg')
   })
 

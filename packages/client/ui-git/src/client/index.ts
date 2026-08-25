@@ -11,7 +11,7 @@ import { en, zh, type GitPanelKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** Git panel copy (empty states, lists, commit placeholder). */
+    /** Git panel copy (empty states, lists, commit, preview, hunk actions). */
     gitPanel: GitPanelKey
   }
 }
@@ -36,9 +36,14 @@ export function apply(ctx: ClientContext): void {
     inject: (): GitPanelInjected => ({
       gitWorkingTree: (workspaceId, signal) => ctx.workspaces.gitWorkingTree(workspaceId, signal),
       gitInit: (workspaceId, signal) => ctx.workspaces.gitInit(workspaceId, signal),
-      gitStage: (workspaceId, path) => ctx.workspaces.gitStage(workspaceId, path),
-      gitUnstage: (workspaceId, path) => ctx.workspaces.gitUnstage(workspaceId, path),
-      gitDiscard: (workspaceId, path) => ctx.workspaces.gitDiscard(workspaceId, path),
+      gitDiffPreview: (workspaceId, path, side, signal) =>
+        ctx.workspaces.gitDiffPreview(workspaceId, path, side, signal),
+      gitStage: (workspaceId, path, hunkHeader) =>
+        ctx.workspaces.gitStage(workspaceId, path, hunkHeader),
+      gitUnstage: (workspaceId, path, hunkHeader) =>
+        ctx.workspaces.gitUnstage(workspaceId, path, hunkHeader),
+      gitDiscard: (workspaceId, path, hunkHeader) =>
+        ctx.workspaces.gitDiscard(workspaceId, path, hunkHeader),
       gitCommit: (workspaceId, message) => ctx.workspaces.gitCommit(workspaceId, message),
     }),
   }, GitPanel))

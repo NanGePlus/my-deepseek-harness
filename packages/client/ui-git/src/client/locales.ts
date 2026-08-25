@@ -32,6 +32,11 @@ export const zh = {
   'git.busy.stage': '正在暂存',
   'git.busy.unstage': '正在取消暂存',
   'git.busy.discard': '正在丢弃',
+  'git.preview.region': '差异预览',
+  'git.preview.binary': '二进制文件有差异',
+  'git.hunk.stage': '暂存块',
+  'git.hunk.unstage': '取消暂存块',
+  'git.hunk.discard': '丢弃块',
 } as const
 
 /** English dictionary, checked complete against the zh key set. */
@@ -68,6 +73,11 @@ export const en = {
   'git.busy.stage': 'Staging',
   'git.busy.unstage': 'Unstaging',
   'git.busy.discard': 'Discarding',
+  'git.preview.region': 'Diff preview',
+  'git.preview.binary': 'Binary file has a diff',
+  'git.hunk.stage': 'Stage hunk',
+  'git.hunk.unstage': 'Unstage hunk',
+  'git.hunk.discard': 'Discard hunk',
 } as const
 
 /** The gitPanel namespace key union. */

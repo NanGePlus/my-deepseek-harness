@@ -10,7 +10,7 @@ The Git-panel occupant from [bind, list, and initialize](2026-08-25-ui-git-panel
 
 ## Decision
 
-`ui-git` calls the Host write RPCs in [Host Git working-tree write RPCs](2026-08-25-host-git-write.md) through injected `ctx.workspaces` closures: whole-file `gitStage` / `gitUnstage` / `gitDiscard` / `gitCommit`. Write responses replace the panel lists; the occupant does not issue a follow-up `gitWorkingTree`. Hunk headers are omitted. The Git action guard is not in this occupant.
+`ui-git` calls the Host write RPCs in [Host Git working-tree write RPCs](2026-08-25-host-git-write.md) through injected `ctx.workspaces` closures: whole-file `gitStage` / `gitUnstage` / `gitDiscard` / `gitCommit`. Write responses replace the panel lists; the occupant does not issue a follow-up `gitWorkingTree`. Hunk headers on those same RPCs are owned by [diff preview and hunk operations](2026-08-25-ui-git-panel-diff-preview.md). The Git action guard is not in this occupant.
 
 Unstaged rows expose **暂存** and **丢弃**; staged rows expose only **取消暂存**. Section heads expose **全部暂存** / **全部取消暂存**. Discard opens a panel-local `bg-layer-3` dialog (not a full-viewport mask): tracked modification uses 「丢弃更改」 / restore-to-index-or-HEAD; untracked uses 「丢弃未跟踪文件」 / delete-from-disk; tracked deletion uses 「丢弃更改」 / restore-the-file-to-disk. Host `GitWorkingTreeChange.kind` (`modified` / `untracked` / `deleted`) selects that copy.
 
@@ -33,7 +33,7 @@ File-tree Git badges re-read disk when the Explorer tab becomes visible after be
 ## Consequences
 
 - [Bind/list/init](2026-08-25-ui-git-panel-bind-list.md) still owns discovery, empty states, and visibility-gated inspect reads; this note owns whole-file writes, drafts, and Explorer badge refresh.
-- Hunk operations and the Git action guard remain later git-panel slices.
+- Hunk operations are owned by [diff preview and hunk operations](2026-08-25-ui-git-panel-diff-preview.md). The Git action guard remains a later git-panel slice.
 - The `ui-git` and `ui-conversation` / `ui-file-editor` client bundles must rebuild before `pnpm dsh web` shows write actions and Explorer `visible`.
 
 ## Testing
