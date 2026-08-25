@@ -322,7 +322,9 @@ export function GitPanel({
           if (workspaceId === undefined) return
           void runSection(rows, 'unstage', path => gitUnstage(workspaceId, path))
         },
-        onAskDiscard: (row, hunkHeader) => { setDiscardTarget({ row, hunkHeader }) },
+        onAskDiscard: (row, hunkHeader) => {
+          setDiscardTarget(hunkHeader === undefined ? { row } : { row, hunkHeader })
+        },
         onCancelDiscard: () => { setDiscardTarget(null) },
         onConfirmDiscard: () => {
           const target = discardTarget
@@ -904,9 +906,9 @@ function contentLines(text: string): string[] {
 
 function diffLineClass(origin: GitDiffLine['origin']): string {
   switch (origin) {
-    case 'add': return css.diffAdd
-    case 'del': return css.diffDel
-    case 'context': return css.diffContext
+    case 'add': return css.diffAdd as string
+    case 'del': return css.diffDel as string
+    case 'context': return css.diffContext as string
     /* v8 ignore next 2 -- closed-union backstop; only reached if a line origin is forged */
     default: return assertNever(origin)
   }
