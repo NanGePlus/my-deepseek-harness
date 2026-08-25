@@ -125,9 +125,15 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.details.tool': { kind: 'single'; scope: 'session'; owner: DetailsToolOwnerProps }
     /**
      * The file-editor surface rendered when the details segmented tab selects
-     * 「文件编辑器」. One occupant; ui-file-editor injects here.
+     * 「资源管理器」. One occupant; ui-file-editor injects here.
      */
     'conversation.details.editor': { kind: 'single'; scope: 'root' }
+    /**
+     * The Git panel rendered when the details segmented tab selects 「Git」.
+     * One occupant; ui-git injects here. The shell hides this seat when the
+     * tab is not selected and does not unmount it.
+     */
+    'conversation.details.git': { kind: 'single'; scope: 'root' }
     /**
      * The composer takeover chain: entries are selector-routed replacements
      * of the default InputBar. Declared by this package's 'conversation'
@@ -772,8 +778,8 @@ export interface DetailsInjected {
   }
 }
 
-/** Full details-slot props: Tool and editor seats, session-bound hooks, layout callbacks, and locale. */
-export type DetailsSlotProps = PropsRuntime<'details'> & PropsRenderSlots<'conversation.details.tool' | 'conversation.details.editor'>
+/** Full details-slot props: Tool, editor, and Git seats, session-bound hooks, layout callbacks, and locale. */
+export type DetailsSlotProps = PropsRuntime<'details'> & PropsRenderSlots<'conversation.details.tool' | 'conversation.details.editor' | 'conversation.details.git'>
   & Omit<DetailsInjected, 'hooks'> & {
     useChat: SnapshotSelectorHook<SessionChatBinding>
     useConversation: SnapshotSelectorHook<ConversationSnapshot>

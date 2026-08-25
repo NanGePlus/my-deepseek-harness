@@ -10,7 +10,7 @@ File editor V1 places the editor surface in the existing Web details column besi
 
 ## Decision
 
-`ui-conversation` owns the details **shell**: a segmented tab bar (`Tool 详情` | `文件编辑器`) in `DetailsPanel`, with Tool body extracted to `ToolDetailsBody` and tab selection in the shared per-session chat store (`detailsTab: 'tool' | 'editor'`). Selecting **文件编辑器** calls `layout.openDetails()` so a collapsed column opens without a separate fourth pane or overlay.
+`ui-conversation` owns the details **shell**: a segmented tab bar (`资源管理器` | `Git` | `工具详情`) in `DetailsPanel`, with Tool body extracted to `ToolDetailsBody` and tab selection in the shared per-session chat store (`detailsTab: 'tool' | 'editor' | 'git'`). Selecting **资源管理器** or **Git** calls `layout.openDetails()` so a collapsed column opens without a separate fourth pane or overlay. The Git occupant slot is [Toolbox three-tab Git slot](2026-08-25-details-three-tab-git.md).
 
 `ui-file-editor` injects `EditorSurface` into the new child slot `conversation.details.editor`. The [file-tree issue](2026-08-20-editor-surface-file-tree.md) owns Workspace binding, listings, filter, icons, and Git badges; [open modes, tabs, and save](2026-08-20-editor-surface-open-tabs-save.md) own buffers and Monaco.
 
@@ -25,12 +25,12 @@ File editor V1 places the editor surface in the existing Web details column besi
 ## Consequences
 
 - Tab choice persists in the chat store across remounts until Session guards reset it in later issues.
-- Browser e2e targets the details tablist via `aria-label="Details panel"` to avoid capturing conversation view tabs.
+- Browser e2e targets the details tablist via `aria-label="Toolbox"` to avoid capturing conversation view tabs.
 - Bundles for `ui-conversation`, `ui-layout`, and `ui-file-editor` must rebuild before web e2e exercises the change.
 
 ## Testing
 
-`packages/client/ui-conversation/tests/details-panel-tabs.client.spec.tsx` covers default labels, editor-tab selection (opens details + renders editor seat), and switching back to Tool details.
+`packages/client/ui-conversation/tests/details-panel-tabs.client.spec.tsx` covers default labels, editor-tab selection (opens details + renders editor seat), and switching back to Tool details. Git-tab chrome is owned by [Toolbox three-tab Git slot](2026-08-25-details-three-tab-git.md).
 
 `packages/client/ui-file-editor/tests/*` covers slot injection, the file-tree states owned by [the file-tree note](2026-08-20-editor-surface-file-tree.md), and the open/save states owned by [the open/tabs/save note](2026-08-20-editor-surface-open-tabs-save.md).
 

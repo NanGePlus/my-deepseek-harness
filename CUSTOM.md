@@ -14,14 +14,14 @@
 - 默认 profile：`web`
 - 模型提供方：DeepSeek / 其它 / 自定义 OpenAI 兼容端点
 - **V1 定制重点**：Web **工具箱**（原 details 栏）内嵌 Workspace 文件编辑器（文件树 + Monaco 多 Tab），与 Agent 对话并列、不占用中栏
-- **V2 定制重点（进行中）**：工具箱增加 **Git 面板**（工作区变更 + 差异预览）；PRD 见 `docs/prd/git-panel-v2.md` 与 Issue [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)。Host Git 只读 RPC 见 Issue [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53)；写 RPC（暂存 / 取消暂存 / 丢弃 / 提交）见 Issue [#54](https://github.com/NanGePlus/my-deepseek-harness/issues/54)
+- **V2 定制重点（进行中）**：工具箱增加 **Git 面板**（工作区变更 + 差异预览）；PRD 见 `docs/prd/git-panel-v2.md` 与 Issue [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)。Host Git 只读 RPC 见 Issue [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53)；写 RPC（暂存 / 取消暂存 / 丢弃 / 提交）见 Issue [#54](https://github.com/NanGePlus/my-deepseek-harness/issues/54)；工具箱三段 Tab 见 Issue [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55)
 
 ## 已实现定制功能（相对上游 master）
 
 ### 工具箱与壳层（details 栏，PR #28–29 及后续）
 - 产品文案：**详情栏 / 详情面板** 统一表述为 **工具箱**（`packages/client/ui-conversation` locales；Tab 内「工具详情」仍指 Tool 输出内容）
 - 会话头入口：**图标 +「工具箱」** capsule 按钮（与 Session log 同高 32px）；tooltip / `aria-label` 仍为「打开 / 收起工具箱」
-- 工具箱 segmented Tab：**资源管理器 | 工具详情**；Tab 条样式与对话区 **对话 / 轨迹** 一致（左对齐、13px、`state-business-primary` 选中下划线）
+- 工具箱 segmented Tab：**资源管理器 | Git | 工具详情**；Tab 条样式与对话区 **对话 / 轨迹** 一致（左对齐、13px、`state-business-primary` 选中下划线）；Git 段槽位 `conversation.details.git` 供 `ui-git` 注入，切走只隐藏不卸载
 - 文件编辑器 Tab 注入 `@deepseek-ai/dsh-client-ui-file-editor`（`cordis.patch.yml` 注册）
 - 工具箱可拖宽；Tool 行点击可跳转工具详情并保持面板存活（PR #38 前后续修复）
 
@@ -83,7 +83,7 @@
 |-----------|----------|------|
 | `packages/host/apiproxy/` | 文件编辑器 Host RPC、listing 性能、`readFile` 大小上限；**2026-08-25** Git 面板只读 RPC（`gitWorkingTree` / `gitInit` / `gitDiffPreview`）；**2026-08-25** Git 面板写 RPC（`gitStage` / `gitUnstage` / `gitDiscard` / `gitCommit`） | 2026-08 |
 | `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat；**2026-08-23** 保存/外部变更后文件树自动刷新 | 2026-08 |
-| `packages/client/ui-conversation/` | 工具箱 segmented Tab、Tool 详情与编辑器 Tab 协调；**2026-08-22** 工具箱文案、capsule 入口、Tab 样式对齐对话区；**2026-08-23** 已发送用户消息 file-context pill 展示投影 | 2026-08 |
+| `packages/client/ui-conversation/` | 工具箱 segmented Tab、Tool 详情与编辑器 Tab 协调；**2026-08-22** 工具箱文案、capsule 入口、Tab 样式对齐对话区；**2026-08-23** 已发送用户消息 file-context pill 展示投影；**2026-08-25** 工具箱三段 Tab（资源管理器 \| Git \| 工具详情）与 `conversation.details.git` 槽位 | 2026-08 |
 | `packages/client/runtime/` | `WorkspaceRuntime` 转发新 Host RPC；**2026-08-25** 转发 Git 面板只读 RPC；**2026-08-25** 转发 Git 面板写 RPC | 2026-08 |
 | `packages/client/ui-primitives/` | Mermaid 块、ZoomPanLightbox、Markdown 图片 | 2026-08 |
 | `packages/client/ui-tool/` | Tool 行 selection → details 跳转 | 2026-08 |
@@ -123,7 +123,8 @@
 | `docs/git-panel-v2-prd` | Git 面板 V2：父 PRD [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)；切片 #52–#59 | PR [#60](https://github.com/NanGePlus/my-deepseek-harness/pull/60) 已合并入 `custom/main` |
 | `issue/52-d-global-git-panel-design-close` | [#52](https://github.com/NanGePlus/my-deepseek-harness/issues/52) `#D-global`：验收关闭 Git 面板 DESIGN.md | 进行中 |
 | `issue/53-host-git-rpc-inspect` | [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53) Host Git RPC：仓库发现、变更列表、差异预览与初始化 | 已合并入 `custom/main`（PR [#62](https://github.com/NanGePlus/my-deepseek-harness/pull/62)） |
-| `issue/54-host-git-rpc-write` | [#54](https://github.com/NanGePlus/my-deepseek-harness/issues/54) Host Git RPC：暂存、取消暂存、丢弃与提交 | 进行中 |
+| `issue/54-host-git-rpc-write` | [#54](https://github.com/NanGePlus/my-deepseek-harness/issues/54) Host Git RPC：暂存、取消暂存、丢弃与提交 | 已合并入 `custom/main`（PR [#63](https://github.com/NanGePlus/my-deepseek-harness/pull/63)） |
+| `issue/55-app-shell-details-three-tab` | [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55) app-shell：工具箱三段 Tab 与 Git 槽位 | 进行中 |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
@@ -162,3 +163,4 @@
 | 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/52-d-global-git-panel-design-close` | Issue [#52](https://github.com/NanGePlus/my-deepseek-harness/issues/52) `#D-global` 验收关闭；Git 面板消费既有品牌板，不新增 §5 原语 |
 | 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/53-host-git-rpc-inspect` | Issue [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53) Host Git 只读 RPC；不改 V1 `gitStatus`，不暴露任意 argv |
 | 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/54-host-git-rpc-write` | Issue [#54](https://github.com/NanGePlus/my-deepseek-harness/issues/54) Host Git 写 RPC：暂存 / 取消暂存 / 丢弃 / 提交；按块 patch 由 Host 拼装；不暴露任意 argv |
+| 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/55-app-shell-details-three-tab` | Issue [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55) 工具箱三段 Tab（资源管理器 \| Git \| 工具详情）；声明 `conversation.details.git`；切走 Git 只隐藏不卸载 |

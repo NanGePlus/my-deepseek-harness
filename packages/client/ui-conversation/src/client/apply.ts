@@ -534,6 +534,7 @@ export function apply(ctx: Context): void {
     children: {
       'conversation.details.tool': { kind: 'single', scope: 'session' },
       'conversation.details.editor': { kind: 'single', scope: 'root' },
+      'conversation.details.git': { kind: 'single', scope: 'root' },
     },
     inject: (): DetailsInjected => ({
       openDetails: () => { layout.openDetails() },
