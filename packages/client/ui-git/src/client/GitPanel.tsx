@@ -1,6 +1,6 @@
 /** Git-panel occupant of the details column Git tab. */
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
 import {
   Button, IconCodeOutline16, IconFolderClose16, IconLoadingOutline16, IconPlusOutline16,
   IconRefreshOutline16,
@@ -8,7 +8,8 @@ import {
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
-  GitInitResult, GitWorkingTreeChange, GitWorkingTreeResult, WorkspaceId,
+  GitDiffHunk, GitDiffLine, GitDiffPreview, GitDiffSide, GitInitResult, GitWorkingTreeChange,
+  GitWorkingTreeResult, WorkspaceId,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { fileIconUrlForPath, FILE_ICON_BASE_URL } from './file-icon.ts'
@@ -32,26 +33,57 @@ export interface GitPanelInjected {
    */
   gitInit: (workspaceId: WorkspaceId, signal?: AbortSignal) => Promise<GitInitResult>
   /**
-   * Stage one unstaged path (whole file).
+   * Read a disk-only diff preview for one working-tree change.
    * @param workspaceId - Workspace whose bound root is the discovery start.
    * @param path - Host-absolute path under the discovered repository root.
-   * @returns the refreshed working tree.
+   * @param side - unstaged vs staged list that owns the selected row.
+   * @param signal - aborts a superseded preview.
+   * @returns hunks, whole-file text, a binary marker, or deleted content.
    */
-  gitStage: (workspaceId: WorkspaceId, path: string) => Promise<GitWorkingTreeResult>
+  gitDiffPreview: (
+    workspaceId: WorkspaceId,
+    path: string,
+    side: GitDiffSide,
+    signal?: AbortSignal,
+  ) => Promise<GitDiffPreview>
   /**
-   * Unstage one staged path (whole file) without rewriting disk.
+   * Stage one unstaged path (whole file, or one tracked-text hunk when `hunkHeader` is set).
    * @param workspaceId - Workspace whose bound root is the discovery start.
    * @param path - Host-absolute path under the discovered repository root.
+   * @param hunkHeader - optional unified-diff hunk header from gitDiffPreview.
    * @returns the refreshed working tree.
    */
-  gitUnstage: (workspaceId: WorkspaceId, path: string) => Promise<GitWorkingTreeResult>
+  gitStage: (
+    workspaceId: WorkspaceId,
+    path: string,
+    hunkHeader?: string,
+  ) => Promise<GitWorkingTreeResult>
   /**
-   * Discard one unstaged path (whole file) after the panel confirms.
+   * Unstage one staged path (whole file, or one tracked-text hunk when `hunkHeader` is set)
+   * without rewriting disk.
    * @param workspaceId - Workspace whose bound root is the discovery start.
    * @param path - Host-absolute path under the discovered repository root.
+   * @param hunkHeader - optional unified-diff hunk header from gitDiffPreview.
    * @returns the refreshed working tree.
    */
-  gitDiscard: (workspaceId: WorkspaceId, path: string) => Promise<GitWorkingTreeResult>
+  gitUnstage: (
+    workspaceId: WorkspaceId,
+    path: string,
+    hunkHeader?: string,
+  ) => Promise<GitWorkingTreeResult>
+  /**
+   * Discard one unstaged path (whole file, or one tracked-text hunk when `hunkHeader` is set)
+   * after the panel confirms.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param path - Host-absolute path under the discovered repository root.
+   * @param hunkHeader - optional unified-diff hunk header from gitDiffPreview.
+   * @returns the refreshed working tree.
+   */
+  gitDiscard: (
+    workspaceId: WorkspaceId,
+    path: string,
+    hunkHeader?: string,
+  ) => Promise<GitWorkingTreeResult>
   /**
    * Create one new HEAD commit from the current index.
    * @param workspaceId - Workspace whose bound root is the discovery start.
@@ -75,16 +107,32 @@ type ViewState =
   | { kind: 'refreshing'; tree: GitWorkingTreeResult }
   | { kind: 'error'; message: string }
 
-type SectionId = 'unstaged' | 'staged'
+type SectionId = GitDiffSide
+
+interface Selection {
+  side: SectionId
+  row: GitWorkingTreeChange
+}
+
+type PreviewState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'ready'; preview: GitDiffPreview }
+  | { kind: 'error'; message: string }
+
+interface DiscardTarget {
+  row: GitWorkingTreeChange
+  hunkHeader?: string
+}
 
 /**
- * Git panel body: branch, commit message, two change lists, and empty states.
+ * Git panel body: branch, commit message, two change lists, and in-panel diff preview.
  * @param props - root runtime share, locale, draft store, visibility, and Host Git callbacks.
  * @returns the Git panel surface.
  */
 export function GitPanel({
   t, visible, useSessions, useWorkspaces, useStore, actions,
-  gitWorkingTree, gitInit, gitStage, gitUnstage, gitDiscard, gitCommit,
+  gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit,
 }: GitPanelProps) {
   const currentSessionId = useSessions(state => state.current)
   const workspace = useWorkspaces(state =>
@@ -96,6 +144,7 @@ export function GitPanel({
   ))
   const [view, setView] = useState<ViewState>({ kind: 'idle' })
   const [reloadEpoch, setReloadEpoch] = useState(0)
+  const [previewEpoch, setPreviewEpoch] = useState(0)
   const [initError, setInitError] = useState<string | null>(null)
   const [initPending, setInitPending] = useState(false)
   const [writeError, setWriteError] = useState<string | null>(null)
@@ -103,7 +152,9 @@ export function GitPanel({
   const [busyPath, setBusyPath] = useState<string | null>(null)
   const [busyKind, setBusyKind] = useState<'stage' | 'unstage' | 'discard' | null>(null)
   const [commitPending, setCommitPending] = useState(false)
-  const [discardTarget, setDiscardTarget] = useState<GitWorkingTreeChange | null>(null)
+  const [discardTarget, setDiscardTarget] = useState<DiscardTarget | null>(null)
+  const [selection, setSelection] = useState<Selection | null>(null)
+  const [preview, setPreview] = useState<PreviewState>({ kind: 'idle' })
 
   useEffect(() => {
     if (!visible || workspaceId === undefined) return
@@ -123,6 +174,8 @@ export function GitPanel({
       setWriteError(null)
       setCommitError(false)
       setView({ kind: 'ready', tree })
+      setSelection(current => retainSelection(current, tree))
+      setPreviewEpoch(epoch => epoch + 1)
     }).catch((error: unknown) => {
       if (isAbortError(error) || ac.signal.aborted) return
       setView({ kind: 'error', message: hostErrorMessage(error) })
@@ -130,12 +183,33 @@ export function GitPanel({
     return () => { ac.abort() }
   }, [visible, workspaceId, gitWorkingTree, reloadEpoch])
 
+  useEffect(() => {
+    if (selection === null) {
+      setPreview({ kind: 'idle' })
+      return
+    }
+    if (!visible || workspaceId === undefined) return
+    const ac = new AbortController()
+    const selected = selection
+    setPreview({ kind: 'loading' })
+    void gitDiffPreview(workspaceId, selected.row.absolutePath, selected.side, ac.signal).then((value) => {
+      if (ac.signal.aborted) return
+      setPreview({ kind: 'ready', preview: value })
+    }).catch((error: unknown) => {
+      if (isAbortError(error) || ac.signal.aborted) return
+      setPreview({ kind: 'error', message: hostErrorMessage(error) })
+    })
+    return () => { ac.abort() }
+  }, [visible, workspaceId, selection, gitDiffPreview, previewEpoch])
+
   const writing = busyPath !== null || commitPending
 
   const applyTree = (tree: GitWorkingTreeResult): void => {
     setWriteError(null)
     setCommitError(false)
     setView({ kind: 'ready', tree })
+    setSelection(current => retainSelection(current, tree))
+    setPreviewEpoch(epoch => epoch + 1)
   }
 
   const runPathWrite = async (
@@ -208,21 +282,35 @@ export function GitPanel({
     <div className={css.root} data-surface="git-panel">
       {renderBody({
         view, t, onInit, initError, initPending, writeError, commitError, message, busyPath, busyKind,
-        commitPending, discardTarget, writing,
+        commitPending, discardTarget, writing, selection, preview,
         onMessage: (value) => {
           /* v8 ignore next -- the commit field only renders for a current Session. */
           if (currentSessionId === undefined) return
           actions.setDraft(currentSessionId, value)
         },
-        onStage: (row) => {
-          /* v8 ignore next -- row actions only render after a Workspace-bound repository read. */
-          if (workspaceId === undefined) return
-          void runPathWrite(row.absolutePath, 'stage', () => gitStage(workspaceId, row.absolutePath))
+        onSelect: (side, row) => {
+          setSelection((current) => {
+            if (current?.side === side && current.row.absolutePath === row.absolutePath) return current
+            return { side, row }
+          })
         },
-        onUnstage: (row) => {
+        onStage: (row, hunkHeader) => {
           /* v8 ignore next -- row actions only render after a Workspace-bound repository read. */
           if (workspaceId === undefined) return
-          void runPathWrite(row.absolutePath, 'unstage', () => gitUnstage(workspaceId, row.absolutePath))
+          void runPathWrite(
+            row.absolutePath,
+            'stage',
+            () => invokeWrite(gitStage, workspaceId, row.absolutePath, hunkHeader),
+          )
+        },
+        onUnstage: (row, hunkHeader) => {
+          /* v8 ignore next -- row actions only render after a Workspace-bound repository read. */
+          if (workspaceId === undefined) return
+          void runPathWrite(
+            row.absolutePath,
+            'unstage',
+            () => invokeWrite(gitUnstage, workspaceId, row.absolutePath, hunkHeader),
+          )
         },
         onStageAll: (rows) => {
           /* v8 ignore next -- section actions only render after a Workspace-bound repository read. */
@@ -234,14 +322,18 @@ export function GitPanel({
           if (workspaceId === undefined) return
           void runSection(rows, 'unstage', path => gitUnstage(workspaceId, path))
         },
-        onAskDiscard: (row) => { setDiscardTarget(row) },
+        onAskDiscard: (row, hunkHeader) => { setDiscardTarget({ row, hunkHeader }) },
         onCancelDiscard: () => { setDiscardTarget(null) },
         onConfirmDiscard: () => {
           const target = discardTarget
           /* v8 ignore next -- confirm only renders while a discard target is set on a bound Workspace. */
           if (target === null || workspaceId === undefined) return
           setDiscardTarget(null)
-          void runPathWrite(target.absolutePath, 'discard', () => gitDiscard(workspaceId, target.absolutePath))
+          void runPathWrite(
+            target.row.absolutePath,
+            'discard',
+            () => invokeWrite(gitDiscard, workspaceId, target.row.absolutePath, target.hunkHeader),
+          )
         },
         onCommit, onRetryCommit: onCommit,
       })}
@@ -261,14 +353,17 @@ interface RepoBody {
   busyPath: string | null
   busyKind: 'stage' | 'unstage' | 'discard' | null
   commitPending: boolean
-  discardTarget: GitWorkingTreeChange | null
+  discardTarget: DiscardTarget | null
   writing: boolean
+  selection: Selection | null
+  preview: PreviewState
   onMessage: (value: string) => void
-  onStage: (row: GitWorkingTreeChange) => void
-  onUnstage: (row: GitWorkingTreeChange) => void
+  onSelect: (side: SectionId, row: GitWorkingTreeChange) => void
+  onStage: (row: GitWorkingTreeChange, hunkHeader?: string) => void
+  onUnstage: (row: GitWorkingTreeChange, hunkHeader?: string) => void
   onStageAll: (rows: readonly GitWorkingTreeChange[]) => void
   onUnstageAll: (rows: readonly GitWorkingTreeChange[]) => void
-  onAskDiscard: (row: GitWorkingTreeChange) => void
+  onAskDiscard: (row: GitWorkingTreeChange, hunkHeader?: string) => void
   onCancelDiscard: () => void
   onConfirmDiscard: () => void
   onCommit: () => void
@@ -403,13 +498,194 @@ function renderRepository(
         </div>
       </div>
       <div className={css.gutter} aria-hidden="true" />
-      <div className={css.preview}>
-        <div className={css.previewEmpty}>{t('git.empty.preview')}</div>
-      </div>
+      <DiffPreviewPane body={body} />
       {discardTarget !== null && (
-        <DiscardDialog target={discardTarget} t={t} onCancel={body.onCancelDiscard} onConfirm={body.onConfirmDiscard} />
+        <DiscardDialog
+          target={discardTarget.row}
+          t={t}
+          onCancel={body.onCancelDiscard}
+          onConfirm={body.onConfirmDiscard}
+        />
       )}
     </div>
+  )
+}
+
+function DiffPreviewPane({ body }: { body: RepoBody }): ReactNode {
+  const { t, selection, preview } = body
+  return (
+    <div className={css.preview} role="region" aria-label={t('git.preview.region')}>
+      {selection === null || preview.kind === 'idle'
+        ? <div className={css.previewEmpty}>{t('git.empty.preview')}</div>
+        : (
+          <>
+            <div className={css.previewBar}>
+              <span className={css.previewName}>{selection.row.path}</span>
+              <WholeFilePreviewActions side={selection.side} row={selection.row} body={body} />
+            </div>
+            <div className={css.previewBody}>
+              {preview.kind === 'loading' && (
+                <div className={css.previewFeedback} role="status" aria-label={t('git.loading')}>
+                  <span className={css.spinner} aria-hidden="true">
+                    <IconLoadingOutline16 size={24} />
+                  </span>
+                </div>
+              )}
+              {preview.kind === 'error' && (
+                <div className={css.previewFeedback} role="alert">{preview.message}</div>
+              )}
+              {preview.kind === 'ready' && renderPreviewKind(preview.preview, selection, body)}
+            </div>
+          </>
+        )}
+    </div>
+  )
+}
+
+function WholeFilePreviewActions({
+  side, row, body,
+}: {
+  side: SectionId
+  row: GitWorkingTreeChange
+  body: RepoBody
+}): ReactNode {
+  const { t } = body
+  if (side === 'unstaged') {
+    return (
+      <span className={css.rowActions}>
+        <IconAction
+          label={t('git.stage')}
+          disabled={body.writing}
+          onClick={() => { body.onStage(row) }}
+        >
+          <IconPlusOutline16 size={14} />
+        </IconAction>
+        <IconAction
+          label={t('git.discard')}
+          disabled={body.writing}
+          onClick={() => { body.onAskDiscard(row) }}
+        >
+          <IconRefreshOutline16 size={14} />
+        </IconAction>
+      </span>
+    )
+  }
+  return (
+    <span className={css.rowActions}>
+      <IconAction
+        label={t('git.unstage')}
+        disabled={body.writing}
+        onClick={() => { body.onUnstage(row) }}
+      >
+        <IconMinus size={14} />
+      </IconAction>
+    </span>
+  )
+}
+
+function renderPreviewKind(
+  preview: GitDiffPreview,
+  selection: Selection,
+  body: RepoBody,
+): ReactNode {
+  switch (preview.kind) {
+    case 'text':
+      return preview.hunks.map(hunk => (
+        <DiffHunkBlock
+          key={hunk.header}
+          hunk={hunk}
+          selection={selection}
+          body={body}
+        />
+      ))
+    case 'untracked-text':
+      return contentLines(preview.text).map((line, index) => (
+        <DiffLineRow key={index} origin="add" text={line} />
+      ))
+    case 'deleted-text':
+      return contentLines(preview.text).map((line, index) => (
+        <DiffLineRow key={index} origin="del" text={line} />
+      ))
+    case 'binary':
+    case 'deleted-binary':
+      return (
+        <div className={css.binaryWrap}>
+          <div className={css.emptyCard}>
+            <div className={css.emptyTitle}>{body.t('git.preview.binary')}</div>
+          </div>
+        </div>
+      )
+    /* v8 ignore next 4 -- closed-union backstop; only reached if a preview kind is forged */
+    default: {
+      return assertNever(preview)
+    }
+  }
+}
+
+function DiffHunkBlock({
+  hunk, selection, body,
+}: {
+  hunk: GitDiffHunk
+  selection: Selection
+  body: RepoBody
+}): ReactNode {
+  const { t } = body
+  return (
+    <div className={css.hunk}>
+      <div className={css.hunkHead}>
+        {selection.side === 'unstaged'
+          ? (
+            <>
+              <HunkAction
+                label={t('git.hunk.stage')}
+                disabled={body.writing}
+                onClick={() => { body.onStage(selection.row, hunk.header) }}
+              />
+              <HunkAction
+                label={t('git.hunk.discard')}
+                disabled={body.writing}
+                onClick={() => { body.onAskDiscard(selection.row, hunk.header) }}
+              />
+            </>
+          )
+          : (
+            <HunkAction
+              label={t('git.hunk.unstage')}
+              disabled={body.writing}
+              onClick={() => { body.onUnstage(selection.row, hunk.header) }}
+            />
+          )}
+      </div>
+      {hunk.lines.map((line, index) => (
+        <DiffLineRow key={index} origin={line.origin} text={line.text} />
+      ))}
+    </div>
+  )
+}
+
+function DiffLineRow({ origin, text }: { origin: GitDiffLine['origin']; text: string }): ReactNode {
+  return (
+    <div className={`${css.diffLine} ${diffLineClass(origin)}`}>{text}</div>
+  )
+}
+
+function HunkAction({
+  label, disabled, onClick,
+}: {
+  label: string
+  disabled: boolean
+  onClick: () => void
+}): ReactNode {
+  return (
+    <button
+      type="button"
+      className={css.hunkAction}
+      aria-label={label}
+      aria-disabled={disabled || undefined}
+      onClick={disabled ? undefined : onClick}
+    >
+      {label}
+    </button>
   )
 }
 
@@ -456,6 +732,7 @@ function ChangeRow({
   body: RepoBody
 }) {
   const { t } = body
+  const selected = body.selection?.side === id && body.selection.row.absolutePath === row.absolutePath
   const busy = body.busyPath === row.absolutePath
   const busyLabel = body.busyKind === 'unstage'
     ? t('git.busy.unstage')
@@ -463,7 +740,11 @@ function ChangeRow({
       ? t('git.busy.discard')
       : t('git.busy.stage')
   return (
-    <li className={css.row}>
+    <li
+      className={selected ? `${css.row} ${css.rowSelected}` : css.row}
+      aria-selected={selected || undefined}
+      onClick={() => { body.onSelect(id, row) }}
+    >
       <span className={css.rowIcon} role="img" aria-label={t('git.icon.file')}>
         <img
           className={css.rowGlyph}
@@ -574,7 +855,11 @@ function IconAction({
       className={css.iconButton}
       aria-label={label}
       aria-disabled={disabled || undefined}
-      onClick={disabled ? undefined : onClick}
+      onClick={(event: MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation()
+        if (disabled) return
+        onClick()
+      }}
     >
       {children}
     </button>
@@ -589,6 +874,44 @@ function IconMinus({ size }: { size: number }) {
   )
 }
 
+function retainSelection(
+  current: Selection | null,
+  tree: GitWorkingTreeResult,
+): Selection | null {
+  if (current === null || tree.availability !== 'repository') return null
+  if (current.side === 'unstaged') {
+    const row = tree.unstaged.find(item => item.absolutePath === current.row.absolutePath)
+    return row === undefined ? null : { side: 'unstaged', row }
+  }
+  const row = tree.staged.find(item => item.absolutePath === current.row.absolutePath)
+  return row === undefined ? null : { side: 'staged', row }
+}
+
+function invokeWrite(
+  write: (workspaceId: WorkspaceId, path: string, hunkHeader?: string) => Promise<GitWorkingTreeResult>,
+  workspaceId: WorkspaceId,
+  path: string,
+  hunkHeader?: string,
+): Promise<GitWorkingTreeResult> {
+  return hunkHeader === undefined ? write(workspaceId, path) : write(workspaceId, path, hunkHeader)
+}
+
+function contentLines(text: string): string[] {
+  if (text === '') return ['']
+  const body = text.endsWith('\n') ? text.slice(0, -1) : text
+  return body.split('\n')
+}
+
+function diffLineClass(origin: GitDiffLine['origin']): string {
+  switch (origin) {
+    case 'add': return css.diffAdd
+    case 'del': return css.diffDel
+    case 'context': return css.diffContext
+    /* v8 ignore next 2 -- closed-union backstop; only reached if a line origin is forged */
+    default: return assertNever(origin)
+  }
+}
+
 function hostErrorMessage(error: unknown): string {
   if (error instanceof DirectoryBrowseError) return error.rpcError.message
   return error instanceof Error ? error.message : String(error)
@@ -596,4 +919,9 @@ function hostErrorMessage(error: unknown): string {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
+}
+
+/* v8 ignore next 3 -- closed-union backstop; only reached if a preview kind or line origin is forged */
+function assertNever(value: never): never {
+  throw new Error(`unreachable Git preview variant: ${String(value)}`)
 }

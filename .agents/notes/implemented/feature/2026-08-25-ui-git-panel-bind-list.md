@@ -12,7 +12,7 @@ The toolbox Git tab declared in [the three-tab Git slot](2026-08-25-details-thre
 
 `@deepseek-ai/dsh-client-ui-git` is the Git-panel occupant of `conversation.details.git`. It follows the Workspace whose `sessionIds` include the current Session, calls `gitWorkingTree` / `gitInit` through injected `ctx.workspaces` closures, and does not import `ui-file-editor` internals.
 
-The shell passes owner `visible: true` only while the Git segment is selected. The occupant stays mounted when hidden. It reads disk when `visible` becomes true, when the bound Workspace changes, and after a successful init. It does not poll while the tab stays selected, so Agent or terminal writes are not live-followed. Lists render Host rows only (ignored paths never appear; unsaved edit buffers never appear). `git-unavailable` and `not-a-repository` are mutually exclusive overlays; only the latter offers **初始化仓库**. A clean repository shows 「没有要提交的更改」 and keeps the commit-message field. Whole-file stage, discard, commit, and per-Session drafts are owned by [whole-file stage, discard, and commit](2026-08-25-ui-git-panel-stage-commit.md).
+The shell passes owner `visible: true` only while the Git segment is selected. The occupant stays mounted when hidden. It reads disk when `visible` becomes true, when the bound Workspace changes, and after a successful init. It does not poll while the tab stays selected, so Agent or terminal writes are not live-followed. Lists render Host rows only (ignored paths never appear; unsaved edit buffers never appear). `git-unavailable` and `not-a-repository` are mutually exclusive overlays; only the latter offers **初始化仓库**. A clean repository shows 「没有要提交的更改」 and keeps the commit-message field. Whole-file stage, discard, commit, and per-Session drafts are owned by [whole-file stage, discard, and commit](2026-08-25-ui-git-panel-stage-commit.md). Diff preview and hunk operations are owned by [diff preview and hunk operations](2026-08-25-ui-git-panel-diff-preview.md).
 
 First load uses a centered spinner. A later re-read of an already-shown repository uses the 2px list-top indeterminate bar and does not mask the lists.
 
@@ -29,7 +29,7 @@ First load uses a centered spinner. A later re-read of an already-shown reposito
 ## Consequences
 
 - `packages/bundle/web-app` registers `ui-git`. An empty Git seat is no longer the assembled web default.
-- Whole-file stage/discard/commit are owned by [whole-file stage, discard, and commit](2026-08-25-ui-git-panel-stage-commit.md). Hunk operations and the Git action guard remain later slices.
+- Whole-file stage/discard/commit are owned by [whole-file stage, discard, and commit](2026-08-25-ui-git-panel-stage-commit.md). Hunk operations are owned by [diff preview and hunk operations](2026-08-25-ui-git-panel-diff-preview.md). The Git action guard remains a later slice.
 - The `ui-git` client bundle must rebuild before web e2e or `pnpm dsh web` shows the panel body.
 
 ## Testing
