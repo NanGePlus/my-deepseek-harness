@@ -114,12 +114,13 @@ export interface GitDiffHunk {
 }
 
 /**
- * host.gitDiffPreview success value. Tracked text is line-level hunks;
+ * host.gitDiffPreview success value. Tracked text is line-level hunks plus the
+ * post-change file body used to fill unchanged regions between hunks;
  * untracked text is the whole file; binary only declares that a diff exists;
  * deletions include old text when the blob is text.
  */
 export type GitDiffPreview =
-  | { kind: 'text'; hunks: GitDiffHunk[] }
+  | { kind: 'text'; hunks: GitDiffHunk[]; fileText: string }
   | { kind: 'untracked-text'; text: string }
   | { kind: 'binary' }
   | { kind: 'deleted-text'; text: string }

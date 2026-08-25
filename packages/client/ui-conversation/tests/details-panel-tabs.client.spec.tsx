@@ -128,7 +128,7 @@ describe('DetailsPanel segmented tabs', () => {
 
   it('default: shows 资源管理器 | Git | 工具详情 with the editor selected', () => {
     const { view } = bench()
-    expect(tabLabels(view)).toEqual(['资源管理器', 'Git', '工具详情'])
+    expect(tabLabels(view)).toEqual(['资源管理器', 'Git面板', '工具详情'])
     expect(selectedTab(view)).toBe('资源管理器')
     expect(view.getByTestId('editor-surface-seat').getAttribute('data-visible')).toBe('true')
     expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('false')
@@ -150,10 +150,10 @@ describe('DetailsPanel segmented tabs', () => {
   it('tab-selected: selecting Git shows only the Git panel and opens the toolbox', () => {
     const { view, chat, openDetails } = bench()
     expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('false')
-    fireEvent.click(view.getByRole('tab', { name: 'Git' }))
+    fireEvent.click(view.getByRole('tab', { name: 'Git面板' }))
     expect(chat.store.getSnapshot().detailsTab).toBe('git')
     expect(openDetails).toHaveBeenCalledTimes(1)
-    expect(selectedTab(view)).toBe('Git')
+    expect(selectedTab(view)).toBe('Git面板')
     expect(view.getByTestId('git-panel-seat')).toBeTruthy()
     expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('true')
     expect(view.getByTestId('editor-surface-seat').getAttribute('data-visible')).toBe('false')
@@ -177,7 +177,7 @@ describe('DetailsPanel segmented tabs', () => {
 
   it('tab-leave-git: leaving Git hides the panel and keeps the injected occupant and draft', () => {
     const { view, chat } = bench()
-    fireEvent.click(view.getByRole('tab', { name: 'Git' }))
+    fireEvent.click(view.getByRole('tab', { name: 'Git面板' }))
     expect((view.getByTestId('git-commit-draft') as HTMLTextAreaElement).value).toBe('wip message')
     fireEvent.click(view.getByRole('tab', { name: '资源管理器' }))
     expect(chat.store.getSnapshot().detailsTab).toBe('editor')

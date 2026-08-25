@@ -47,4 +47,25 @@ describe('parseWorkingTreePorcelain', () => {
       { path: 'mixed.ts', absolutePath: `${ROOT}/mixed.ts`, kind: 'deleted' },
     ])
   })
+
+  it('decodes quoted UTF-8 porcelain paths', () => {
+    const parsed = parseWorkingTreePorcelain('?? "others/\\345\\237\\272/file.txt"\n', ROOT)
+    expect(parsed.unstaged).toEqual([
+      { path: 'others/基/file.txt', absolutePath: `${ROOT}/others/基/file.txt`, kind: 'untracked' },
+    ])
+  })
+
+  it('omits .DS_Store rows from both change lists', () => {
+    const parsed = parseWorkingTreePorcelain(
+      [
+        '?? .DS_Store',
+        '?? others/.DS_Store',
+        '?? src/readme.md',
+      ].join('\n'),
+      ROOT,
+    )
+    expect(parsed.unstaged).toEqual([
+      { path: 'src/readme.md', absolutePath: `${ROOT}/src/readme.md`, kind: 'untracked' },
+    ])
+  })
 })

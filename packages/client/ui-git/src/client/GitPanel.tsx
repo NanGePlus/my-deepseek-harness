@@ -1,6 +1,6 @@
 /** Git-panel occupant of the details column Git tab. */
 
-import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from 'react'
 import {
   Button, IconCodeOutline16, IconFolderClose16, IconLoadingOutline16, IconPlusOutline16,
   IconRefreshOutline16,
@@ -8,11 +8,17 @@ import {
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
-  GitDiffHunk, GitDiffLine, GitDiffPreview, GitDiffSide, GitInitResult, GitWorkingTreeChange,
+  GitDiffLine, GitDiffPreview, GitDiffSide, GitInitResult, GitWorkingTreeChange,
   GitWorkingTreeResult, WorkspaceId,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
+import { changeKindLetter, splitChangePath } from './change-path-label.ts'
 import { fileIconUrlForPath, FILE_ICON_BASE_URL } from './file-icon.ts'
+import { buildDiffPreviewRows, type DiffPreviewRow } from './diff-preview-model.ts'
+import type { CharSpan } from './inline-char-diff.ts'
+import { DiffMinimap } from './DiffMinimap.tsx'
+import { clampOpsWidth, OPS_WIDTH_DEFAULT } from './git-panel-layout.ts'
+import { GitSplitHandle } from './GitSplitHandle.tsx'
 import type { createGitPanelStore } from './stores.ts'
 import css from './GitPanel.module.css'
 
@@ -156,6 +162,33 @@ export function GitPanel({
   const [guardTarget, setGuardTarget] = useState<GitWorkingTreeChange | null>(null)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [preview, setPreview] = useState<PreviewState>({ kind: 'idle' })
+  const [opsWidthPx, setOpsWidthPx] = useState<number | null>(null)
+  const [opsDragging, setOpsDragging] = useState(false)
+  const splitRef = useRef<HTMLDivElement>(null)
+  const opsDragBase = useRef(0)
+
+  const beginOpsResize = useCallback(() => {
+    const root = splitRef.current
+    if (root === null) return
+    const pane = root.querySelector('[data-git-ops-pane="true"]')
+    const width = pane instanceof HTMLElement
+      ? pane.getBoundingClientRect().width
+      : opsWidthPx ?? 0
+    opsDragBase.current = width
+    if (opsWidthPx === null) setOpsWidthPx(width)
+    setOpsDragging(true)
+  }, [opsWidthPx])
+
+  const dragOpsResize = useCallback((dx: number) => {
+    const root = splitRef.current
+    if (root === null) return
+    const container = root.getBoundingClientRect().width
+    setOpsWidthPx(clampOpsWidth(opsDragBase.current + dx, container))
+  }, [])
+
+  const endOpsResize = useCallback(() => {
+    setOpsDragging(false)
+  }, [])
 
   useEffect(() => {
     if (!visible || workspaceId === undefined) return
@@ -291,6 +324,7 @@ export function GitPanel({
       {renderBody({
         view, t, onInit, initError, initPending, writeError, commitError, message, busyPath, busyKind,
         commitPending, discardTarget, guardTarget, writing, dirtyPaths, selection, preview,
+        splitRef, opsWidthPx, opsDragging, beginOpsResize, dragOpsResize, endOpsResize,
         onMessage: (value) => {
           /* v8 ignore next -- the commit field only renders for a current Session. */
           if (currentSessionId === undefined) return
@@ -377,6 +411,12 @@ interface RepoBody {
   dirtyPaths: readonly string[]
   selection: Selection | null
   preview: PreviewState
+  splitRef: RefObject<HTMLDivElement>
+  opsWidthPx: number | null
+  opsDragging: boolean
+  beginOpsResize: () => void
+  dragOpsResize: (dx: number) => void
+  endOpsResize: () => void
   onMessage: (value: string) => void
   onSelect: (side: SectionId, row: GitWorkingTreeChange) => void
   onStage: (row: GitWorkingTreeChange, hunkHeader?: string) => void
@@ -462,9 +502,19 @@ function renderRepository(
   const stagedDirty = tree.staged.some(row => body.dirtyPaths.includes(row.absolutePath))
   const showEmptyHint = !stagedEmpty && messageEmpty
   const commitDisabled = stagedEmpty || messageEmpty || commitPending || body.writing || stagedDirty
+  const opsClass = body.opsWidthPx !== null ? `${css.ops} ${css.opsResized}` : css.ops
   return (
-    <div className={css.split}>
-      <div className={css.ops}>
+    <div
+      ref={body.splitRef}
+      className={css.split}
+      style={{ '--git-ops-default-width': `${OPS_WIDTH_DEFAULT}px` } as CSSProperties}
+      data-ops-dragging={body.opsDragging || undefined}
+    >
+      <div
+        className={opsClass}
+        style={body.opsWidthPx !== null ? { width: body.opsWidthPx } : undefined}
+        data-git-ops-pane="true"
+      >
         {refreshing
           ? <div className={css.refreshBar} role="progressbar" aria-label={t('git.refresh')} />
           : <div className={css.refreshSlot} />}
@@ -519,7 +569,12 @@ function renderRepository(
           />
         </div>
       </div>
-      <div className={css.gutter} aria-hidden="true" />
+      <GitSplitHandle
+        ariaLabel={t('git.ops.resize')}
+        onStart={body.beginOpsResize}
+        onDrag={body.dragOpsResize}
+        onEnd={body.endOpsResize}
+      />
       <DiffPreviewPane body={body} />
       {discardTarget !== null && (
         <DiscardDialog
@@ -542,6 +597,7 @@ function renderRepository(
 
 function DiffPreviewPane({ body }: { body: RepoBody }): ReactNode {
   const { t, selection, preview } = body
+  const scrollRef = useRef<HTMLDivElement>(null)
   return (
     <div className={css.preview} role="region" aria-label={t('git.preview.region')}>
       {selection === null || preview.kind === 'idle'
@@ -552,18 +608,32 @@ function DiffPreviewPane({ body }: { body: RepoBody }): ReactNode {
               <span className={css.previewName}>{selection.row.path}</span>
               <WholeFilePreviewActions side={selection.side} row={selection.row} body={body} />
             </div>
-            <div className={css.previewBody}>
-              {preview.kind === 'loading' && (
-                <div className={css.previewFeedback} role="status" aria-label={t('git.loading')}>
-                  <span className={css.spinner} aria-hidden="true">
-                    <IconLoadingOutline16 size={24} />
-                  </span>
-                </div>
+            <div className={css.previewScrollWrap}>
+              <div className={css.previewBody} ref={scrollRef}>
+                {preview.kind === 'loading' && (
+                  <div className={css.previewFeedback} role="status" aria-label={t('git.loading')}>
+                    <span className={css.spinner} aria-hidden="true">
+                      <IconLoadingOutline16 size={24} />
+                    </span>
+                  </div>
+                )}
+                {preview.kind === 'error' && (
+                  <div className={css.previewFeedback} role="alert">{preview.message}</div>
+                )}
+                {preview.kind === 'ready' && (
+                  <DiffPreviewContent
+                    preview={preview.preview}
+                    selection={selection}
+                    body={body}
+                  />
+                )}
+              </div>
+              {preview.kind === 'ready' && (
+                <DiffMinimap
+                  rows={buildDiffPreviewRows(preview.preview)}
+                  scrollRef={scrollRef}
+                />
               )}
-              {preview.kind === 'error' && (
-                <div className={css.previewFeedback} role="alert">{preview.message}</div>
-              )}
-              {preview.kind === 'ready' && renderPreviewKind(preview.preview, selection, body)}
             </div>
           </>
         )}
@@ -613,29 +683,14 @@ function WholeFilePreviewActions({
   )
 }
 
-function renderPreviewKind(
-  preview: GitDiffPreview,
-  selection: Selection,
-  body: RepoBody,
-): ReactNode {
+function DiffPreviewContent({
+  preview, selection, body,
+}: {
+  preview: GitDiffPreview
+  selection: Selection
+  body: RepoBody
+}): ReactNode {
   switch (preview.kind) {
-    case 'text':
-      return preview.hunks.map(hunk => (
-        <DiffHunkBlock
-          key={hunk.header}
-          hunk={hunk}
-          selection={selection}
-          body={body}
-        />
-      ))
-    case 'untracked-text':
-      return contentLines(preview.text).map((line, index) => (
-        <DiffLineRow key={index} origin="add" text={line} />
-      ))
-    case 'deleted-text':
-      return contentLines(preview.text).map((line, index) => (
-        <DiffLineRow key={index} origin="del" text={line} />
-      ))
     case 'binary':
     case 'deleted-binary':
       return (
@@ -645,79 +700,149 @@ function renderPreviewKind(
           </div>
         </div>
       )
-    /* v8 ignore next 4 -- closed-union backstop; only reached if a preview kind is forged */
     default: {
-      return assertNever(preview)
+      const rows = buildDiffPreviewRows(preview)
+      return rows.map((row, index) => (
+        <DiffPreviewRowView
+          key={index}
+          row={row}
+          selection={selection}
+          body={body}
+        />
+      ))
     }
   }
 }
 
-function DiffHunkBlock({
-  hunk, selection, body,
+function DiffPreviewRowView({
+  row, selection, body,
 }: {
-  hunk: GitDiffHunk
+  row: DiffPreviewRow
   selection: Selection
   body: RepoBody
 }): ReactNode {
-  const { t } = body
-  const guarded = body.dirtyPaths.includes(selection.row.absolutePath)
-  return (
-    <div className={css.hunk}>
-      <div className={css.hunkHead}>
-        {selection.side === 'unstaged'
-          ? (
-            <>
-              <HunkAction
-                label={t('git.hunk.stage')}
-                disabled={body.writing || guarded}
-                onClick={() => { body.onStage(selection.row, hunk.header) }}
-              />
-              <HunkAction
-                label={t('git.hunk.discard')}
-                disabled={body.writing || guarded}
-                onClick={() => { body.onAskDiscard(selection.row, hunk.header) }}
-              />
-            </>
-          )
-          : (
-            <HunkAction
-              label={t('git.hunk.unstage')}
-              disabled={body.writing}
-              onClick={() => { body.onUnstage(selection.row, hunk.header) }}
-            />
-          )}
+  if (row.kind === 'header') {
+    return <div className={css.hunkHeader}>{row.header}</div>
+  }
+  if (row.kind === 'truncated') {
+    return (
+      <div className={css.previewTruncated} role="note">
+        {body.t('git.preview.truncated', { count: row.omitted })}
       </div>
-      {hunk.lines.map((line, index) => (
-        <DiffLineRow key={index} origin={line.origin} text={line.text} />
+    )
+  }
+  const gutter = row.hunkLineIndex === 0 && row.hunkHeader !== ''
+    ? (
+      <HunkGutterActions
+        side={selection.side}
+        row={selection.row}
+        hunkHeader={row.hunkHeader}
+        body={body}
+      />
+    )
+    : undefined
+  return (
+    <DiffLineRow
+      lineNum={row.lineNum}
+      origin={row.origin}
+      text={row.text}
+      charSpans={row.charSpans}
+      gutterActions={gutter}
+    />
+  )
+}
+
+function HunkGutterActions({
+  side, row, hunkHeader, body,
+}: {
+  side: SectionId
+  row: GitWorkingTreeChange
+  hunkHeader: string
+  body: RepoBody
+}): ReactNode {
+  const { t } = body
+  const guarded = body.dirtyPaths.includes(row.absolutePath)
+  if (side === 'unstaged') {
+    return (
+      <>
+        <IconAction
+          label={t('git.hunk.stage')}
+          disabled={body.writing || guarded}
+          onClick={() => { body.onStage(row, hunkHeader) }}
+        >
+          <IconPlusOutline16 size={14} />
+        </IconAction>
+        <IconAction
+          label={t('git.hunk.discard')}
+          disabled={body.writing || guarded}
+          onClick={() => { body.onAskDiscard(row, hunkHeader) }}
+        >
+          <IconRefreshOutline16 size={14} />
+        </IconAction>
+      </>
+    )
+  }
+  return (
+    <IconAction
+      label={t('git.hunk.unstage')}
+      disabled={body.writing}
+      onClick={() => { body.onUnstage(row, hunkHeader) }}
+    >
+      <IconMinus size={14} />
+    </IconAction>
+  )
+}
+
+function DiffLineRow({
+  lineNum, origin, text, charSpans, gutterActions,
+}: {
+  lineNum: number
+  origin: GitDiffLine['origin']
+  text: string
+  charSpans?: CharSpan[] | undefined
+  gutterActions?: ReactNode
+}): ReactNode {
+  const prefix = origin === 'add' ? '+' : origin === 'del' ? '-' : ' '
+  return (
+    <div className={`${css.diffRow} ${diffRowClass(origin)}`}>
+      <div className={css.diffGutterActions}>{gutterActions}</div>
+      <div className={css.diffLineNum} aria-hidden="true">{lineNum > 0 ? String(lineNum) : ''}</div>
+      <div className={css.diffPrefix} aria-hidden="true">{prefix}</div>
+      <DiffLineContent origin={origin} text={text} charSpans={charSpans} />
+    </div>
+  )
+}
+
+function DiffLineContent({
+  origin, text, charSpans,
+}: {
+  origin: GitDiffLine['origin']
+  text: string
+  charSpans?: CharSpan[] | undefined
+}): ReactNode {
+  const baseClass = `${css.diffContent} ${diffLineClass(origin)}`
+  if (charSpans === undefined || charSpans.every(span => span.kind === 'same')) {
+    return <div className={baseClass}>{text}</div>
+  }
+  return (
+    <div className={baseClass}>
+      {charSpans.map((span, index) => (
+        <span
+          key={index}
+          className={charSpanClass(origin, span.kind)}
+        >
+          {span.text}
+        </span>
       ))}
     </div>
   )
 }
 
-function DiffLineRow({ origin, text }: { origin: GitDiffLine['origin']; text: string }): ReactNode {
-  return (
-    <div className={`${css.diffLine} ${diffLineClass(origin)}`}>{text}</div>
-  )
-}
-
-function HunkAction({
-  label, disabled, onClick,
-}: {
-  label: string
-  disabled: boolean
-  onClick: () => void
-}): ReactNode {
-  return (
-    <button
-      type="button"
-      className={css.hunkAction}
-      aria-label={label}
-      aria-disabled={disabled || undefined}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  )
+function charSpanClass(origin: GitDiffLine['origin'], kind: CharSpan['kind']): string | undefined {
+  if (kind === 'same') return undefined
+  if (origin === 'add' && kind === 'insert') return css.diffCharInsert
+  if (origin === 'del' && kind === 'delete') return css.diffCharDelete
+  return undefined
 }
 
 function ChangeSection({
@@ -772,10 +897,19 @@ function ChangeRow({
     : body.busyKind === 'discard'
       ? t('git.busy.discard')
       : t('git.busy.stage')
+  const { fileName, parentDir } = splitChangePath(row.path)
+  const statusLetter = changeKindLetter(row.kind)
+  const statusClass = row.kind === 'untracked'
+    ? css.rowBadgeUntracked
+    : row.kind === 'deleted'
+      ? css.rowBadgeDeleted
+      : css.rowBadgeModified
   return (
     <li
       className={selected ? `${css.row} ${css.rowSelected}` : css.row}
       aria-selected={selected || undefined}
+      aria-label={row.path}
+      data-change-path={row.path}
       onClick={() => { body.onSelect(id, row) }}
     >
       <span className={css.rowIcon} role="img" aria-label={t('git.icon.file')}>
@@ -793,7 +927,16 @@ function ChangeRow({
           }}
         />
       </span>
-      <span className={css.rowPath}>{row.path}</span>
+      <span className={css.rowLabel}>
+        <span className={css.rowFileName}>{fileName}</span>
+        {parentDir !== '' && <span className={css.rowParentDir}>{parentDir}</span>}
+      </span>
+      <span
+        className={`${css.rowBadge} ${statusClass}`}
+        aria-label={t('git.change.status', { letter: statusLetter })}
+      >
+        {statusLetter}
+      </span>
       {busy
         ? (
           <span className={css.rowSpinner} role="status" aria-label={busyLabel}>
@@ -955,17 +1098,21 @@ function invokeWrite(
   return hunkHeader === undefined ? write(workspaceId, path) : write(workspaceId, path, hunkHeader)
 }
 
-function contentLines(text: string): string[] {
-  if (text === '') return ['']
-  const body = text.endsWith('\n') ? text.slice(0, -1) : text
-  return body.split('\n')
-}
-
 function diffLineClass(origin: GitDiffLine['origin']): string {
   switch (origin) {
     case 'add': return css.diffAdd as string
     case 'del': return css.diffDel as string
     case 'context': return css.diffContext as string
+    /* v8 ignore next 2 -- closed-union backstop; only reached if a line origin is forged */
+    default: return assertNever(origin)
+  }
+}
+
+function diffRowClass(origin: GitDiffLine['origin']): string {
+  switch (origin) {
+    case 'add': return css.diffAddRow as string
+    case 'del': return css.diffDelRow as string
+    case 'context': return css.diffContextRow as string
     /* v8 ignore next 2 -- closed-union backstop; only reached if a line origin is forged */
     default: return assertNever(origin)
   }

@@ -1,0 +1,44 @@
+---
+description: 修改 web 客户端插件源码后，结束前必须 rebuild 对应 lib/client.js bundle
+alwaysApply: true
+---
+
+# 客户端 bundle 重建
+
+`pnpm dsh web` 浏览器加载的是各插件已构建的 **`lib/client.js`**，不是 `src/` 源码。只改源码不 rebuild，页面上**不会变化**。
+
+## 何时必须 rebuild
+
+在同一轮对话中，只要改动了会进入浏览器 bundle 的路径，**向用户宣称「完成 / 请验证」之前**必须 rebuild 受影响的包：
+
+- `packages/*/*/src/client/**`（及同包的 `src/client/` 入口链）
+- 会改变 client bundle 内容的 CSS module、locale、client 侧 types
+- `apps/web/` 中影响前端组装的改动（通常需 `pnpm run build` 或对应 web 构建）
+
+不必 rebuild：纯测试、纯 docs、仅 Node 侧 `lib/index.js`（无 `./client` export）、与 web UI 无关的后端包。
+
+## 怎么 rebuild
+
+**按改动包逐个 bundle**（优先，最快）：
+
+```sh
+pnpm --filter @deepseek-ai/dsh-client-ui-conversation run bundle
+pnpm --filter @deepseek-ai/dsh-client-ui-file-editor run bundle
+# 其他包：pnpm --filter <package.json 的 name> run bundle
+```
+
+从文件路径推断包名：`packages/client/ui-conversation/src/...` → `@deepseek-ai/dsh-client-ui-conversation`。
+
+**长期本地开发**（可选，与用户并行）：另开终端 `pnpm run dev:web`，源码变更自动 watch rebuild；`dsh web` 会 stat 轮询并 HMR 推送新 rev。
+
+**全量**（跨多包、发布前、或不确定影响面时）：
+
+```sh
+pnpm run build
+```
+
+## 完成前自检
+
+- [ ] 已对所改动的每个 web client 插件执行 `run bundle`（或确认 `dev:web` 正在 watch）
+- [ ] 若用户用 `pnpm dsh web` 验证 UI，回复中提醒 **硬刷新**（`Cmd+Shift+R`）或重启 web 进程
+- [ ] 在回复中**简要列出**实际执行的 rebuild 命令（不要默认用户已手动 bundle）

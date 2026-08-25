@@ -161,7 +161,7 @@ export const hostGitDiffPreviewRequestSchema = z.object({
 
 /** host.gitDiffPreview response value. */
 export const hostGitDiffPreviewValueSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('text'), hunks: z.array(gitDiffHunkSchema) }),
+  z.object({ kind: z.literal('text'), hunks: z.array(gitDiffHunkSchema), fileText: z.string() }),
   z.object({ kind: z.literal('untracked-text'), text: z.string() }),
   z.object({ kind: z.literal('binary') }),
   z.object({ kind: z.literal('deleted-text'), text: z.string() }),

@@ -1,0 +1,27 @@
+# Repo Wiki 元数据格式
+# 生成完成后写入 docs/repo-wiki/_meta.yaml
+
+# 示例：
+branch: main
+commit: abc1234def5678901234567890abcdef12345678
+language: zh-CN          # zh-CN | en — 同一仓库只保留一种
+generated_at: 2026-08-03T10:00:00+08:00
+page_count: 12
+diagram_enabled: true
+retry_count: 0           # 单页失败时的自动重试次数
+status: complete         # complete | partial | stopped
+failed_pages: []         # 生成失败的页面路径列表（若有）
+# failed_pages:
+#   - 02-core-modules/billing.md
+
+# 字段说明
+#
+# branch        — 生成时所在分支
+# commit        — 生成时 HEAD 完整 commit hash（用于刷新检测）
+# language      — Wiki 语言；换语言重新生成会覆盖全部页面
+# generated_at  — ISO 8601 时间戳
+# page_count    — 成功生成的页面数（含 README，不含 _meta.yaml）
+# diagram_enabled — 是否启用了图表生成
+# retry_count   — 用户配置的失败重试次数
+# status        — complete=全部成功；partial=部分失败或用户停止；stopped=用户主动停止
+# failed_pages  — partial 时列出失败页路径，便于重新生成

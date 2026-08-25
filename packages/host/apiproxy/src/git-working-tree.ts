@@ -10,7 +10,7 @@ import { runNativeCommand, type NativeCommandRunner } from '@deepseek-ai/dsh-nat
 import type {
   GitDiffHunk, GitDiffPreview, GitDiffSide, GitWorkingTreeChange, GitWorkingTreeChangeKind, GitWorkingTreeResult,
 } from './api/host.ts'
-import { parsePorcelainPath } from './git-status.ts'
+import { isGitUiVisibleRelativePath, normalizePorcelainRelativePath } from './git-status.ts'
 import { pathWithinWorkspace } from './list-workspace-entries.ts'
 
 /**
@@ -106,9 +106,9 @@ export function parseWorkingTreePorcelain(
     if (line.length < 4 || line[2] !== ' ') continue
     const indexStatus = line.charAt(0)
     const workTreeStatus = line.charAt(1)
-    const relativePath = parsePorcelainPath(line.slice(3)).replaceAll('\\', '/')
+    const relativePath = normalizePorcelainRelativePath(line.slice(3))
     /* v8 ignore next -- porcelain never emits an empty path after the status prefix. */
-    if (relativePath === '') continue
+    if (relativePath === '' || !isGitUiVisibleRelativePath(relativePath)) continue
     const absolutePath = resolve(root, relativePath)
     const pair = `${indexStatus}${workTreeStatus}`
     if (UNMERGED_PAIRS.has(pair) || (indexStatus === '?' && workTreeStatus === '?')) {
@@ -264,7 +264,7 @@ function porcelainPairForPath(porcelain: string, relativePath: string): { index:
     if (line.length < 4 || line[2] !== ' ') continue
     const index = line.charAt(0)
     const work = line.charAt(1)
-    if (parsePorcelainPath(line.slice(3)).replaceAll('\\', '/') === relativePath) {
+    if (normalizePorcelainRelativePath(line.slice(3)) === relativePath) {
       return { index, work }
     }
   }
@@ -545,7 +545,9 @@ export async function readGitDiffPreview(
         const numstat = await git(run, repoRoot, ['diff', '--numstat', '--', rel], signal)
         if (numstatIsBinary(numstat)) return { kind: 'binary' }
         const diff = await git(run, repoRoot, ['diff', '--', rel], signal)
-        return { kind: 'text', hunks: parseUnifiedDiff(diff) }
+        const bytes = await readFile(absolutePath)
+        if (containsNul(bytes)) return { kind: 'binary' }
+        return { kind: 'text', hunks: parseUnifiedDiff(diff), fileText: bytes.toString('utf8') }
       }
       throw new GitPathNotFoundError(absolutePath)
     }
@@ -559,7 +561,8 @@ export async function readGitDiffPreview(
     const numstat = await git(run, repoRoot, ['diff', '--cached', '--numstat', '--', rel], signal)
     if (numstatIsBinary(numstat)) return { kind: 'binary' }
     const diff = await git(run, repoRoot, ['diff', '--cached', '--', rel], signal)
-    return { kind: 'text', hunks: parseUnifiedDiff(diff) }
+    const fileText = await git(run, repoRoot, ['show', `:${rel}`], signal)
+    return { kind: 'text', hunks: parseUnifiedDiff(diff), fileText }
   } catch (error: unknown) {
     if (error instanceof GitUnavailableError || error instanceof GitPathNotFoundError) throw error
     if (signal.aborted) throw error

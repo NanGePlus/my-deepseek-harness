@@ -98,16 +98,36 @@
   position: relative;
 }
 
+.split[data-ops-dragging] {
+  user-select: none;
+}
+
 .ops {
   display: flex;
-  flex: none;
+  flex: 0 0 var(--git-ops-default-width, 180px);
+  width: var(--git-ops-default-width, 180px);
+  min-width: min(180px, 100%);
   flex-direction: column;
   gap: 8px;
-  width: 40%;
-  min-width: 200px;
   min-height: 0;
   padding: 8px;
-  background: var(--dsw-alias-bg-overlay);
+  background: var(--dsw-specific-sidebar-fill);
+  border-right: 1px solid var(--dsw-alias-border-l1);
+}
+
+.opsResized {
+  flex: none;
+  width: auto;
+  max-width: none;
+}
+
+.splitHandle {
+  flex: none;
+  width: 8px;
+  margin: 0 -4px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 1;
 }
 
 .refreshBar {
@@ -370,7 +390,8 @@
   height: 16px;
 }
 
-.rowPath {
+.rowLabel {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -378,13 +399,37 @@
   font-family: var(--dsw-font-family);
   font-size: 13px;
   line-height: 18px;
+}
+
+.rowFileName {
   color: var(--dsw-alias-label-primary);
 }
 
-.gutter {
+.rowParentDir {
+  margin-left: 6px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.rowBadge {
   flex: none;
-  width: 1px;
-  background: var(--dsw-alias-border-l2);
+  min-width: 14px;
+  font-family: var(--dsw-font-family);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.rowBadgeModified {
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.rowBadgeUntracked {
+  color: var(--dsw-alias-label-caption);
+}
+
+.rowBadgeDeleted {
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .preview {
@@ -430,12 +475,110 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.previewScrollWrap {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .previewBody {
   display: flex;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   flex-direction: column;
   overflow: auto;
+  background: var(--dsw-alias-bg-base);
+}
+
+.hunkHeader {
+  padding: 4px 12px 4px 88px;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-caption);
+  background: color-mix(in srgb, var(--dsw-alias-label-caption) 8%, var(--dsw-alias-bg-base));
+  user-select: none;
+  white-space: pre;
+}
+
+.minimap {
+  flex: none;
+  width: 12px;
+  padding: 0 2px 0 0;
+  background: var(--dsw-alias-bg-base);
+  min-height: 0;
+  align-self: stretch;
+}
+
+.minimapTrack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  cursor: pointer;
+}
+
+.minimapContext,
+.minimapAdd,
+.minimapDel,
+.minimapHeader,
+.minimapTruncated {
+  flex: 1;
+  min-height: 1px;
+  width: 100%;
+}
+
+.minimapContext {
+  background: color-mix(in srgb, var(--dsw-alias-label-caption) 35%, transparent);
+}
+
+.minimapAdd {
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 75%, transparent);
+}
+
+.minimapDel {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 75%, transparent);
+}
+
+.minimapHeader {
+  background: color-mix(in srgb, var(--dsw-alias-label-caption) 55%, transparent);
+}
+
+.minimapTruncated {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 55%, transparent);
+}
+
+.minimapViewport {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+  pointer-events: none;
+}
+
+.diffCharInsert {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 38%, transparent);
+}
+
+.diffCharDelete {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 38%, transparent);
+}
+
+.previewTruncated {
+  padding: 8px 12px 8px 88px;
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 8%, var(--dsw-alias-bg-base));
 }
 
 .hunk {
@@ -443,40 +586,71 @@
   flex-direction: column;
 }
 
-.hunkHead {
+.diffRow {
   display: flex;
-  flex: none;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-}
-
-.hunkAction {
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font-family: var(--dsw-font-family);
-  font-size: 12px;
-  line-height: 16px;
-  cursor: pointer;
-}
-
-.hunkAction:hover:not([aria-disabled='true']) {
-  color: var(--dsw-alias-label-primary);
-}
-
-.hunkAction[aria-disabled='true'] {
-  color: var(--dsw-alias-label-caption);
-  cursor: not-allowed;
-}
-
-.diffLine {
-  padding: 0 8px;
+  min-height: 20px;
+  align-items: stretch;
   font-family: var(--ds-font-family-code);
   font-size: 13px;
   line-height: 20px;
+}
+
+.diffGutterActions {
+  display: flex;
+  flex: none;
+  width: 28px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 2px;
+  background: var(--dsw-alias-bg-base);
+}
+
+.diffLineNum {
+  flex: none;
+  width: 44px;
+  padding-right: 8px;
+  color: var(--dsw-alias-label-caption);
+  text-align: right;
+  user-select: none;
+  background: var(--dsw-alias-bg-base);
+}
+
+.diffPrefix {
+  flex: none;
+  width: 16px;
+  color: var(--dsw-alias-label-caption);
+  text-align: center;
+  user-select: none;
+}
+
+.diffContent {
+  flex: 1;
+  min-width: 0;
+  padding-right: 12px;
   white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diffContextRow {
+  background: var(--dsw-alias-bg-base);
+}
+
+.diffAddRow {
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, var(--dsw-alias-bg-base));
+}
+
+.diffDelRow {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, var(--dsw-alias-bg-base));
+}
+
+.diffAddRow .diffLineNum,
+.diffAddRow .diffPrefix,
+.diffDelRow .diffLineNum,
+.diffDelRow .diffPrefix {
+  background: transparent;
 }
 
 .diffAdd {

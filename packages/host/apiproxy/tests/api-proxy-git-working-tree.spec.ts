@@ -726,6 +726,7 @@ describe('host.gitDiffPreview', () => {
       { origin: 'del', text: 'v1' },
       { origin: 'add', text: 'v2' },
     ]))
+    expect(preview.fileText).toBe('v2\n')
   })
 
   it('previews untracked text as a whole-file addition', async () => {
