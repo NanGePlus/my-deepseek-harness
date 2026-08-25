@@ -85,14 +85,14 @@ export function DiffMinimap({
 function minimapToneClass(tone: MinimapTone): string {
   switch (tone) {
     case 'header':
-      return css.minimapHeader
+      return css.minimapHeader as string
     case 'add':
-      return css.minimapAdd
+      return css.minimapAdd as string
     case 'del':
-      return css.minimapDel
+      return css.minimapDel as string
     case 'truncated':
-      return css.minimapTruncated
+      return css.minimapTruncated as string
     case 'context':
-      return css.minimapContext
+      return css.minimapContext as string
   }
 }

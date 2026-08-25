@@ -55,8 +55,10 @@ describe('buildDiffPreviewRows', () => {
         ],
       }],
     })
-    const del = rows.find(row => row.kind === 'line' && row.origin === 'del')
-    const add = rows.find(row => row.kind === 'line' && row.origin === 'add')
+    const del = rows.find((row): row is Extract<typeof row, { kind: 'line' }> =>
+      row.kind === 'line' && row.origin === 'del')
+    const add = rows.find((row): row is Extract<typeof row, { kind: 'line' }> =>
+      row.kind === 'line' && row.origin === 'add')
     expect(del?.charSpans).toEqual([{ kind: 'delete', text: 'old' }])
     expect(add?.charSpans).toEqual([{ kind: 'insert', text: 'new' }])
   })

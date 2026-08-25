@@ -1,6 +1,8 @@
 /** Split a repository-relative change path for Git-panel row labels. */
 
-import type { GitWorkingTreeChangeKind } from '@deepseek-ai/dsh-client-runtime/client'
+import type { GitWorkingTreeChange } from '@deepseek-ai/dsh-client-runtime/client'
+
+type GitWorkingTreeChangeKind = GitWorkingTreeChange['kind']
 
 /** File name and parent directory segments of one repository-relative path. */
 export interface ChangePathLabel {
