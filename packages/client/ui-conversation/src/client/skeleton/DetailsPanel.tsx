@@ -21,7 +21,7 @@ export function DetailsPanel({
   useSessions, renderSlot, openDetails, t,
   useChat, useConversation,
 }: DetailsPanelProps) {
-  const detailsTab = useChat(binding => binding.state.detailsTab ?? 'editor')
+  const detailsTab = useChat(binding => binding.state.detailsTab)
   const chatActions = useChat(binding => binding.actions)
   const boundSessionId = useChat(binding => binding.sessionId)
   const currentSessionId = useSessions(list => list.current)
@@ -62,7 +62,7 @@ export function DetailsPanel({
           role="tabpanel"
           aria-hidden={detailsTab !== 'git'}
         >
-          {renderSlot('conversation.details.git', {})}
+          {renderSlot('conversation.details.git', { visible: detailsTab === 'git' })}
         </div>
         <div
           className={clsx(css.tabPanel, detailsTab !== 'tool' && css.tabPanelHidden)}

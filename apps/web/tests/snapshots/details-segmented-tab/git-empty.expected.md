@@ -1,0 +1,2 @@
+- text: Not a Git repository No Git repository was found above the bound directory.
+- button "Initialize repository"

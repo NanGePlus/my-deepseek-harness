@@ -68,11 +68,11 @@ function bench(overrides?: Partial<Pick<DetailsSlotProps, 'renderSlot'>>) {
   const conversation = createSnapshotStore(snap)
   const openDetails = vi.fn()
   const closeDetails = vi.fn()
-  const renderSlot: DetailsSlotProps['renderSlot'] = overrides?.renderSlot ?? ((key) => {
+  const renderSlot: DetailsSlotProps['renderSlot'] = overrides?.renderSlot ?? ((key, owner) => {
     if (key === 'conversation.details.editor') return <div data-testid="editor-surface-seat" />
     if (key === 'conversation.details.git') {
       return (
-        <div data-testid="git-panel-seat">
+        <div data-testid="git-panel-seat" data-visible={String(owner.visible)}>
           <textarea data-testid="git-commit-draft" defaultValue="wip message" />
         </div>
       )
@@ -143,11 +143,13 @@ describe('DetailsPanel segmented tabs', () => {
 
   it('tab-selected: selecting Git shows only the Git panel and opens the toolbox', () => {
     const { view, chat, openDetails } = bench()
+    expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('false')
     fireEvent.click(view.getByRole('tab', { name: 'Git' }))
     expect(chat.store.getSnapshot().detailsTab).toBe('git')
     expect(openDetails).toHaveBeenCalledTimes(1)
     expect(selectedTab(view)).toBe('Git')
     expect(view.getByTestId('git-panel-seat')).toBeTruthy()
+    expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('true')
     expect(panels(view)[0]!.getAttribute('aria-hidden')).toBe('true')
     expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('false')
     expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('true')

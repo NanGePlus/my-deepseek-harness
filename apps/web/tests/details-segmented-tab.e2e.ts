@@ -1,8 +1,8 @@
 // Keyless browser regression for the details segmented tab chrome and editor-surface
 // (file tree + unopened-file empty state). The workspace fixture is not a Git
 // repository: an empty `.git` directory would make `git status` mis-detect one.
-// This slice covers the three-tab chrome (File editor | Git | Tool details);
-// Git panel empty states belong to the ui-git issues.
+// This slice covers the three-tab chrome (File editor | Git | Tool details)
+// and the Git panel not-a-repository empty state of the non-Git workspace fixture.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
@@ -19,6 +19,7 @@ import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './suppor
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/details-segmented-tab', import.meta.url))
 const TABS_EXPECTED = join(SNAPSHOT_DIR, 'tabs.expected.md')
 const EDITOR_EXPECTED = join(SNAPSHOT_DIR, 'editor-empty.expected.md')
+const GIT_EXPECTED = join(SNAPSHOT_DIR, 'git-empty.expected.md')
 const FIXTURE = fileURLToPath(new URL('./snapshots/lifecycle-chrome/session.jsonl', import.meta.url))
 const SEED_FIXTURE = fileURLToPath(new URL('./snapshots/seeded-history/seed.jsonl', import.meta.url))
 const PROMPT = 'Reply with the single word LIGHTHOUSE and stop.'
@@ -101,12 +102,16 @@ describe.skipIf(MODE === 'record')('web e2e: details segmented tab chrome', () =
     expect(await page.getByRole('tab', { name: 'File editor' }).getAttribute('aria-selected')).toBe('false')
     expect(await page.getByRole('tab', { name: 'Tool details' }).getAttribute('aria-selected')).toBe('false')
     await expect.poll(() => detailsTrack(page), { timeout: 10_000 }).toBeGreaterThan(0)
+    await page.getByText('Not a Git repository', { exact: true }).waitFor({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Initialize repository' }).waitFor({ timeout: 5_000 })
+    const gitSnapshot = await captureStableAria(page, '[data-surface="git-panel"]', scaffold.workspaceCwd)
+    await compareOrRefreshGolden(GIT_EXPECTED, gitSnapshot, MODE)
 
     await page.getByRole('tab', { name: 'Tool details' }).click()
     await page.getByText('Click a tool row in the message flow to view its details', { exact: true }).waitFor({ timeout: 5_000 })
 
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['tabs.expected.md', 'editor-empty.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['tabs.expected.md', 'editor-empty.expected.md', 'git-empty.expected.md'])
   }, 90_000)
 })

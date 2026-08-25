@@ -12,9 +12,9 @@ Git panel V2 needs a third toolbox segment beside the explorer and Tool details 
 
 `ui-conversation` owns the toolbox tab chrome: `DetailsPanel` renders **资源管理器 | Git | 工具详情**, and the per-session chat store `detailsTab` is `'editor' | 'git' | 'tool'`. Only one segment is selected. Selecting **资源管理器** or **Git** calls `layout.openDetails()` so a collapsed column opens; the shell does not add a fourth column or overlay.
 
-The Git occupant is child slot `conversation.details.git` (`kind: 'single'`, `scope: 'root'`). `ui-git` injects here. All three tabpanels stay mounted; an unselected panel is `display: none` (`aria-hidden`). Leaving Git does not unstage and does not clear a commit-message draft — those belong to the Git occupant, and hiding the panel is what preserves them.
+The Git occupant is child slot `conversation.details.git` (`kind: 'single'`, `scope: 'root'`, owner `{ visible }`). `ui-git` injects here. All three tabpanels stay mounted; an unselected panel is `display: none` (`aria-hidden`). `visible` is true only while Git is selected so the occupant can re-read disk when the user returns. Leaving Git does not unstage and does not clear a commit-message draft — those belong to the Git occupant, and hiding the panel is what preserves them.
 
-An empty `conversation.details.git` seat is the correct assembled state until `ui-git` registers. Right-column drag and concession stay in `ui-layout`.
+`ui-git` registers the occupant into this seat. Right-column drag and concession stay in `ui-layout`.
 
 ## Alternatives considered
 
@@ -30,7 +30,7 @@ An empty `conversation.details.git` seat is the correct assembled state until `u
 
 - `ui-git` must inject `conversation.details.git` and must not import `ui-file-editor` internals.
 - Switching tabs never issues a Git write RPC; unstaging is not a shell behavior.
-- Browser e2e `details-segmented-tab` includes the Git tab label. Git-panel empty states are not part of this slice.
+- Browser e2e `details-segmented-tab` includes the Git tab label. Git-panel body coverage lives with [`ui-git` bind/list](2026-08-25-ui-git-panel-bind-list.md).
 - The `ui-conversation` client bundle must rebuild before web e2e or `pnpm dsh web` shows the third tab.
 
 ## Testing
