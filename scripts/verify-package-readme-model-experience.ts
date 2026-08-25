@@ -72,6 +72,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/client/ui-sidebar': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/client/ui-conversation': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/client/ui-file-editor': { kind: 'none', reason: 'Browser-side file-editor surface; listings and Git badges never enter the session log.' },
+  'packages/client/ui-git': { kind: 'none', reason: 'Browser-side Git panel surface; working-tree lists and commit drafts never enter the session log.' },
   'packages/client/ui-message-feedback': { kind: 'none', reason: 'Browser-side controls over the message-feedback sidecar; ratings and notes never enter the Session log, model context, or telemetry.' },
   'packages/client/ui-tool': { kind: 'none', reason: 'Browser-side Tool presentation layer; renders logged calls without changing model context.' },
   'packages/client/ui-jobs': { kind: 'none', reason: 'Browser-side read-only projection of ctx.jobs records; dsh-tool-jobs owns the model-facing behavior.' },

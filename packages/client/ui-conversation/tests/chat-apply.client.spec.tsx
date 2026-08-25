@@ -86,8 +86,10 @@ describe('apply wiring', () => {
     // (the session-maybe 'conversation' shell carries no store by design).
     expect(conversationSession?.store).toBeDefined()
     expect(conversationHeader?.store).toBe(conversationSession?.store)
-    expect(details?.store).toBe(conversationSession?.store)
     expect(chatView?.store).toBe(conversationSession?.store)
+    // details is root-scoped: it binds the current session through inject.hooks.chat,
+    // not a store share (the session-maybe 'conversation' shell also carries none).
+    expect(details?.store).toBeUndefined()
     // The hero holes ride the conversation entry's children declaration (the
     // empty-state occupant is gone). Both are root-scoped: the new-session
     // screen precedes the session either would belong to.

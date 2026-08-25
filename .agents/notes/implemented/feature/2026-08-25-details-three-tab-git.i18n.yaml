@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-25-details-three-tab-git.md
-2026-08-25-details-three-tab-git.md: 2581bf2a80752410b8ff533f70cd3cdabbed6182
-2026-08-25-details-three-tab-git.zh.md: 00a97ddcdbb40626265e299d5c91bed103424c07
+2026-08-25-details-three-tab-git.md: 5821a4ecb9d25e4f95906d2983e957a0c0daa2f6
+2026-08-25-details-three-tab-git.zh.md: 94173615c9d0b176a80793e99cc137d9e106f238

@@ -8,7 +8,7 @@ import {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ConversationSnapshot, SessionId, SessionListState, WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionProviderComponent } from '@deepseek-ai/dsh-client-ui-slots'
-import type { DetailsSlotProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { DetailsGitOwnerProps, DetailsSlotProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import {
@@ -68,11 +68,12 @@ function bench(overrides?: Partial<Pick<DetailsSlotProps, 'renderSlot'>>) {
   const conversation = createSnapshotStore(snap)
   const openDetails = vi.fn()
   const closeDetails = vi.fn()
-  const renderSlot: DetailsSlotProps['renderSlot'] = overrides?.renderSlot ?? ((key) => {
+  const renderSlot: DetailsSlotProps['renderSlot'] = overrides?.renderSlot ?? ((key, owner) => {
     if (key === 'conversation.details.editor') return <div data-testid="editor-surface-seat" />
     if (key === 'conversation.details.git') {
+      const gitOwner = owner as unknown as DetailsGitOwnerProps
       return (
-        <div data-testid="git-panel-seat">
+        <div data-testid="git-panel-seat" data-visible={String(gitOwner.visible)}>
           <textarea data-testid="git-commit-draft" defaultValue="wip message" />
         </div>
       )
@@ -143,11 +144,13 @@ describe('DetailsPanel segmented tabs', () => {
 
   it('tab-selected: selecting Git shows only the Git panel and opens the toolbox', () => {
     const { view, chat, openDetails } = bench()
+    expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('false')
     fireEvent.click(view.getByRole('tab', { name: 'Git' }))
     expect(chat.store.getSnapshot().detailsTab).toBe('git')
     expect(openDetails).toHaveBeenCalledTimes(1)
     expect(selectedTab(view)).toBe('Git')
     expect(view.getByTestId('git-panel-seat')).toBeTruthy()
+    expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('true')
     expect(panels(view)[0]!.getAttribute('aria-hidden')).toBe('true')
     expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('false')
     expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('true')

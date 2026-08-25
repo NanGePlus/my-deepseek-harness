@@ -131,9 +131,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     /**
      * The Git panel rendered when the details segmented tab selects 「Git」.
      * One occupant; ui-git injects here. The shell hides this seat when the
-     * tab is not selected and does not unmount it.
+     * tab is not selected and does not unmount it. `visible` is true only
+     * while Git is the selected segment so the occupant can re-read disk
+     * when the user returns to the tab.
      */
-    'conversation.details.git': { kind: 'single'; scope: 'root' }
+    'conversation.details.git': { kind: 'single'; scope: 'root'; owner: DetailsGitOwnerProps }
     /**
      * The composer takeover chain: entries are selector-routed replacements
      * of the default InputBar. Declared by this package's 'conversation'
@@ -417,6 +419,12 @@ export interface DetailsToolOwnerProps {
   block: ToolCallBlock
   /** Session workspace root for card cwd and relative-path display. */
   cwd?: string | undefined
+}
+
+/** Owner share of the toolbox Git occupant: whether the Git segment is selected. */
+export interface DetailsGitOwnerProps {
+  /** True while the toolbox Git segment is selected. Hidden panels stay mounted. */
+  visible: boolean
 }
 
 /**
