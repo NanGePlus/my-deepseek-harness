@@ -222,6 +222,84 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
+   * Stage a working-tree change (recorded). The default is not-a-repository.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param path - Host-absolute path under the discovered repository root.
+   * @param hunkHeader - optional unified-diff hunk header.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns the refreshed working tree.
+   */
+  async gitStage(
+    workspaceId: WorkspaceId,
+    path: string,
+    hunkHeader?: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    this.calls.push({ method: 'gitStage', args: [workspaceId, path, hunkHeader, signal] })
+    const stub = this.stubs.get('gitStage')
+    if (stub !== undefined) return await (stub(workspaceId, path, hunkHeader, signal) as Promise<GitWorkingTreeResult>)
+    return { availability: 'not-a-repository' }
+  }
+
+  /**
+   * Unstage a working-tree change (recorded). The default is not-a-repository.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param path - Host-absolute path under the discovered repository root.
+   * @param hunkHeader - optional unified-diff hunk header.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns the refreshed working tree.
+   */
+  async gitUnstage(
+    workspaceId: WorkspaceId,
+    path: string,
+    hunkHeader?: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    this.calls.push({ method: 'gitUnstage', args: [workspaceId, path, hunkHeader, signal] })
+    const stub = this.stubs.get('gitUnstage')
+    if (stub !== undefined) return await (stub(workspaceId, path, hunkHeader, signal) as Promise<GitWorkingTreeResult>)
+    return { availability: 'not-a-repository' }
+  }
+
+  /**
+   * Discard an unstaged working-tree change (recorded). The default is not-a-repository.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param path - Host-absolute path under the discovered repository root.
+   * @param hunkHeader - optional unified-diff hunk header.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns the refreshed working tree.
+   */
+  async gitDiscard(
+    workspaceId: WorkspaceId,
+    path: string,
+    hunkHeader?: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    this.calls.push({ method: 'gitDiscard', args: [workspaceId, path, hunkHeader, signal] })
+    const stub = this.stubs.get('gitDiscard')
+    if (stub !== undefined) return await (stub(workspaceId, path, hunkHeader, signal) as Promise<GitWorkingTreeResult>)
+    return { availability: 'not-a-repository' }
+  }
+
+  /**
+   * Commit the current index (recorded). The default is not-a-repository.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param message - commit message.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns the refreshed working tree.
+   */
+  async gitCommit(
+    workspaceId: WorkspaceId,
+    message: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    this.calls.push({ method: 'gitCommit', args: [workspaceId, message, signal] })
+    const stub = this.stubs.get('gitCommit')
+    if (stub !== undefined) return await (stub(workspaceId, message, signal) as Promise<GitWorkingTreeResult>)
+    return { availability: 'not-a-repository' }
+  }
+
+  /**
    * Read a Workspace file (recorded). The default returns empty text or empty bytes.
    * @param workspaceId - Workspace whose root bounds the path.
    * @param path - absolute file path.

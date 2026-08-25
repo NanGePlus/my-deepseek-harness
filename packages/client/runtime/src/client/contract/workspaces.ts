@@ -97,6 +97,64 @@ export interface IWorkspaces {
     signal?: AbortSignal,
   ): Promise<GitDiffPreview>
   /**
+   * Stage one unstaged working-tree change. Omit `hunkHeader` to stage the whole
+   * file; when present, only that tracked-text hunk is staged.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param path - Host-absolute path under the discovered repository root.
+   * @param hunkHeader - optional unified-diff hunk header from gitDiffPreview.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  gitStage(
+    workspaceId: WorkspaceId,
+    path: string,
+    hunkHeader?: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult>
+  /**
+   * Unstage one staged working-tree change. Omit `hunkHeader` to unstage the
+   * whole file; when present, only that tracked-text hunk is unstaged.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param path - Host-absolute path under the discovered repository root.
+   * @param hunkHeader - optional unified-diff hunk header from gitDiffPreview.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  gitUnstage(
+    workspaceId: WorkspaceId,
+    path: string,
+    hunkHeader?: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult>
+  /**
+   * Discard one unstaged working-tree change. Omit `hunkHeader` to discard the
+   * whole file; when present, only that unstaged tracked-text hunk is discarded.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param path - Host-absolute path under the discovered repository root.
+   * @param hunkHeader - optional unified-diff hunk header from gitDiffPreview.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  gitDiscard(
+    workspaceId: WorkspaceId,
+    path: string,
+    hunkHeader?: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult>
+  /**
+   * Create one new commit from the current index. Author identity is taken only
+   * from Git config. Does not amend and does not push.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param message - commit message; blank after trim is rejected by the Host.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  gitCommit(
+    workspaceId: WorkspaceId,
+    message: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult>
+  /**
    * Read one file inside a registered Workspace.
    * @param workspaceId - Workspace whose root bounds the path.
    * @param path - absolute file path.

@@ -19,6 +19,10 @@ import {
   hostGitWorkingTreeValueSchema,
   hostGitInitValueSchema,
   hostGitDiffPreviewValueSchema,
+  hostGitStageValueSchema,
+  hostGitUnstageValueSchema,
+  hostGitDiscardValueSchema,
+  hostGitCommitValueSchema,
   hostListDirectoryValueSchema, hostListWorkspaceEntriesValueSchema,
   hostOpenPathValueSchema, hostPickDirectoryValueSchema,
   hostReadFileValueSchema,
@@ -129,6 +133,10 @@ export interface IApiClient {
     gitWorkingTree(payload: RequestPayload<'host.gitWorkingTree'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitWorkingTree'>>>
     gitInit(payload: RequestPayload<'host.gitInit'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitInit'>>>
     gitDiffPreview(payload: RequestPayload<'host.gitDiffPreview'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitDiffPreview'>>>
+    gitStage(payload: RequestPayload<'host.gitStage'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitStage'>>>
+    gitUnstage(payload: RequestPayload<'host.gitUnstage'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitUnstage'>>>
+    gitDiscard(payload: RequestPayload<'host.gitDiscard'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitDiscard'>>>
+    gitCommit(payload: RequestPayload<'host.gitCommit'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitCommit'>>>
     readFile(payload: RequestPayload<'host.readFile'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.readFile'>>>
     writeFile(payload: RequestPayload<'host.writeFile'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.writeFile'>>>
     deletePath(payload: RequestPayload<'host.deletePath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.deletePath'>>>
@@ -227,6 +235,10 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'host.gitWorkingTree': hostGitWorkingTreeValueSchema,
   'host.gitInit': hostGitInitValueSchema,
   'host.gitDiffPreview': hostGitDiffPreviewValueSchema,
+  'host.gitStage': hostGitStageValueSchema,
+  'host.gitUnstage': hostGitUnstageValueSchema,
+  'host.gitDiscard': hostGitDiscardValueSchema,
+  'host.gitCommit': hostGitCommitValueSchema,
   'host.readFile': hostReadFileValueSchema,
   'host.writeFile': hostWriteFileValueSchema,
   'host.deletePath': hostDeletePathValueSchema,
@@ -500,6 +512,10 @@ export abstract class AbstractApiClient implements IApiClient {
     gitWorkingTree: (payload, signal) => this.callUnary('host.gitWorkingTree', payload, signal),
     gitInit: (payload, signal) => this.callUnary('host.gitInit', payload, signal),
     gitDiffPreview: (payload, signal) => this.callUnary('host.gitDiffPreview', payload, signal),
+    gitStage: (payload, signal) => this.callUnary('host.gitStage', payload, signal),
+    gitUnstage: (payload, signal) => this.callUnary('host.gitUnstage', payload, signal),
+    gitDiscard: (payload, signal) => this.callUnary('host.gitDiscard', payload, signal),
+    gitCommit: (payload, signal) => this.callUnary('host.gitCommit', payload, signal),
     readFile: (payload, signal) => this.callUnary('host.readFile', payload, signal),
     writeFile: (payload, signal) => this.callUnary('host.writeFile', payload, signal),
     deletePath: (payload, signal) => this.callUnary('host.deletePath', payload, signal),

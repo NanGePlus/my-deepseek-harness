@@ -427,6 +427,51 @@ describe('WorkspaceRuntime', () => {
     const previewFailure = workspaces.gitDiffPreview(wid('alpha'), '/w/alpha/clean.txt', 'unstaged')
     await expect(previewFailure).rejects.toBeInstanceOf(DirectoryBrowseError)
     await expect(previewFailure).rejects.toMatchObject({ rpcError: { code: 'git-path-not-found' } })
+
+    const treeOk = {
+      availability: 'repository' as const,
+      repoRoot: '/w/alpha',
+      branch: 'main',
+      unstaged: [],
+      staged: [{ path: 'a.ts', absolutePath: '/w/alpha/a.ts' }],
+    }
+    api.onGitStage = () => Promise.resolve(ok(treeOk))
+    await expect(workspaces.gitStage(wid('alpha'), '/w/alpha/a.ts')).resolves.toEqual(treeOk)
+    expect(api.callsOf('host.gitStage')).toEqual([{ workspaceId: 'alpha', path: '/w/alpha/a.ts' }])
+    api.onGitStage = () => Promise.resolve(err({
+      code: 'git-path-not-found', message: 'gone', details: { path: '/w/alpha/clean.txt' },
+    }))
+    await expect(workspaces.gitStage(wid('alpha'), '/w/alpha/clean.txt', '@@ -1,1 +1,1 @@'))
+      .rejects.toMatchObject({ rpcError: { code: 'git-path-not-found' } })
+    expect(api.callsOf('host.gitStage')).toEqual([
+      { workspaceId: 'alpha', path: '/w/alpha/a.ts' },
+      { workspaceId: 'alpha', path: '/w/alpha/clean.txt', hunkHeader: '@@ -1,1 +1,1 @@' },
+    ])
+
+    api.onGitUnstage = () => Promise.resolve(ok({ ...treeOk, staged: [], unstaged: treeOk.staged }))
+    await expect(workspaces.gitUnstage(wid('alpha'), '/w/alpha/a.ts')).resolves.toMatchObject({ staged: [] })
+    api.onGitUnstage = () => Promise.resolve(err({
+      code: 'git-path-not-found', message: 'gone', details: { path: '/w/alpha/a.ts' },
+    }))
+    await expect(workspaces.gitUnstage(wid('alpha'), '/w/alpha/a.ts'))
+      .rejects.toMatchObject({ rpcError: { code: 'git-path-not-found' } })
+
+    api.onGitDiscard = () => Promise.resolve(ok({ ...treeOk, staged: [], unstaged: [] }))
+    await expect(workspaces.gitDiscard(wid('alpha'), '/w/alpha/a.ts')).resolves.toMatchObject({ unstaged: [] })
+    api.onGitDiscard = () => Promise.resolve(err({
+      code: 'git-path-not-found', message: 'gone', details: { path: '/w/alpha/a.ts' },
+    }))
+    await expect(workspaces.gitDiscard(wid('alpha'), '/w/alpha/a.ts'))
+      .rejects.toMatchObject({ rpcError: { code: 'git-path-not-found' } })
+
+    api.onGitCommit = () => Promise.resolve(ok({ ...treeOk, staged: [], unstaged: [] }))
+    await expect(workspaces.gitCommit(wid('alpha'), 'msg')).resolves.toMatchObject({ staged: [] })
+    expect(api.callsOf('host.gitCommit')).toEqual([{ workspaceId: 'alpha', message: 'msg' }])
+    api.onGitCommit = () => Promise.resolve(err({
+      code: 'git-failed', message: 'nothing to commit', details: {},
+    }))
+    await expect(workspaces.gitCommit(wid('alpha'), 'msg'))
+      .rejects.toMatchObject({ rpcError: { code: 'git-failed' } })
   })
 
   it('passes workspace file reads and writes through the host wire', async () => {

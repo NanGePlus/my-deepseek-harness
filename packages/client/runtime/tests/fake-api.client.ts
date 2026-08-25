@@ -152,6 +152,18 @@ export class FakeApiClient implements IApiClient {
   onGitDiffPreview: (payload: unknown) => Promise<RpcResponse<GitDiffPreview>> =
     () => Promise.resolve(ok({ kind: 'binary' as const }))
 
+  onGitStage: (payload: unknown) => Promise<RpcResponse<GitWorkingTreeResult>> =
+    () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
+
+  onGitUnstage: (payload: unknown) => Promise<RpcResponse<GitWorkingTreeResult>> =
+    () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
+
+  onGitDiscard: (payload: unknown) => Promise<RpcResponse<GitWorkingTreeResult>> =
+    () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
+
+  onGitCommit: (payload: unknown) => Promise<RpcResponse<GitWorkingTreeResult>> =
+    () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
+
   onReadFile: (payload: unknown) => Promise<RpcResponse<FileReadResult>> = (payload) => {
     const request = payload as { path: string; kind: 'text' | 'bytes' }
     if (request.kind === 'bytes') {
@@ -240,6 +252,10 @@ export class FakeApiClient implements IApiClient {
     gitWorkingTree: (payload: unknown) => this.record('host.gitWorkingTree', payload, this.onGitWorkingTree(payload)),
     gitInit: (payload: unknown) => this.record('host.gitInit', payload, this.onGitInit(payload)),
     gitDiffPreview: (payload: unknown) => this.record('host.gitDiffPreview', payload, this.onGitDiffPreview(payload)),
+    gitStage: (payload: unknown) => this.record('host.gitStage', payload, this.onGitStage(payload)),
+    gitUnstage: (payload: unknown) => this.record('host.gitUnstage', payload, this.onGitUnstage(payload)),
+    gitDiscard: (payload: unknown) => this.record('host.gitDiscard', payload, this.onGitDiscard(payload)),
+    gitCommit: (payload: unknown) => this.record('host.gitCommit', payload, this.onGitCommit(payload)),
     readFile: (payload: unknown) => this.record('host.readFile', payload, this.onReadFile(payload)),
     writeFile: (payload: unknown) => this.record('host.writeFile', payload, this.onWriteFile(payload)),
     deletePath: (payload: unknown) => this.record('host.deletePath', payload, this.onDeletePath(payload)),

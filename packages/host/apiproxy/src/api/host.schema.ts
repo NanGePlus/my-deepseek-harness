@@ -167,6 +167,45 @@ export const hostGitDiffPreviewValueSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('deleted-binary') }),
 ]) satisfies z.ZodType<Wire<ResponseValue<'host.gitDiffPreview'>>>
 
+/** host.gitStage request payload. */
+export const hostGitStageRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+  hunkHeader: z.string().min(1).optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.gitStage'>>>
+
+/** host.gitStage response value (refreshed working tree). */
+export const hostGitStageValueSchema = hostGitWorkingTreeValueSchema satisfies z.ZodType<Wire<ResponseValue<'host.gitStage'>>>
+
+/** host.gitUnstage request payload. */
+export const hostGitUnstageRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+  hunkHeader: z.string().min(1).optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.gitUnstage'>>>
+
+/** host.gitUnstage response value (refreshed working tree). */
+export const hostGitUnstageValueSchema = hostGitWorkingTreeValueSchema satisfies z.ZodType<Wire<ResponseValue<'host.gitUnstage'>>>
+
+/** host.gitDiscard request payload. */
+export const hostGitDiscardRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+  hunkHeader: z.string().min(1).optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.gitDiscard'>>>
+
+/** host.gitDiscard response value (refreshed working tree). */
+export const hostGitDiscardValueSchema = hostGitWorkingTreeValueSchema satisfies z.ZodType<Wire<ResponseValue<'host.gitDiscard'>>>
+
+/** host.gitCommit request payload. */
+export const hostGitCommitRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  message: z.string(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.gitCommit'>>>
+
+/** host.gitCommit response value (refreshed working tree). */
+export const hostGitCommitValueSchema = hostGitWorkingTreeValueSchema satisfies z.ZodType<Wire<ResponseValue<'host.gitCommit'>>>
+
 /** host.readFile request payload. */
 export const hostReadFileRequestSchema = z.object({
   workspaceId: workspaceIdSchema,

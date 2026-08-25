@@ -118,7 +118,7 @@ import {
   WorkspacePathOutOfBoundsError,
 } from './list-workspace-entries.ts'
 import { readGitStatus } from './git-status.ts'
-import { inspectGitWorkingTree, initGitRepository, readGitDiffPreview, GitUnavailableError, AlreadyAGitRepositoryError, GitCommandFailedError, GitPathNotFoundError } from './git-working-tree.ts'
+import { inspectGitWorkingTree, initGitRepository, readGitDiffPreview, stageGitPath, unstageGitPath, discardGitPath, commitGitIndex, GitUnavailableError, AlreadyAGitRepositoryError, GitCommandFailedError, GitPathNotFoundError } from './git-working-tree.ts'
 import { watchWorkspacePath } from './watch-path.ts'
 import type { WatchPathFrame } from './api/host.ts'
 import {
@@ -410,6 +410,45 @@ async function buildModelCatalog(ctx: Context): Promise<{
 /** Wrap an error result echoing the request's rpcId. */
 function err<T>(request: RpcRequest<unknown>, error: RpcError): RpcResponse<T> {
   return { rpcId: request.rpcId, result: { ok: false, error } }
+}
+
+/**
+ * Map a Git write-path failure onto the typed RPC error codes shared by stage,
+ * unstage, discard, and commit.
+ * @param request - the request being answered.
+ * @param error - the thrown value.
+ * @param signal - caller lifetime; aborted signals become `cancelled`.
+ * @param abortedMessage - `cancelled` message naming the RPC.
+ * @returns the typed RPC refusal.
+ */
+function gitWriteFailure(
+  request: RpcRequest<unknown>,
+  error: unknown,
+  signal: AbortSignal,
+  abortedMessage: string,
+): RpcResponse<never> {
+  if (signal.aborted) {
+    return err(request, { code: 'cancelled', message: abortedMessage, details: {} })
+  }
+  if (error instanceof GitUnavailableError) {
+    return err(request, { code: 'git-unavailable', message: error.message, details: {} })
+  }
+  if (error instanceof GitPathNotFoundError) {
+    return err(request, {
+      code: 'git-path-not-found',
+      message: error.message,
+      details: { path: error.path },
+    })
+  }
+  if (error instanceof GitCommandFailedError) {
+    return err(request, { code: 'git-failed', message: error.message, details: {} })
+  }
+  /* v8 ignore next 5 -- Git write RPCs map remaining failures onto typed errors. */
+  return err(request, {
+    code: 'internal',
+    message: error instanceof Error ? error.message : String(error),
+    details: {},
+  })
 }
 
 /**
@@ -3175,6 +3214,58 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             message: error instanceof Error ? error.message : String(error),
             details: {},
           })
+        }
+      },
+
+      async gitStage(request, signal) {
+        const { workspaceId, path, hunkHeader } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await stageGitPath(workspace.path, path, signal, hunkHeader))
+        } catch (error: unknown) {
+          return gitWriteFailure(request, error, signal, 'git stage was aborted')
+        }
+      },
+
+      async gitUnstage(request, signal) {
+        const { workspaceId, path, hunkHeader } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await unstageGitPath(workspace.path, path, signal, hunkHeader))
+        } catch (error: unknown) {
+          return gitWriteFailure(request, error, signal, 'git unstage was aborted')
+        }
+      },
+
+      async gitDiscard(request, signal) {
+        const { workspaceId, path, hunkHeader } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await discardGitPath(workspace.path, path, signal, hunkHeader))
+        } catch (error: unknown) {
+          return gitWriteFailure(request, error, signal, 'git discard was aborted')
+        }
+      },
+
+      async gitCommit(request, signal) {
+        const { workspaceId, message } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await commitGitIndex(workspace.path, message, signal))
+        } catch (error: unknown) {
+          return gitWriteFailure(request, error, signal, 'git commit was aborted')
         }
       },
 
