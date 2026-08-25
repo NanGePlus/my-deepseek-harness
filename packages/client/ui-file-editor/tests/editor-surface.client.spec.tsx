@@ -877,6 +877,15 @@ describe('EditorSurface open / save', () => {
     await waitFor(() => { expect(b.gitStatus.mock.calls.length).toBeGreaterThan(1) })
   })
 
+  it('re-fetches Git badges when the Explorer tab becomes visible again', async () => {
+    const b = mount()
+    await waitFor(() => { expect(b.gitStatus).toHaveBeenCalledTimes(1) })
+    b.view.rerender(<EditorSurface {...b.props} visible={false} />)
+    expect(b.gitStatus).toHaveBeenCalledTimes(1)
+    b.view.rerender(<EditorSurface {...b.props} visible={true} />)
+    await waitFor(() => { expect(b.gitStatus.mock.calls.length).toBeGreaterThan(1) })
+  })
+
   it('save-refreshes-tree: saving re-fetches the parent directory listing', async () => {
     const b = mount()
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })

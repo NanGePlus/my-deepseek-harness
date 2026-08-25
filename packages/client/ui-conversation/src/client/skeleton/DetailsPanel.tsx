@@ -55,7 +55,7 @@ export function DetailsPanel({
           role="tabpanel"
           aria-hidden={detailsTab !== 'editor'}
         >
-          {renderSlot('conversation.details.editor', {})}
+          {renderSlot('conversation.details.editor', { visible: detailsTab === 'editor' })}
         </div>
         <div
           className={clsx(css.tabPanel, detailsTab !== 'git' && css.tabPanelHidden)}

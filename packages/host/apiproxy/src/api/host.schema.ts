@@ -109,6 +109,7 @@ export const hostGitStatusValueSchema = z.object({
 export const gitWorkingTreeChangeSchema = z.object({
   path: z.string(),
   absolutePath: z.string(),
+  kind: z.enum(['modified', 'untracked', 'deleted']),
 }) satisfies z.ZodType<Wire<GitWorkingTreeChange>>
 
 /** host.gitWorkingTree request payload. */

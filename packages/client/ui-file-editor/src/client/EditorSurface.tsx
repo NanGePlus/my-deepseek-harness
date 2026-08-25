@@ -208,7 +208,7 @@ const DARK_ATTRIBUTE = 'data-ds-dark-theme'
  * @param props - root runtime share, locale, Workspace-partitioned tab store, and Host callbacks.
  */
 export function EditorSurface({
-  t, useSessions, useWorkspaces, useStore, actions, dirtyGuard,
+  t, visible = true, useSessions, useWorkspaces, useStore, actions, dirtyGuard,
   listWorkspaceEntries, gitStatus, readFile, writeFile,
   deletePath, renamePath, createWorkspaceDirectory, watchPath,
   lspSyncDocument, lspCloseDocument, lspHoverDocument, insertFileContextToComposer,
@@ -247,6 +247,7 @@ export function EditorSurface({
   const [dark, setDark] = useState(() => document.body.hasAttribute(DARK_ATTRIBUTE))
   const [newFileTrigger, _setNewFileTrigger] = useState(0)
   const [gitRefreshTrigger, setGitRefreshTrigger] = useState(0)
+  const prevExplorerVisible = useRef(visible)
   const [explorerRefresh, setExplorerRefresh] = useState({
     trigger: 0,
     path: '',
@@ -294,6 +295,12 @@ export function EditorSurface({
   const bumpGitRefresh = useCallback(() => {
     setGitRefreshTrigger(current => current + 1)
   }, [])
+
+  useEffect(() => {
+    const wasHidden = prevExplorerVisible.current === false
+    prevExplorerVisible.current = visible
+    if (visible && wasHidden) bumpGitRefresh()
+  }, [visible, bumpGitRefresh])
 
   const bumpExplorerRefresh = useCallback((path: string, mode: 'parent' | 'visible' = 'parent') => {
     setExplorerRefresh(prev => ({
