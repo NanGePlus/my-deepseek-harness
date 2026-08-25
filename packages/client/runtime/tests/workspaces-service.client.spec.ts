@@ -433,7 +433,7 @@ describe('WorkspaceRuntime', () => {
       repoRoot: '/w/alpha',
       branch: 'main',
       unstaged: [],
-      staged: [{ path: 'a.ts', absolutePath: '/w/alpha/a.ts', kind: 'modified' }],
+      staged: [{ path: 'a.ts', absolutePath: '/w/alpha/a.ts', kind: 'modified' as const }],
     }
     api.onGitStage = () => Promise.resolve(ok(treeOk))
     await expect(workspaces.gitStage(wid('alpha'), '/w/alpha/a.ts')).resolves.toEqual(treeOk)

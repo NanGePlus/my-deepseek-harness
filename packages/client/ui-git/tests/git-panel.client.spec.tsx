@@ -530,7 +530,7 @@ describe('GitPanel', () => {
   })
 
   it('unstages every staged path from the section action', async () => {
-    const gitUnstage = vi.fn(async () => ({
+    const gitUnstage = vi.fn(async (_workspaceId: WorkspaceId, _path: string) => ({
       ...DIRTY_REPO,
       unstaged: [
         change('src/a.ts', 'modified'),
