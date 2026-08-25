@@ -5,6 +5,7 @@ import type {
   ClientResponse, HostFrame, IApiClient, ModelSelection, MuxFrame,
   RpcError, RpcReceipt, RpcRequest, RpcResponse, SessionId, SessionModels, SessionSearchItem, SkillEntry,
   WorkspaceId, WorkspaceView, FileReadResult,
+  GitWorkingTreeResult, GitDiffPreview,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import { RpcId } from '@deepseek-ai/dsh-client-connection/client'
 import type { SessionRemotes } from '../src/client/sessions/remotes.ts'
@@ -142,13 +143,13 @@ export class FakeApiClient implements IApiClient {
   }>> =
     () => Promise.resolve(ok({ entries: [] }))
 
-  onGitWorkingTree: (payload: unknown) => Promise<RpcResponse<{ availability: 'not-a-repository' }>> =
+  onGitWorkingTree: (payload: unknown) => Promise<RpcResponse<GitWorkingTreeResult>> =
     () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
 
   onGitInit: (payload: unknown) => Promise<RpcResponse<{ repoRoot: string }>> =
     () => Promise.resolve(ok({ repoRoot: '' }))
 
-  onGitDiffPreview: (payload: unknown) => Promise<RpcResponse<{ kind: 'binary' }>> =
+  onGitDiffPreview: (payload: unknown) => Promise<RpcResponse<GitDiffPreview>> =
     () => Promise.resolve(ok({ kind: 'binary' as const }))
 
   onReadFile: (payload: unknown) => Promise<RpcResponse<FileReadResult>> = (payload) => {
