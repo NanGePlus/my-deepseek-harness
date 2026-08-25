@@ -132,7 +132,7 @@
 | `issue/56-git-panel-bind-list` | [#56](https://github.com/NanGePlus/my-deepseek-harness/issues/56) `ui-git`：仓库绑定、两段列表、空态、刷新与初始化 | 已合并入 `custom/main`（PR [#65](https://github.com/NanGePlus/my-deepseek-harness/pull/65)） |
 | `issue/57-git-panel-stage-commit` | [#57](https://github.com/NanGePlus/my-deepseek-harness/issues/57) `ui-git`：整文件暂存、丢弃、提交说明与提交 | 已合并入 `custom/main`（PR [#66](https://github.com/NanGePlus/my-deepseek-harness/pull/66)） |
 | `issue/58-git-panel-diff-preview` | [#58](https://github.com/NanGePlus/my-deepseek-harness/issues/58) `ui-git`：差异预览与按块操作 | 已合并入 `custom/main`（PR [#67](https://github.com/NanGePlus/my-deepseek-harness/pull/67)） |
-| `issue/59-git-panel-action-guard` | [#59](https://github.com/NanGePlus/my-deepseek-harness/issues/59) `ui-git`：Git 操作守卫 | 进行中 |
+| `issue/59-git-panel-action-guard` | [#59](https://github.com/NanGePlus/my-deepseek-harness/issues/59) `ui-git`：Git 操作守卫 | 已合并入 `custom/main`（PR [#68](https://github.com/NanGePlus/my-deepseek-harness/pull/68)） |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
@@ -184,3 +184,4 @@
 | 2026-08-25 | PR [#67](https://github.com/NanGePlus/my-deepseek-harness/pull/67) 合并入 `custom/main` | 关闭 Issue [#58](https://github.com/NanGePlus/my-deepseek-harness/issues/58)；保留分支 `issue/58-git-panel-diff-preview` |
 | 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/59-git-panel-action-guard` | Issue [#59](https://github.com/NanGePlus/my-deepseek-harness/issues/59) Git 操作守卫；dirty 路径由工具箱壳层持有，不进 runtime 对象层 |
 | 2026-08-25 | 实现 Issue #59 Git 面板 4/4 切片 | dirty 路径禁止暂存 / 丢弃 / 包含该路径的提交；取消暂存不受限；守卫对话框无自动保存 |
+| 2026-08-25 | PR [#68](https://github.com/NanGePlus/my-deepseek-harness/pull/68) 合并入 `custom/main` | 关闭 Issue [#59](https://github.com/NanGePlus/my-deepseek-harness/issues/59)；保留分支 `issue/59-git-panel-action-guard` |
