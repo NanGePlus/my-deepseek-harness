@@ -3,7 +3,9 @@
  */
 
 import { z } from 'zod'
-import type { DirectoryEntry, GitStatusEntry, WorkspaceEntry, FileTextRead, FileBytesRead } from './host.ts'
+import type {
+  DirectoryEntry, GitStatusEntry, GitWorkingTreeChange, GitDiffLine, GitDiffHunk, WorkspaceEntry, FileTextRead, FileBytesRead,
+} from './host.ts'
 import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
 import { rpcErrorSchema } from './rpc.schema.ts'
@@ -102,6 +104,68 @@ export const hostGitStatusRequestSchema = z.object({
 export const hostGitStatusValueSchema = z.object({
   entries: z.array(gitStatusEntrySchema),
 }) satisfies z.ZodType<Wire<ResponseValue<'host.gitStatus'>>>
+
+/** One working-tree change row of host.gitWorkingTree. */
+export const gitWorkingTreeChangeSchema = z.object({
+  path: z.string(),
+  absolutePath: z.string(),
+}) satisfies z.ZodType<Wire<GitWorkingTreeChange>>
+
+/** host.gitWorkingTree request payload. */
+export const hostGitWorkingTreeRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'host.gitWorkingTree'>>>
+
+/** host.gitWorkingTree response value. */
+export const hostGitWorkingTreeValueSchema = z.discriminatedUnion('availability', [
+  z.object({ availability: z.literal('git-unavailable') }),
+  z.object({ availability: z.literal('not-a-repository') }),
+  z.object({
+    availability: z.literal('repository'),
+    repoRoot: z.string(),
+    branch: z.string(),
+    unstaged: z.array(gitWorkingTreeChangeSchema),
+    staged: z.array(gitWorkingTreeChangeSchema),
+  }),
+]) satisfies z.ZodType<Wire<ResponseValue<'host.gitWorkingTree'>>>
+
+/** host.gitInit request payload. */
+export const hostGitInitRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'host.gitInit'>>>
+
+/** host.gitInit response value. */
+export const hostGitInitValueSchema = z.object({
+  repoRoot: z.string(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.gitInit'>>>
+
+/** One unified-diff line of host.gitDiffPreview. */
+export const gitDiffLineSchema = z.object({
+  origin: z.enum(['context', 'add', 'del']),
+  text: z.string(),
+}) satisfies z.ZodType<Wire<GitDiffLine>>
+
+/** One hunk of a tracked-text gitDiffPreview. */
+export const gitDiffHunkSchema = z.object({
+  header: z.string(),
+  lines: z.array(gitDiffLineSchema),
+}) satisfies z.ZodType<Wire<GitDiffHunk>>
+
+/** host.gitDiffPreview request payload. */
+export const hostGitDiffPreviewRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+  side: z.enum(['unstaged', 'staged']),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.gitDiffPreview'>>>
+
+/** host.gitDiffPreview response value. */
+export const hostGitDiffPreviewValueSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('text'), hunks: z.array(gitDiffHunkSchema) }),
+  z.object({ kind: z.literal('untracked-text'), text: z.string() }),
+  z.object({ kind: z.literal('binary') }),
+  z.object({ kind: z.literal('deleted-text'), text: z.string() }),
+  z.object({ kind: z.literal('deleted-binary') }),
+]) satisfies z.ZodType<Wire<ResponseValue<'host.gitDiffPreview'>>>
 
 /** host.readFile request payload. */
 export const hostReadFileRequestSchema = z.object({

@@ -17,6 +17,7 @@ export type {
   ApiProxy, SessionsApi, SessionSearchItem, SessionSummary, PromptContentPart, HostApi, EventsApi, MuxFrame, HostFrame,
   ApprovalResponsePayload, QuestionResponsePayload, HistoryEntry, ToolEventView,
   DirectoryEntry, DirectoryListing, GitStatusEntry, GitStatusListing,
+  GitWorkingTreeChange, GitWorkingTreeResult, GitInitResult, GitDiffSide, GitDiffLine, GitDiffHunk, GitDiffPreview,
   ToolCallView, ToolResultView, WorkspaceApi, WorkspaceId, WorkspaceView,
   WorkspaceEntry, WorkspaceEntriesListing,
   FileReadKind, FileTextRead, FileBytesRead, FileReadResult, FileWriteResult, PathMutationResult,

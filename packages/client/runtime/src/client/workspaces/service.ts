@@ -5,6 +5,7 @@ import type {
   DirectoryListing, GitStatusListing, IApiClient, RpcError,
   SessionId, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
+  GitWorkingTreeResult, GitInitResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '../contract/store.ts'
@@ -254,6 +255,50 @@ export class WorkspaceRuntime implements IWorkspaces {
    */
   async gitStatus(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitStatusListing> {
     const response = await this.api.host.gitStatus({ workspaceId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Discover the Git repository and list unstaged and staged disk changes.
+   * Git unavailable and not-a-repository ride the success discriminant.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns Git unavailable, not-a-repository, or repository state with both change lists.
+   */
+  async gitWorkingTree(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitWorkingTreeResult> {
+    const response = await this.api.host.gitWorkingTree({ workspaceId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Initialize a Git repository at the bound Workspace root.
+   * @param workspaceId - Workspace whose root receives `git init`.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the bound Workspace path after a successful `git init`.
+   */
+  async gitInit(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitInitResult> {
+    const response = await this.api.host.gitInit({ workspaceId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Read a disk-only diff preview for one working-tree change.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param path - Host-absolute path under the discovered repository root.
+   * @param side - unstaged vs staged list.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns hunks, whole-file text, a binary marker, or deleted content.
+   */
+  async gitDiffPreview(
+    workspaceId: WorkspaceId,
+    path: string,
+    side: GitDiffSide,
+    signal?: AbortSignal,
+  ): Promise<GitDiffPreview> {
+    const response = await this.api.host.gitDiffPreview({ workspaceId, path, side }, signal)
     if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
     return response.result.value
   }

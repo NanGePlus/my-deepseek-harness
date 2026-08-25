@@ -90,6 +90,10 @@ export const rpcErrorSchema: z.ZodType<RpcError> = z.discriminatedUnion('code', 
   z.object({ code: z.literal('subagent-delivery-unavailable'), message: z.string(), details: z.object({ childSessionId: z.string() }) }),
   z.object({ code: z.literal('lsp-unavailable'), message: z.string(), details: z.object({}) }),
   z.object({ code: z.literal('lsp-error'), message: z.string(), details: z.object({ lspCode: z.string() }) }),
+  z.object({ code: z.literal('git-unavailable'), message: z.string(), details: z.object({}) }),
+  z.object({ code: z.literal('already-a-git-repository'), message: z.string(), details: z.object({ repoRoot: z.string() }) }),
+  z.object({ code: z.literal('git-failed'), message: z.string(), details: z.object({}) }),
+  z.object({ code: z.literal('git-path-not-found'), message: z.string(), details: z.object({ path: z.string() }) }),
   z.object({ code: z.literal('internal'), message: z.string(), details: z.object({}) }),
 ]) as unknown as z.ZodType<RpcError>
 

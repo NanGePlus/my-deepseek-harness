@@ -109,6 +109,14 @@ export interface RpcErrorDetailsMap {
   'subagent-delivery-unavailable': { childSessionId: SessionId }
   'lsp-unavailable': {}
   'lsp-error': { lspCode: string }
+  /** The host has no git executable on PATH. */
+  'git-unavailable': {}
+  /** Git is available and an ancestor of the bound Workspace is already a repository. */
+  'already-a-git-repository': { repoRoot: string }
+  /** A typed Git RPC failed; the message is Git's own text. */
+  'git-failed': {}
+  /** The requested path has no working-tree change to preview. */
+  'git-path-not-found': { path: string }
   'internal': {}
 }
 

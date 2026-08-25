@@ -32,6 +32,9 @@ import {
 import {
   hostCreateDirectoryRequestSchema, hostDescribeRequestSchema,
   hostGitStatusRequestSchema,
+  hostGitWorkingTreeRequestSchema,
+  hostGitInitRequestSchema,
+  hostGitDiffPreviewRequestSchema,
   hostListDirectoryRequestSchema, hostListWorkspaceEntriesRequestSchema,
   hostOpenPathRequestSchema,
   hostLspSyncDocumentRequestSchema,
@@ -121,6 +124,9 @@ const UNARY_ROUTES: UnaryRoutes = {
   'host.createDirectory': { schema: hostCreateDirectoryRequestSchema, invoke: (api, r) => api.host.createDirectory(r) },
   'host.listWorkspaceEntries': { schema: hostListWorkspaceEntriesRequestSchema, invoke: (api, r, signal) => api.host.listWorkspaceEntries(r, signal) },
   'host.gitStatus': { schema: hostGitStatusRequestSchema, invoke: (api, r, signal) => api.host.gitStatus(r, signal) },
+  'host.gitWorkingTree': { schema: hostGitWorkingTreeRequestSchema, invoke: (api, r, signal) => api.host.gitWorkingTree(r, signal) },
+  'host.gitInit': { schema: hostGitInitRequestSchema, invoke: (api, r, signal) => api.host.gitInit(r, signal) },
+  'host.gitDiffPreview': { schema: hostGitDiffPreviewRequestSchema, invoke: (api, r, signal) => api.host.gitDiffPreview(r, signal) },
   'host.readFile': { schema: hostReadFileRequestSchema, invoke: (api, r, signal) => api.host.readFile(r, signal) },
   'host.writeFile': { schema: hostWriteFileRequestSchema, invoke: (api, r, signal) => api.host.writeFile(r, signal) },
   'host.deletePath': { schema: hostDeletePathRequestSchema, invoke: (api, r, signal) => api.host.deletePath(r, signal) },
@@ -195,7 +201,6 @@ function fullResponse(narrow: RpcResponse<unknown>): Response {
  */
 // K appears once in the signature but ties the UNARY_ROUTES[K] row lookup to its own
 // schema/invoke pairing; a union parameter degrades the row to an uninvokable intersection.
-// oxlint-disable-next-line typescript/no-unnecessary-type-parameters
 async function handleUnary<K extends keyof RpcMethodMap>(
   api: ApiProxy, method: K, message: ClientRequest, signal: AbortSignal,
 ): Promise<Response> {

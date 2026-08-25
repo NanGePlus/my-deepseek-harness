@@ -52,6 +52,71 @@ export interface GitStatusListing {
   entries: GitStatusEntry[]
 }
 
+/** One working-tree change row of host.gitWorkingTree. */
+export interface GitWorkingTreeChange {
+  /** Path relative to the Git repository root (POSIX separators). */
+  path: string
+  /** Absolute host path. May lie outside the bound Workspace when the repo root is an ancestor. */
+  absolutePath: string
+}
+
+/**
+ * host.gitWorkingTree success value. Git unavailable and not-a-repository are
+ * product states, not RPC errors, so the Git panel can render the matching empty state.
+ */
+export type GitWorkingTreeResult =
+  | { availability: 'git-unavailable' }
+  | { availability: 'not-a-repository' }
+  | {
+    availability: 'repository'
+    /** Absolute Git repository root discovered upward from the bound Workspace. */
+    repoRoot: string
+    /**
+     * Current branch name, or Git's description of a detached HEAD
+     * (for example `HEAD detached at abc1234`).
+     */
+    branch: string
+    /** Unstaged working-tree changes, including untracked paths; ignored paths omitted. */
+    unstaged: GitWorkingTreeChange[]
+    /** Staged working-tree changes; ignored paths omitted. */
+    staged: GitWorkingTreeChange[]
+  }
+
+/** host.gitInit response value: the newly created repository root. */
+export interface GitInitResult {
+  /** Absolute bound Workspace path where `git init` ran. */
+  repoRoot: string
+}
+
+/** Which change list a gitDiffPreview request reads. */
+export type GitDiffSide = 'unstaged' | 'staged'
+
+/** One unified-diff line in a text hunk. */
+export interface GitDiffLine {
+  origin: 'context' | 'add' | 'del'
+  /** Line text without the origin prefix. */
+  text: string
+}
+
+/** One contiguous hunk of a tracked-text diff preview. */
+export interface GitDiffHunk {
+  /** Unified-diff hunk header (the `@@ … @@` line). */
+  header: string
+  lines: GitDiffLine[]
+}
+
+/**
+ * host.gitDiffPreview success value. Tracked text is line-level hunks;
+ * untracked text is the whole file; binary only declares that a diff exists;
+ * deletions include old text when the blob is text.
+ */
+export type GitDiffPreview =
+  | { kind: 'text'; hunks: GitDiffHunk[] }
+  | { kind: 'untracked-text'; text: string }
+  | { kind: 'binary' }
+  | { kind: 'deleted-text'; text: string }
+  | { kind: 'deleted-binary' }
+
 /** host.readFile request discriminator: text for editable sources, bytes for image preview. */
 export type FileReadKind = 'text' | 'bytes'
 
@@ -225,6 +290,39 @@ export interface HostApi {
     request: RpcRequest<{ workspaceId: WorkspaceId }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<GitStatusListing>>
+
+  /**
+   * Discover the Git repository root and current branch for a registered
+   * Workspace, and list unstaged and staged working-tree changes. Distinguishes
+   * Git unavailable from not-a-repository. Does not expose an arbitrary git argv.
+   */
+  gitWorkingTree(
+    request: RpcRequest<{ workspaceId: WorkspaceId }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<GitWorkingTreeResult>>
+
+  /**
+   * Initialize a Git repository at the bound Workspace root. Fails with
+   * `git-unavailable` when git is missing, `already-a-git-repository` when
+   * any ancestor is already a repository, and `git-failed` when `git init`
+   * itself fails. Does not publish a remote.
+   */
+  gitInit(
+    request: RpcRequest<{ workspaceId: WorkspaceId }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<GitInitResult>>
+
+  /**
+   * Read a disk-only diff preview for one working-tree change. The path is a
+   * Host-absolute path under the discovered repository root (it may lie outside
+   * the bound Workspace). `side` selects the unstaged or staged diff. Missing
+   * change rows fail with `git-path-not-found`; a missing git binary with
+   * `git-unavailable`; other git invocation failures with `git-failed`.
+   */
+  gitDiffPreview(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string; side: GitDiffSide }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<GitDiffPreview>>
 
   /**
    * Read one regular file inside a registered Workspace; the path must lie
