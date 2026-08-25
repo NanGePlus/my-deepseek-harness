@@ -2601,6 +2601,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         })
       },
       gitStatus: request => ok(request, { entries: [] }),
+      gitWorkingTree: request => ok(request, { availability: 'not-a-repository' as const }),
+      gitInit: request => ok(request, { repoRoot: '/t' }),
+      gitDiffPreview: request => ok(request, { kind: 'binary' as const }),
       readFile: request => ok(request, { kind: 'text', path: request.payload.path, text: '' }),
       writeFile: request => ok(request, { path: request.payload.path }),
       deletePath: request => ok(request, { path: request.payload.path }),
@@ -3150,6 +3153,9 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'host.createDirectory': return this.api.host.createDirectory(request)
       case 'host.listWorkspaceEntries': return this.api.host.listWorkspaceEntries(request, signal)
       case 'host.gitStatus': return this.api.host.gitStatus(request, signal)
+      case 'host.gitWorkingTree': return this.api.host.gitWorkingTree(request, signal)
+      case 'host.gitInit': return this.api.host.gitInit(request, signal)
+      case 'host.gitDiffPreview': return this.api.host.gitDiffPreview(request, signal)
       case 'host.readFile': return this.api.host.readFile(request, signal)
       case 'host.writeFile': return this.api.host.writeFile(request, signal)
       case 'host.deletePath': return this.api.host.deletePath(request, signal)

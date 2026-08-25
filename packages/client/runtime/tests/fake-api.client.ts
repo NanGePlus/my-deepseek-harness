@@ -142,6 +142,15 @@ export class FakeApiClient implements IApiClient {
   }>> =
     () => Promise.resolve(ok({ entries: [] }))
 
+  onGitWorkingTree: (payload: unknown) => Promise<RpcResponse<{ availability: 'not-a-repository' }>> =
+    () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
+
+  onGitInit: (payload: unknown) => Promise<RpcResponse<{ repoRoot: string }>> =
+    () => Promise.resolve(ok({ repoRoot: '' }))
+
+  onGitDiffPreview: (payload: unknown) => Promise<RpcResponse<{ kind: 'binary' }>> =
+    () => Promise.resolve(ok({ kind: 'binary' as const }))
+
   onReadFile: (payload: unknown) => Promise<RpcResponse<FileReadResult>> = (payload) => {
     const request = payload as { path: string; kind: 'text' | 'bytes' }
     if (request.kind === 'bytes') {
@@ -227,6 +236,9 @@ export class FakeApiClient implements IApiClient {
       this.onListWorkspaceEntries(payload),
     ),
     gitStatus: (payload: unknown) => this.record('host.gitStatus', payload, this.onGitStatus(payload)),
+    gitWorkingTree: (payload: unknown) => this.record('host.gitWorkingTree', payload, this.onGitWorkingTree(payload)),
+    gitInit: (payload: unknown) => this.record('host.gitInit', payload, this.onGitInit(payload)),
+    gitDiffPreview: (payload: unknown) => this.record('host.gitDiffPreview', payload, this.onGitDiffPreview(payload)),
     readFile: (payload: unknown) => this.record('host.readFile', payload, this.onReadFile(payload)),
     writeFile: (payload: unknown) => this.record('host.writeFile', payload, this.onWriteFile(payload)),
     deletePath: (payload: unknown) => this.record('host.deletePath', payload, this.onDeletePath(payload)),

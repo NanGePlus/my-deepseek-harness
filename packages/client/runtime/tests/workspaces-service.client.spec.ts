@@ -381,6 +381,52 @@ describe('WorkspaceRuntime', () => {
     const gitFailure = workspaces.gitStatus(wid('missing'))
     await expect(gitFailure).rejects.toBeInstanceOf(DirectoryBrowseError)
     await expect(gitFailure).rejects.toMatchObject({ rpcError: { code: 'workspace-not-found' } })
+
+    api.onGitWorkingTree = () => Promise.resolve(ok({
+      availability: 'repository' as const,
+      repoRoot: '/w/alpha',
+      branch: 'main',
+      unstaged: [{ path: 'a.ts', absolutePath: '/w/alpha/a.ts' }],
+      staged: [],
+    }))
+    await expect(workspaces.gitWorkingTree(wid('alpha'))).resolves.toEqual({
+      availability: 'repository',
+      repoRoot: '/w/alpha',
+      branch: 'main',
+      unstaged: [{ path: 'a.ts', absolutePath: '/w/alpha/a.ts' }],
+      staged: [],
+    })
+    expect(api.callsOf('host.gitWorkingTree')).toEqual([{ workspaceId: 'alpha' }])
+    api.onGitWorkingTree = () => Promise.resolve(err({
+      code: 'workspace-not-found', message: 'gone', details: { workspaceId: 'missing' },
+    }))
+    const treeFailure = workspaces.gitWorkingTree(wid('missing'))
+    await expect(treeFailure).rejects.toBeInstanceOf(DirectoryBrowseError)
+    await expect(treeFailure).rejects.toMatchObject({ rpcError: { code: 'workspace-not-found' } })
+
+    api.onGitInit = () => Promise.resolve(ok({ repoRoot: '/w/alpha' }))
+    await expect(workspaces.gitInit(wid('alpha'))).resolves.toEqual({ repoRoot: '/w/alpha' })
+    expect(api.callsOf('host.gitInit')).toEqual([{ workspaceId: 'alpha' }])
+    api.onGitInit = () => Promise.resolve(err({
+      code: 'already-a-git-repository', message: 'exists', details: { repoRoot: '/w' },
+    }))
+    const initFailure = workspaces.gitInit(wid('alpha'))
+    await expect(initFailure).rejects.toBeInstanceOf(DirectoryBrowseError)
+    await expect(initFailure).rejects.toMatchObject({ rpcError: { code: 'already-a-git-repository' } })
+
+    api.onGitDiffPreview = () => Promise.resolve(ok({ kind: 'untracked-text' as const, text: 'hello\n' }))
+    await expect(workspaces.gitDiffPreview(wid('alpha'), '/w/alpha/new.txt', 'unstaged')).resolves.toEqual({
+      kind: 'untracked-text', text: 'hello\n',
+    })
+    expect(api.callsOf('host.gitDiffPreview')).toEqual([
+      { workspaceId: 'alpha', path: '/w/alpha/new.txt', side: 'unstaged' },
+    ])
+    api.onGitDiffPreview = () => Promise.resolve(err({
+      code: 'git-path-not-found', message: 'gone', details: { path: '/w/alpha/clean.txt' },
+    }))
+    const previewFailure = workspaces.gitDiffPreview(wid('alpha'), '/w/alpha/clean.txt', 'unstaged')
+    await expect(previewFailure).rejects.toBeInstanceOf(DirectoryBrowseError)
+    await expect(previewFailure).rejects.toMatchObject({ rpcError: { code: 'git-path-not-found' } })
   })
 
   it('passes workspace file reads and writes through the host wire', async () => {

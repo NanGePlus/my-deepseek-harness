@@ -118,6 +118,7 @@ import {
   WorkspacePathOutOfBoundsError,
 } from './list-workspace-entries.ts'
 import { readGitStatus } from './git-status.ts'
+import { inspectGitWorkingTree, initGitRepository, readGitDiffPreview, GitUnavailableError, AlreadyAGitRepositoryError, GitCommandFailedError, GitPathNotFoundError } from './git-working-tree.ts'
 import { watchWorkspacePath } from './watch-path.ts'
 import type { WatchPathFrame } from './api/host.ts'
 import {
@@ -3081,6 +3082,94 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           if (signal.aborted) {
             return err(request, { code: 'cancelled', message: 'git status was aborted', details: {} })
           }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async gitWorkingTree(request, signal) {
+        const { workspaceId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await inspectGitWorkingTree(workspace.path, signal))
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'git working tree was aborted', details: {} })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async gitInit(request, signal) {
+        const { workspaceId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await initGitRepository(workspace.path, signal))
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'git init was aborted', details: {} })
+          }
+          if (error instanceof GitUnavailableError) {
+            return err(request, { code: 'git-unavailable', message: error.message, details: {} })
+          }
+          if (error instanceof AlreadyAGitRepositoryError) {
+            return err(request, {
+              code: 'already-a-git-repository',
+              message: error.message,
+              details: { repoRoot: error.repoRoot },
+            })
+          }
+          if (error instanceof GitCommandFailedError) {
+            return err(request, { code: 'git-failed', message: error.message, details: {} })
+          }
+          /* v8 ignore next 5 -- gitInit maps remaining failures onto typed errors. */
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async gitDiffPreview(request, signal) {
+        const { workspaceId, path, side } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await readGitDiffPreview(workspace.path, path, side, signal))
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'git diff preview was aborted', details: {} })
+          }
+          if (error instanceof GitUnavailableError) {
+            return err(request, { code: 'git-unavailable', message: error.message, details: {} })
+          }
+          if (error instanceof GitPathNotFoundError) {
+            return err(request, {
+              code: 'git-path-not-found',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          if (error instanceof GitCommandFailedError) {
+            return err(request, { code: 'git-failed', message: error.message, details: {} })
+          }
+          /* v8 ignore next 5 -- gitDiffPreview maps remaining failures onto typed errors. */
           return err(request, {
             code: 'internal',
             message: error instanceof Error ? error.message : String(error),

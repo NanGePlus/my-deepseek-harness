@@ -4,6 +4,7 @@ import type {
   DirectoryListing, GitStatusListing, IWorkspaces, SessionId, SnapshotStore,
   WorkspaceEntriesListing, WorkspaceId, WorkspaceListState, WorkspaceView,
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
+  GitWorkingTreeResult, GitInitResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { workspaceListState } from './fixtures.ts'
@@ -172,6 +173,52 @@ export class TestWorkspaces implements IWorkspaces {
     const stub = this.stubs.get('gitStatus')
     if (stub !== undefined) return await (stub(workspaceId, signal) as Promise<GitStatusListing>)
     return { entries: [] }
+  }
+
+  /**
+   * Git working-tree inspect (recorded). The default is not-a-repository.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns Git unavailable, not-a-repository, or repository state.
+   */
+  async gitWorkingTree(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitWorkingTreeResult> {
+    this.calls.push({ method: 'gitWorkingTree', args: [workspaceId, signal] })
+    const stub = this.stubs.get('gitWorkingTree')
+    if (stub !== undefined) return await (stub(workspaceId, signal) as Promise<GitWorkingTreeResult>)
+    return { availability: 'not-a-repository' }
+  }
+
+  /**
+   * Initialize a Git repository (recorded). The default echoes an empty repoRoot.
+   * @param workspaceId - Workspace whose root receives `git init`.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns the initialized repository root.
+   */
+  async gitInit(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitInitResult> {
+    this.calls.push({ method: 'gitInit', args: [workspaceId, signal] })
+    const stub = this.stubs.get('gitInit')
+    if (stub !== undefined) return await (stub(workspaceId, signal) as Promise<GitInitResult>)
+    return { repoRoot: '' }
+  }
+
+  /**
+   * Disk-only diff preview (recorded). The default is a binary marker.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param path - Host-absolute path under the discovered repository root.
+   * @param side - unstaged vs staged list.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns hunks, whole-file text, a binary marker, or deleted content.
+   */
+  async gitDiffPreview(
+    workspaceId: WorkspaceId,
+    path: string,
+    side: GitDiffSide,
+    signal?: AbortSignal,
+  ): Promise<GitDiffPreview> {
+    this.calls.push({ method: 'gitDiffPreview', args: [workspaceId, path, side, signal] })
+    const stub = this.stubs.get('gitDiffPreview')
+    if (stub !== undefined) return await (stub(workspaceId, path, side, signal) as Promise<GitDiffPreview>)
+    return { kind: 'binary' }
   }
 
   /**

@@ -14,7 +14,7 @@
 - 默认 profile：`web`
 - 模型提供方：DeepSeek / 其它 / 自定义 OpenAI 兼容端点
 - **V1 定制重点**：Web **工具箱**（原 details 栏）内嵌 Workspace 文件编辑器（文件树 + Monaco 多 Tab），与 Agent 对话并列、不占用中栏
-- **V2 定制重点（规划中，未落地）**：工具箱增加 **Git 面板**（工作区变更 + 差异预览）；PRD 见 `docs/prd/git-panel-v2.md` 与 Issue [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)
+- **V2 定制重点（进行中）**：工具箱增加 **Git 面板**（工作区变更 + 差异预览）；PRD 见 `docs/prd/git-panel-v2.md` 与 Issue [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)。Host 只读 Git RPC（发现 / 列表 / 预览 / 初始化）见 Issue [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53)
 
 ## 已实现定制功能（相对上游 master）
 
@@ -30,6 +30,9 @@
 |-----|------|
 | `host.listWorkspaceEntries` | Workspace 内单层目录 listing（上限 1000 条/层，`truncated` 标记） |
 | `host.gitStatus` | `git status --porcelain` 只读徽章（非仓库返回空） |
+| `host.gitWorkingTree` | 向上发现仓库根与当前分支；返回未暂存 / 已暂存两段磁盘变更（忽略路径不出现；路径相对仓库根，可在绑定 Workspace 外） |
+| `host.gitInit` | 仅当无祖先仓库时在绑定 Workspace 根 `git init` |
+| `host.gitDiffPreview` | 只认磁盘的差异预览（`text` / `untracked-text` / `binary` / `deleted-text` / `deleted-binary`） |
 | `host.readFile` / `host.writeFile` | 文本 UTF-8 读写；图片 `bytes` + base64 预览 |
 | `host.deletePath` / `host.renamePath` / `host.createWorkspaceDirectory` | 文件树工具栏增删改 |
 | `host.watchPath` | SSE 监听已打开路径的外部磁盘变更 |
@@ -74,10 +77,10 @@
 ## 我改过的官方文件（尽量为空）
 | 文件/目录 | 改了什么 | 日期 |
 |-----------|----------|------|
-| `packages/host/apiproxy/` | 文件编辑器 Host RPC、listing 性能、`readFile` 大小上限 | 2026-08 |
+| `packages/host/apiproxy/` | 文件编辑器 Host RPC、listing 性能、`readFile` 大小上限；**2026-08-25** Git 面板只读 RPC（`gitWorkingTree` / `gitInit` / `gitDiffPreview`） | 2026-08 |
 | `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat；**2026-08-23** 保存/外部变更后文件树自动刷新 | 2026-08 |
 | `packages/client/ui-conversation/` | 工具箱 segmented Tab、Tool 详情与编辑器 Tab 协调；**2026-08-22** 工具箱文案、capsule 入口、Tab 样式对齐对话区；**2026-08-23** 已发送用户消息 file-context pill 展示投影 | 2026-08 |
-| `packages/client/runtime/` | `WorkspaceRuntime` 转发新 Host RPC | 2026-08 |
+| `packages/client/runtime/` | `WorkspaceRuntime` 转发新 Host RPC；**2026-08-25** 转发 Git 面板只读 RPC | 2026-08 |
 | `packages/client/ui-primitives/` | Mermaid 块、ZoomPanLightbox、Markdown 图片 | 2026-08 |
 | `packages/client/ui-tool/` | Tool 行 selection → details 跳转 | 2026-08 |
 | `packages/client/ui-layout/` | 工具箱栏宽度 / AppFrame 微调 | 2026-08 |
@@ -115,6 +118,7 @@
 | `fix/file-editor-v1-verify-fix` | 大文件 + 目录 listing 性能修复 | 已合并入 `custom/main` |
 | `docs/git-panel-v2-prd` | Git 面板 V2：父 PRD [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)；切片 #52–#59 | PR [#60](https://github.com/NanGePlus/my-deepseek-harness/pull/60) 已合并入 `custom/main` |
 | `issue/52-d-global-git-panel-design-close` | [#52](https://github.com/NanGePlus/my-deepseek-harness/issues/52) `#D-global`：验收关闭 Git 面板 DESIGN.md | 进行中 |
+| `issue/53-host-git-rpc-inspect` | [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53) Host Git RPC：仓库发现、变更列表、差异预览与初始化 | 进行中 |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
@@ -151,3 +155,4 @@
 | 2026-08-25 | 发布 Git 面板 V2 Issue | 父 PRD [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)；#52 `#D-global`；#53/#54 Host Git RPC；#55 app-shell 三段 Tab；#56–#59 `git-panel` 四刀 |
 | 2026-08-25 | 提交 Git 面板 V2 规格 | 分支 `docs/git-panel-v2-prd`：PRD、ADR-0003/0004、`CONTEXT.md`、DESIGN 多行/禁用原语；PR [#60](https://github.com/NanGePlus/my-deepseek-harness/pull/60) 已合并 |
 | 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/52-d-global-git-panel-design-close` | Issue [#52](https://github.com/NanGePlus/my-deepseek-harness/issues/52) `#D-global` 验收关闭；Git 面板消费既有品牌板，不新增 §5 原语 |
+| 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/53-host-git-rpc-inspect` | Issue [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53) Host Git 只读 RPC；不改 V1 `gitStatus`，不暴露任意 argv |

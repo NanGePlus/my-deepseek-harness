@@ -410,6 +410,15 @@ describe('workspaces', () => {
     expect(treeStub).toHaveBeenLastCalledWith('w1', '/w', scan.signal)
     await expect(runtime.workspaces.gitStatus('w1' as WorkspaceId, scan.signal))
       .resolves.toEqual({ entries: [{ path: '/w/a.ts', letter: 'M' }] })
+    runtime.workspaces.stub('gitWorkingTree', vi.fn(() => Promise.resolve({
+      availability: 'repository' as const,
+      repoRoot: '/w',
+      branch: 'main',
+      unstaged: [],
+      staged: [],
+    })))
+    await expect(runtime.workspaces.gitWorkingTree('w1' as WorkspaceId, scan.signal))
+      .resolves.toMatchObject({ availability: 'repository', branch: 'main' })
     await runtime.dispose()
   })
 })
@@ -599,11 +608,14 @@ describe('workspaces action face', () => {
       path: '/w/alpha', entries: [], truncated: false,
     })
     await expect(ws.gitStatus('w1' as WorkspaceId)).resolves.toEqual({ entries: [] })
+    await expect(ws.gitWorkingTree('w1' as WorkspaceId)).resolves.toEqual({ availability: 'not-a-repository' })
+    await expect(ws.gitInit('w1' as WorkspaceId)).resolves.toEqual({ repoRoot: '' })
+    await expect(ws.gitDiffPreview('w1' as WorkspaceId, '/w/a.bin', 'unstaged')).resolves.toEqual({ kind: 'binary' })
     expect(ws.calls.map(c => c.method)).toEqual(
       [
         'create', 'create', 'pickDirectory', 'rename', 'delete', 'openPath',
         'insertBefore', 'insertSessionBefore', 'archiveSession',
-        'listWorkspaceEntries', 'gitStatus',
+        'listWorkspaceEntries', 'gitStatus', 'gitWorkingTree', 'gitInit', 'gitDiffPreview',
       ])
 
     ws.stub('create', () => Promise.resolve({ workspaceId: 'ws-x', title: 'X', path: '/x', sessionIds: [] } as never))

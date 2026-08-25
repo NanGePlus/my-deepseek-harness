@@ -9,6 +9,7 @@
 import type {
   DirectoryListing, GitStatusListing, SessionId, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
+  GitWorkingTreeResult, GitInitResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceListState } from '../workspaces/service.ts'
@@ -65,6 +66,36 @@ export interface IWorkspaces {
    * @returns badge rows; empty when Git is absent or the root is not a repository.
    */
   gitStatus(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitStatusListing>
+  /**
+   * Discover the Git repository and list unstaged and staged disk changes.
+   * Distinguishes Git unavailable from not-a-repository. Does not throw for those
+   * product states — they ride the success discriminant.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns Git unavailable, not-a-repository, or repository state with both change lists.
+   */
+  gitWorkingTree(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitWorkingTreeResult>
+  /**
+   * Initialize a Git repository at the bound Workspace root.
+   * @param workspaceId - Workspace whose root receives `git init`.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the bound Workspace path after a successful `git init`.
+   */
+  gitInit(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitInitResult>
+  /**
+   * Read a disk-only diff preview for one working-tree change.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param path - Host-absolute path under the discovered repository root.
+   * @param side - unstaged vs staged list.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns hunks, whole-file text, a binary marker, or deleted content.
+   */
+  gitDiffPreview(
+    workspaceId: WorkspaceId,
+    path: string,
+    side: GitDiffSide,
+    signal?: AbortSignal,
+  ): Promise<GitDiffPreview>
   /**
    * Read one file inside a registered Workspace.
    * @param workspaceId - Workspace whose root bounds the path.
