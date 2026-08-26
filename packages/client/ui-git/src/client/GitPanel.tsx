@@ -121,9 +121,10 @@ export interface GitPanelInjected {
   /**
    * Push the current branch without creating a new commit.
    * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param signal - aborts a superseded push.
    * @returns the refreshed working tree.
    */
-  gitPush: (workspaceId: WorkspaceId) => Promise<GitWorkingTreeResult>
+  gitPush: (workspaceId: WorkspaceId, signal?: AbortSignal) => Promise<GitWorkingTreeResult>
 }
 
 /** Full Git-panel props: runtime share, locale, store, visibility, and Host Git callbacks. */
@@ -166,9 +167,9 @@ function CommitMessageInput({ className, placeholder, ariaLabel, value, hint, in
   placeholder: string
   ariaLabel: string
   value: string
-  hint?: string
-  invalid?: boolean
-  pending?: boolean
+  hint?: string | undefined
+  invalid?: boolean | undefined
+  pending?: boolean | undefined
   onChange: (value: string) => void
 }): ReactNode {
   const ref = useRef<HTMLTextAreaElement>(null)
@@ -224,7 +225,7 @@ function ToolbarFeedbackView({
 }: {
   feedback: ToolbarFeedback
   t: GitPanelProps['t']
-  onRetryCommit?: () => void
+  onRetryCommit?: (() => void) | undefined
 }): ReactNode {
   if (feedback.kind === 'success') {
     return (
@@ -791,7 +792,7 @@ function renderRepository(
           </div>
         </div>
         <CommitMessageInput
-          className={css.commitInput}
+          className={css.commitInput ?? ''}
           placeholder={t('git.commit.placeholder')}
           ariaLabel={t('git.commit.placeholder')}
           value={message}
@@ -1112,7 +1113,7 @@ function HunkGutterActions({
   return (
     <IconAction
       label={t('git.hunk.unstage')}
-      disabled={body.pathWriting}
+      inactive={body.pathWriting}
       onClick={() => { body.onUnstage(row, hunkHeader) }}
     >
       <IconMinus size={ACTION_ICON_SIZE} />

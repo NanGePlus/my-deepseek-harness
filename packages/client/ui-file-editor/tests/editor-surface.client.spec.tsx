@@ -292,13 +292,13 @@ describe('EditorSurface file tree', () => {
     mount({ list: listWorkspaceEntries, git: gitStatus })
     await waitFor(() => { expect(screen.getByText('hahah')).toBeTruthy() })
     const folderRow = screen.getByText('hahah').closest('[role="treeitem"]')
-    expect(folderRow).not.toBeNull()
-    expect(within(folderRow!).getByLabelText('Git U').textContent).toBe('U')
-    fireEvent.click(folderRow!)
+    expect(folderRow).toBeInstanceOf(HTMLElement)
+    expect(within(folderRow as HTMLElement).getByLabelText('Git U').textContent).toBe('U')
+    fireEvent.click(folderRow as HTMLElement)
     await waitFor(() => { expect(screen.getByText('test.md')).toBeTruthy() })
     const fileRow = screen.getByText('test.md').closest('[role="treeitem"]')
-    expect(fileRow).not.toBeNull()
-    expect(within(fileRow!).getByLabelText('Git U').textContent).toBe('U')
+    expect(fileRow).toBeInstanceOf(HTMLElement)
+    expect(within(fileRow as HTMLElement).getByLabelText('Git U').textContent).toBe('U')
   })
 
   it('collapses and expands the file tree from the hide and show controls', async () => {

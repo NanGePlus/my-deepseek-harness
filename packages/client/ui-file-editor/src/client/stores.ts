@@ -20,7 +20,7 @@ export interface TextEditorTab {
   /** Last explicitly saved text. */
   saved: string
   /** Incremented on external disk reload so focused editors still apply the new text. */
-  diskReloadTicket: number
+  diskReloadTicket?: number
 }
 
 /** Read-only image preview tab. */

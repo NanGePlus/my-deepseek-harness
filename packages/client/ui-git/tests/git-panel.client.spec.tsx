@@ -380,6 +380,7 @@ describe('GitPanel', () => {
           branch: 'topic',
           unstaged: [change('beta.ts', 'modified', '/repos/beta')],
           staged: [],
+          pushAvailable: false,
         }
       }
       return DIRTY_REPO
@@ -422,6 +423,7 @@ describe('GitPanel', () => {
         branch: 'main',
         unstaged: [change('saved.ts', 'modified')],
         staged: [],
+        pushAvailable: false,
       },
     })
     await waitFor(() => { expect(screen.getByText('saved.ts')).toBeTruthy() })
@@ -992,6 +994,7 @@ describe('GitPanel', () => {
           branch: 'topic',
           unstaged: [],
           staged: [change('beta.ts', 'modified', '/repos/beta')],
+          pushAvailable: false,
         }
       }
       return DIRTY_REPO
@@ -1594,6 +1597,7 @@ describe('GitPanel', () => {
           branch: 'topic',
           unstaged: [],
           staged: [change('beta.ts', 'modified', '/repos/beta')],
+          pushAvailable: false,
         }
       }
       return DIRTY_REPO

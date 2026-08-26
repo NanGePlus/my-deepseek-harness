@@ -388,6 +388,7 @@ describe('WorkspaceRuntime', () => {
       branch: 'main',
       unstaged: [{ path: 'a.ts', absolutePath: '/w/alpha/a.ts', kind: 'modified' }],
       staged: [],
+      pushAvailable: false,
     }))
     await expect(workspaces.gitWorkingTree(wid('alpha'))).resolves.toEqual({
       availability: 'repository',
@@ -395,6 +396,7 @@ describe('WorkspaceRuntime', () => {
       branch: 'main',
       unstaged: [{ path: 'a.ts', absolutePath: '/w/alpha/a.ts', kind: 'modified' }],
       staged: [],
+      pushAvailable: false,
     })
     expect(api.callsOf('host.gitWorkingTree')).toEqual([{ workspaceId: 'alpha' }])
     api.onGitWorkingTree = () => Promise.resolve(err({

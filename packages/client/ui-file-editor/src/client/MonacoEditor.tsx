@@ -156,7 +156,7 @@ export function MonacoEditor({
   sourceSelectionActions, sourceLineRange, onSourceLineRangeApplied,
 }: MonacoEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null)
-  const fallbackRef = useRef<HTMLTextAreaElement>(null)
+  const fallbackRef = useRef<HTMLTextAreaElement | null>(null)
   const editorRef = useRef<EditorHandle | null>(null)
   const monacoRef = useRef<MonacoEditorModule | null>(null)
   const valueRef = useRef(value)
