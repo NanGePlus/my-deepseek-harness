@@ -10,7 +10,7 @@ Web 文件编辑器须感知已打开文件在磁盘上的外部变更（Agent �
 
 ## 决策
 
-`packages/host/apiproxy` 在现有 Host RPC seam 上新增 `host.watchPath`。客户端以 SSE 打开 `GET /api/host.watchPath?workspaceId=…&path=…`；每次外部变更投递一条带绝对路径的 `host/path-changed` 帧。中止流即关闭 Host `fs.watch` 句柄——不对 Workspace 根递归 watch，也不轮询 mtime（[PRD watchPath 切片](../../../../docs/prd/file-editor-v1.md)）。文件目标监视父目录并按 basename 过滤，因此原子发布（临时文件 rename 到目标路径）不会把 watcher 留在已被替换的 inode 上；目录目标监视自身。
+`packages/host/apiproxy` 在现有 Host RPC seam 上新增 `host.watchPath`。浏览器载体以只下行 WebSocket 打开 `/api/host.watchPath?workspaceId=…&path=…`（普通 GET 返回 426）；进程内 fetch 载体仍用 SSE，以保持协议与通道无关。每次外部变更投递一条带绝对路径的 `host/path-changed` 帧。中止流即关闭 Host `fs.watch` 句柄——不对 Workspace 根递归 watch，也不轮询 mtime（[PRD watchPath 切片](../../../../docs/prd/file-editor-v1.md)）。文件目标监视父目录并按 basename 过滤，因此原子发布（临时文件 rename 到目标路径）不会把 watcher 留在已被替换的 inode 上；目录目标监视自身。
 
 路径须通过 `pathWithinWorkspace` 落在已注册 Workspace 根内；未知 Workspace 与越界路径以 `stream/error` 帧应答。实现位于 `watch-path.ts`；线型类型与文件编辑器其他 RPC 一样扩展 `HostApi`。
 

@@ -1,15 +1,16 @@
 /** Browser API carrier: HTTP upstream plus one WebSocket per downstream event stream. */
 
-import type { ApiProxy, HostFrame, MuxFrame, RpcRequest, ServerRequest } from './api.ts'
+import type { ApiProxy, HostFrame, MuxFrame, RpcRequest, ServerRequest, WatchPathFrame } from './api.ts'
 import { AbstractApiClient } from './api.ts'
 import { hostFrameSchema, muxFrameSchema } from '@deepseek-ai/dsh-host-apiproxy/api/events.schema'
+import { watchPathFrameSchema } from '@deepseek-ai/dsh-host-apiproxy/api/host.schema'
 import { serverRequestSchema } from '@deepseek-ai/dsh-host-apiproxy/api/rpc.schema'
-import { HOST_EVENTS_PATH, MUX_EVENTS_PATH } from '../api-path.ts'
+import { HOST_EVENTS_PATH, MUX_EVENTS_PATH, WATCH_PATH_PATH } from '../api-path.ts'
 
 type SocketItem<F> = { kind: 'frame'; envelope: RpcRequest<F> } | { kind: 'end' }
 type Parser<F> = { parse(value: unknown): F }
 
-/** Browser platform subclass: unary/respond use fetch; mux/host use downlink-only WebSockets. */
+/** Browser platform subclass: unary/respond use fetch; mux/host/watchPath use downlink-only WebSockets. */
 export class WebApiClient extends AbstractApiClient {
   protected doFetch(input: URL, init?: RequestInit): Promise<Response> {
     return globalThis.fetch(input, init)
@@ -31,7 +32,16 @@ export class WebApiClient extends AbstractApiClient {
     return this.readWebSocket(HOST_EVENTS_PATH, signal, hostFrameSchema, onOpen)
   }
 
-  private async *readWebSocket<F extends MuxFrame | HostFrame>(
+  protected override openWatchPath(
+    payload: { workspaceId: Parameters<ApiProxy['host']['watchPath']>[0]['payload']['workspaceId']; path: string },
+    signal: AbortSignal,
+    onOpen?: () => void,
+  ): AsyncIterable<RpcRequest<WatchPathFrame>> {
+    const query = new URLSearchParams({ workspaceId: payload.workspaceId, path: payload.path })
+    return this.readWebSocket(`${WATCH_PATH_PATH}?${query.toString()}`, signal, watchPathFrameSchema, onOpen)
+  }
+
+  private async *readWebSocket<F>(
     path: string,
     signal: AbortSignal,
     frameSchema: Parser<F>,

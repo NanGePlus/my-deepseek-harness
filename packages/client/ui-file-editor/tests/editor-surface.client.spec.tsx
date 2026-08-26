@@ -13,6 +13,7 @@ import { EditorSurface, editorDirtyGuard, type EditorSurfaceProps } from '../src
 import { resetDirtyGuardForTest } from '../src/client/dirty-guard.ts'
 import { createFileEditorStore } from '../src/client/stores.ts'
 import { zh } from '../src/client/locales.ts'
+import { DIRECTORY_LISTING_TIMEOUT_MS } from '../src/client/host-io-timeout.ts'
 
 afterEach(cleanup)
 afterEach(() => { document.body.removeAttribute('data-ds-dark-theme') })
@@ -579,6 +580,25 @@ describe('EditorSurface file tree', () => {
     fireEvent.click(screen.getByRole('button', { name: '展开 src' }))
     await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
     expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === `${ROOT}/src`)).toHaveLength(2)
+  })
+
+  it('list-timeout: marks the folder failed instead of leaving a spinner', async () => {
+    const listWorkspaceEntries = vi.fn((_id: WorkspaceId, path: string) => {
+      if (path === `${ROOT}/src`) return new Promise<WorkspaceEntriesListing>(() => {})
+      return Promise.resolve(listingFor(path))
+    })
+    mount({ list: listWorkspaceEntries })
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: '展开 src' }))
+      expect(screen.getByRole('status', { name: '加载中' })).toBeTruthy()
+      await act(async () => { await vi.advanceTimersByTimeAsync(DIRECTORY_LISTING_TIMEOUT_MS) })
+      expect(screen.getByLabelText('无法加载此文件夹')).toBeTruthy()
+      expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('loading-git: shows a tree-top progress bar without hiding rows', async () => {

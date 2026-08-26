@@ -12,3 +12,6 @@ export const MUX_EVENTS_PATH = `${API_PATH}/events.mux`
 
 /** Browser host-frame WebSocket pathname. */
 export const HOST_EVENTS_PATH = `${API_PATH}/events.host`
+
+/** Browser host.watchPath WebSocket pathname (query carries workspaceId and path). */
+export const WATCH_PATH_PATH = `${API_PATH}/host.watchPath`

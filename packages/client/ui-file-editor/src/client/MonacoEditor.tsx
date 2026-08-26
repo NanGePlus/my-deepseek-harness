@@ -56,7 +56,7 @@ export interface MonacoEditorProps {
   dark: boolean
   /**
    * Editor canvas background token family.
-   * `document` uses bg-base (white in light mode) for Markdown source editing.
+   * Defaults to `document` (`bg-base`) so every text tab matches Markdown.
    */
   surface?: 'sidebar' | 'document' | undefined
   /**
@@ -151,7 +151,7 @@ export function installMonacoImeGuards(
  * @param props - buffer, language, theme, and change callback.
  */
 export function MonacoEditor({
-  path, value, language, diagnostics, ariaLabel, dark, surface = 'sidebar', onChange, onHover,
+  path, value, language, diagnostics, ariaLabel, dark, surface = 'document', onChange, onHover,
   diskReloadTicket = 0,
   sourceSelectionActions, sourceLineRange, onSourceLineRangeApplied,
 }: MonacoEditorProps) {

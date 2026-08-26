@@ -1,17 +1,20 @@
 import { once } from 'node:events'
 import { createServer } from 'node:http'
+import type { IncomingMessage } from 'node:http'
+import { PassThrough } from 'node:stream'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type {
-  ApiProxy, HostFrame, MuxFrame, RpcRequest, ServerRequest,
+  ApiProxy, HostFrame, MuxFrame, RpcRequest, ServerRequest, WatchPathFrame,
 } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api'
-import { HOST_EVENTS_PATH, MUX_EVENTS_PATH } from '../src/api-path.ts'
+import { HOST_EVENTS_PATH, MUX_EVENTS_PATH, WATCH_PATH_PATH } from '../src/api-path.ts'
 import { WebSocketDownlinks } from '../src/websocket-downlink.ts'
 
 type MuxSource = (signal: AbortSignal) => AsyncIterable<RpcRequest<MuxFrame>>
 type HostSource = (signal: AbortSignal) => AsyncIterable<RpcRequest<HostFrame>>
+type WatchSource = (signal: AbortSignal) => AsyncIterable<RpcRequest<WatchPathFrame>>
 
 const running: (() => Promise<void>)[] = []
 
@@ -30,11 +33,14 @@ async function * idle<F>(signal: AbortSignal): AsyncGenerator<RpcRequest<F>> {
   await untilAbort(signal)
 }
 
-function api(mux: MuxSource, host: HostSource): ApiProxy {
+function api(mux: MuxSource, host: HostSource, watch: WatchSource = idle): ApiProxy {
   return {
     events: {
       mux: (_request, signal) => mux(signal),
       host: (_request, signal) => host(signal),
+    },
+    host: {
+      watchPath: (_request, signal) => watch(signal),
     },
   } as ApiProxy
 }
@@ -48,6 +54,7 @@ async function serve(downlinks: WebSocketDownlinks): Promise<{
     const pathname = new URL(request.url ?? '/', 'http://dsh.internal').pathname
     if (pathname === MUX_EVENTS_PATH) downlinks.handleMux(request, socket, head)
     else if (pathname === HOST_EVENTS_PATH) downlinks.handleHost(request, socket, head)
+    else if (pathname === WATCH_PATH_PATH) downlinks.handleWatchPath(request, socket, head)
     else socket.destroy()
   })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
@@ -195,6 +202,64 @@ describe('WebSocket downlinks', () => {
     accepted.emit('error', new Error('transport failed'))
     await closed
     expect(aborted).toBe(true)
+  })
+
+  it('carries host.watchPath frames and cancels the source on close', async () => {
+    let aborted = false
+    let watched: { workspaceId: string; path: string } | undefined
+    const downlinks = new WebSocketDownlinks({
+      events: {
+        mux: (_request: never, signal: AbortSignal) => idle<MuxFrame>(signal),
+        host: (_request: never, signal: AbortSignal) => idle<HostFrame>(signal),
+      },
+      host: {
+        watchPath: (request: { payload: { workspaceId: string; path: string } }, signal: AbortSignal) => {
+          watched = request.payload
+          return (async function * () {
+            try {
+              yield {
+                rpcId: RpcId('watch-1'),
+                payload: { type: 'host/path-changed' as const, path: '/w/a.ts' },
+              }
+              await untilAbort(signal)
+            } finally {
+              aborted = true
+            }
+          })()
+        },
+      },
+    } as unknown as ApiProxy)
+    const host = await serve(downlinks)
+    running.push(host.close)
+    const socket = new WebSocket(
+      `${host.origin}${WATCH_PATH_PATH}?workspaceId=ws1&path=${encodeURIComponent('/w/a.ts')}`,
+    )
+    expect(await read(socket)).toEqual({
+      type: 'server-request',
+      rpcId: 'watch-1',
+      method: 'host/path-changed',
+      payload: { type: 'host/path-changed', path: '/w/a.ts' },
+    })
+    expect(watched).toEqual({ workspaceId: 'ws1', path: '/w/a.ts' })
+    const closed = once(socket, 'close')
+    socket.close()
+    await closed
+    await vi.waitFor(() => { expect(aborted).toBe(true) })
+  })
+
+  it('rejects a watchPath upgrade missing the query before negotiation', async () => {
+    const downlinks = new WebSocketDownlinks(api(idle, idle))
+    const chunks: Buffer[] = []
+    const socket = new PassThrough()
+    socket.on('data', (chunk: Buffer) => { chunks.push(chunk) })
+    const ended = once(socket, 'end')
+    downlinks.handleWatchPath(
+      { url: WATCH_PATH_PATH } as IncomingMessage,
+      socket,
+      Buffer.alloc(0),
+    )
+    await ended
+    expect(Buffer.concat(chunks).toString()).toContain('HTTP/1.1 400 Bad Request')
   })
 
   it('drops a source frame that races after the client has closed', async () => {

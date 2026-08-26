@@ -14,6 +14,7 @@ export type {
   FileReadKind, FileTextRead, FileBytesRead, FileReadResult, FileWriteResult, PathMutationResult,
   HostLspDiagnostic, HostLspPosition, HostLspRange, LspSyncDocumentResult, LspCloseDocumentResult,
   HostLspHover, LspHoverDocumentResult,
+  WatchPathFrame,
   ResponseValue, WorkspaceApi, WorkspaceId, WorkspaceView,
   SkillsApi, SkillEntry,
   ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,

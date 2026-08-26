@@ -10,7 +10,7 @@ The Web file editor must detect when an opened file changes on disk (Agent tools
 
 ## Decision
 
-`packages/host/apiproxy` adds `host.watchPath` on the existing Host RPC seam. The client opens `GET /api/host.watchPath?workspaceId=…&path=…` as an SSE stream; each external change yields one `host/path-changed` frame with the absolute path. Aborting the stream closes the Host `fs.watch` handle — no recursive Workspace-root watch and no mtime polling ([PRD watchPath slice](../../../../docs/prd/file-editor-v1.md)). File targets watch the parent directory filtered by basename so an atomic publish (temp + rename onto the path) does not leave the watcher bound to a replaced inode; directory targets watch themselves.
+`packages/host/apiproxy` adds `host.watchPath` on the existing Host RPC seam. The browser carrier opens `/api/host.watchPath?workspaceId=…&path=…` as a downlink-only WebSocket (network GET returns 426); the in-process fetch carrier still uses SSE so the protocol stays channel-independent. Each external change yields one `host/path-changed` frame with the absolute path. Aborting the stream closes the Host `fs.watch` handle — no recursive Workspace-root watch and no mtime polling ([PRD watchPath slice](../../../../docs/prd/file-editor-v1.md)). File targets watch the parent directory filtered by basename so an atomic publish (temp + rename onto the path) does not leave the watcher bound to a replaced inode; directory targets watch themselves.
 
 Paths must lie within the registered Workspace root via `pathWithinWorkspace`; unknown workspaces and out-of-bounds paths answer with a `stream/error` frame before or instead of change events. Implementation lives in `watch-path.ts`; wire types extend `HostApi` like other file-editor RPCs.
 

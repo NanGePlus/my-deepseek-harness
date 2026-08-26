@@ -121,6 +121,7 @@
   overflow: hidden;
   align-items: stretch;
   justify-content: stretch;
+  background: var(--dsw-alias-bg-base);
 }
 
 .bodyOverlay {

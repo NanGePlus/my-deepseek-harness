@@ -85,3 +85,19 @@ describe('EditorPane.module.css scroll reveal', () => {
     ].sort())
   })
 })
+
+describe('editor canvas background', () => {
+  it('paints the Monaco wrap and fallback with bg-base like Markdown', () => {
+    expect(declarationsFor(monacoCss, /\.wrap\s*\{([^{}]*)\}/))
+      .toContain('background: var(--dsw-alias-bg-base)')
+    expect(declarationsFor(monacoCss, /\.fallback\s*\{([^{}]*)\}/))
+      .toContain('background: var(--dsw-alias-bg-base)')
+    expect(monacoCss.replace(/\/\*[\s\S]*?\*\//g, ' '))
+      .toContain('background-color: var(--dsw-alias-bg-base)')
+  })
+
+  it('paints the editor pane body with bg-base', () => {
+    expect(declarationsFor(editorPaneCss, /\.body\s*\{([^{}]*)\}/))
+      .toContain('background: var(--dsw-alias-bg-base)')
+  })
+})

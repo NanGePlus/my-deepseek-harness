@@ -312,11 +312,12 @@ export function FileTreePane({
       return next
     })
     try {
+      if (ac.signal.aborted && fetchAbortByPath.current.get(dirPath) !== ac) return []
       const listing = await withDirectoryListingTimeout(
         listWorkspaceEntriesRef.current(workspace.workspaceId, dirPath, ac.signal),
         ac,
       )
-      if (ac.signal.aborted) return []
+      if (fetchAbortByPath.current.get(dirPath) !== ac) return []
       const entries = filterTreeEntries(listing.entries)
       setChildrenByPath(current => new Map(current).set(dirPath, entries))
       setTruncatedPaths((current) => {
@@ -328,7 +329,7 @@ export function FileTreePane({
       clearLoadingPath(dirPath)
       return entries
     } catch (error: unknown) {
-      if (ac.signal.aborted) return []
+      if (fetchAbortByPath.current.get(dirPath) !== ac) return []
       void error
       setChildrenByPath(current => new Map(current).set(dirPath, []))
       setFailedPaths(current => new Set(current).add(dirPath))

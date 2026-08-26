@@ -253,6 +253,31 @@ describe('connection client apply', () => {
     fetch.mockRestore()
   })
 
+  it('opens host.watchPath over WebSocket instead of fetch SSE', async () => {
+    ;(globalThis as Win).location = {
+      hostname: 'localhost', search: '', origin: 'http://localhost:3080',
+    }
+    ;(globalThis as WebSocketGlobal).WebSocket = FakeWebSocket as unknown as typeof WebSocket
+    const fetch = vi.spyOn(globalThis, 'fetch')
+    const client = (await mount()).api as WebApiClient
+    const abort = new AbortController()
+    const iterator = client.host.watchPath(
+      { workspaceId: 'ws1' as never, path: '/w/a.ts' },
+      abort.signal,
+    )[Symbol.asyncIterator]()
+    const pending = iterator.next()
+    await vi.waitFor(() => {
+      expect(sockets.some(socket => socket.url.startsWith('ws://localhost:3080/api/host.watchPath?'))).toBe(true)
+    })
+    const socket = sockets.find(item => item.url.includes('/api/host.watchPath'))
+    expect(socket?.url).toContain('workspaceId=ws1')
+    expect(socket?.url).toContain('path=%2Fw%2Fa.ts')
+    expect(fetch).not.toHaveBeenCalled()
+    abort.abort()
+    await expect(pending).resolves.toMatchObject({ done: true })
+    fetch.mockRestore()
+  })
+
   it('maps an HTTPS page origin to a secure WebSocket URL', async () => {
     ;(globalThis as Win).location = {
       hostname: 'harness.example', search: '', origin: 'https://harness.example',
