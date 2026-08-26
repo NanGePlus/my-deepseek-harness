@@ -10,6 +10,11 @@ const gitPanelSource = readFileSync(fileURLToPath(new URL('../src/client/GitPane
 describe('GitPanel icon button tooltips', () => {
   it('wraps icon actions in Tooltip with the same delay as the file tree toolbar', () => {
     expect(gitPanelSource).toContain('const ICON_TOOLTIP_DELAY_MS = 500')
-    expect(gitPanelSource).toContain('<Tooltip label={label} side="bottom" delayMs={ICON_TOOLTIP_DELAY_MS} disabled={disabled}>')
+    expect(gitPanelSource).toContain('disabled={suppressTooltip ?? inactive}')
+  })
+
+  it('wraps the push button in Tooltip with ahead vs unpublished hints', () => {
+    expect(gitPanelSource).toContain("t('git.push.hintAhead'")
+    expect(gitPanelSource).toContain("t('git.push.hintUnpublished'")
   })
 })

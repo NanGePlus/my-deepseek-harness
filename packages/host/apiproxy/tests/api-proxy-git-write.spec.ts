@@ -407,7 +407,7 @@ describe('host.gitCommit', () => {
     expect(execSync('git rev-parse HEAD', { cwd: workspacePath, encoding: 'utf8' }).trim()).toBe(hash)
   })
 
-  it('rejects a blank commit message without creating a commit', async () => {
+  it('allows an empty commit message when the staged area is non-empty', async () => {
     const { api, root } = await harness()
     const workspacePath = join(root, 'repo')
     mkdirSync(workspacePath)
@@ -418,16 +418,130 @@ describe('host.gitCommit', () => {
     execSync('git add tracked.txt', { cwd: workspacePath, stdio: 'ignore' })
 
     const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
-    const response = await api.host.gitCommit(
+    const tree = expectOk(await api.host.gitCommit(
       request({ workspaceId: workspace.workspaceId, message: '   \n' }),
       new AbortController().signal,
-    )
+    ))
 
-    expect(response.result).toMatchObject({
-      ok: false,
-      error: { code: 'git-failed', message: 'Aborting commit due to empty commit message.' },
+    expect(tree).toMatchObject({ availability: 'repository', staged: [], unstaged: [] })
+    const log = execSync('git log -1 --format=%H%n%P%n%B', { cwd: workspacePath, encoding: 'utf8' })
+    const [hash, parents, ...bodyLines] = log.trimEnd().split('\n')
+    const body = bodyLines.join('\n')
+    expect(hash).not.toBe(parent)
+    expect(parents).toBe(parent)
+    expect(body).toBe('')
+  })
+
+  it('pushes to the configured remote when push is true and upstream is set', async () => {
+    const { api, root } = await harness()
+    const barePath = join(root, 'origin.git')
+    mkdirSync(barePath)
+    execSync('git init --bare -b main', { cwd: barePath, stdio: 'ignore' })
+
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    execSync(`git remote add origin ${barePath}`, { cwd: workspacePath, stdio: 'ignore' })
+    commitFile(workspacePath, 'tracked.txt', 'v1\n', 'init')
+    execSync('git push -u origin main', { cwd: workspacePath, stdio: 'ignore' })
+    writeFileSync(join(workspacePath, 'tracked.txt'), 'v2\n')
+    execSync('git add tracked.txt', { cwd: workspacePath, stdio: 'ignore' })
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const tree = expectOk(await api.host.gitCommit(
+      request({ workspaceId: workspace.workspaceId, message: 'update tracked', push: true }),
+      new AbortController().signal,
+    ))
+
+    expect(tree).toMatchObject({ availability: 'repository', staged: [], unstaged: [] })
+    const remoteHead = execSync('git rev-parse main', { cwd: barePath, encoding: 'utf8' }).trim()
+    const localHead = execSync('git rev-parse HEAD', { cwd: workspacePath, encoding: 'utf8' }).trim()
+    expect(remoteHead).toBe(localHead)
+  })
+
+  it('sets upstream on first push when the branch has no upstream', async () => {
+    const { api, root } = await harness()
+    const barePath = join(root, 'origin.git')
+    mkdirSync(barePath)
+    execSync('git init --bare -b main', { cwd: barePath, stdio: 'ignore' })
+
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    execSync(`git remote add origin ${barePath}`, { cwd: workspacePath, stdio: 'ignore' })
+    commitFile(workspacePath, 'tracked.txt', 'v1\n', 'init')
+    writeFileSync(join(workspacePath, 'tracked.txt'), 'v2\n')
+    execSync('git add tracked.txt', { cwd: workspacePath, stdio: 'ignore' })
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    expectOk(await api.host.gitCommit(
+      request({ workspaceId: workspace.workspaceId, message: 'first push', push: true }),
+      new AbortController().signal,
+    ))
+
+    const upstream = execSync('git rev-parse @{u}', { cwd: workspacePath, encoding: 'utf8' }).trim()
+    const localHead = execSync('git rev-parse HEAD', { cwd: workspacePath, encoding: 'utf8' }).trim()
+    expect(upstream).toBe(localHead)
+    const remoteHead = execSync('git rev-parse main', { cwd: barePath, encoding: 'utf8' }).trim()
+    expect(remoteHead).toBe(localHead)
+  })
+
+  it('reports ahead commits on gitWorkingTree', async () => {
+    const { api, root } = await harness()
+    const barePath = join(root, 'origin.git')
+    mkdirSync(barePath)
+    execSync('git init --bare -b main', { cwd: barePath, stdio: 'ignore' })
+
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    execSync(`git remote add origin ${barePath}`, { cwd: workspacePath, stdio: 'ignore' })
+    commitFile(workspacePath, 'tracked.txt', 'v1\n', 'init')
+    execSync('git push -u origin main', { cwd: workspacePath, stdio: 'ignore' })
+    commitFile(workspacePath, 'tracked.txt', 'v2\n', 'local only')
+    commitFile(workspacePath, 'tracked.txt', 'v3\n', 'local only 2')
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const tree = expectOk(await api.host.gitWorkingTree(
+      request({ workspaceId: workspace.workspaceId }),
+      new AbortController().signal,
+    ))
+
+    expect(tree).toMatchObject({
+      availability: 'repository',
+      ahead: 2,
+      pushAvailable: true,
+      staged: [],
     })
-    expect(execSync('git rev-parse HEAD', { cwd: workspacePath, encoding: 'utf8' }).trim()).toBe(parent)
+  })
+
+  it('pushes existing commits without creating a new one', async () => {
+    const { api, root } = await harness()
+    const barePath = join(root, 'origin.git')
+    mkdirSync(barePath)
+    execSync('git init --bare -b main', { cwd: barePath, stdio: 'ignore' })
+
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    execSync(`git remote add origin ${barePath}`, { cwd: workspacePath, stdio: 'ignore' })
+    commitFile(workspacePath, 'tracked.txt', 'v1\n', 'init')
+    execSync('git push -u origin main', { cwd: workspacePath, stdio: 'ignore' })
+    commitFile(workspacePath, 'tracked.txt', 'v2\n', 'local only')
+    commitFile(workspacePath, 'tracked.txt', 'v3\n', 'local only 2')
+    const parentCount = Number(execSync('git rev-list --count HEAD', { cwd: workspacePath, encoding: 'utf8' }).trim())
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const tree = expectOk(await api.host.gitPush(
+      request({ workspaceId: workspace.workspaceId }),
+      new AbortController().signal,
+    ))
+
+    expect(tree).toMatchObject({ availability: 'repository', pushAvailable: false })
+    expect(Number(execSync('git rev-list --count HEAD', { cwd: workspacePath, encoding: 'utf8' }).trim())).toBe(parentCount)
+    const remoteHead = execSync('git rev-parse main', { cwd: barePath, encoding: 'utf8' }).trim()
+    const localHead = execSync('git rev-parse HEAD', { cwd: workspacePath, encoding: 'utf8' }).trim()
+    expect(remoteHead).toBe(localHead)
   })
 
   it('rejects commit when the staged area is empty', async () => {

@@ -10,7 +10,7 @@ import { runNativeCommand, type NativeCommandRunner } from '@deepseek-ai/dsh-nat
 import type {
   GitDiffHunk, GitDiffPreview, GitDiffSide, GitWorkingTreeChange, GitWorkingTreeChangeKind, GitWorkingTreeResult,
 } from './api/host.ts'
-import { isGitUiVisibleRelativePath, normalizePorcelainRelativePath } from './git-status.ts'
+import { GIT_PORCELAIN_UNTRACKED_FILES, isGitUiVisibleRelativePath, normalizePorcelainRelativePath } from './git-status.ts'
 import { pathWithinWorkspace } from './list-workspace-entries.ts'
 
 /**
@@ -56,6 +56,33 @@ async function git(
 }
 
 /**
+ * Whether the current branch can be pushed and how many commits lead upstream.
+ * @param run - command runner.
+ * @param repoRoot - absolute Git repository root.
+ * @param branch - current branch label from {@link readCurrentBranch}.
+ * @param signal - caller lifetime.
+ */
+async function readPublishState(
+  run: NativeCommandRunner,
+  repoRoot: string,
+  branch: string,
+  signal: AbortSignal,
+): Promise<{ ahead?: number; pushAvailable: boolean }> {
+  if (branch.startsWith('HEAD detached')) {
+    return { pushAvailable: false }
+  }
+  try {
+    const counts = (await git(run, repoRoot, ['rev-list', '--left-right', '--count', '@{upstream}...HEAD'], signal)).trim()
+    const [, aheadStr = '0'] = counts.split(/\s+/)
+    const ahead = Number(aheadStr)
+    return ahead > 0 ? { ahead, pushAvailable: true } : { pushAvailable: false }
+  } catch (error: unknown) {
+    if (signal.aborted) throw error
+    return { pushAvailable: true }
+  }
+}
+
+/**
  * Read the current branch name, or Git's detached-HEAD description.
  * @param run - command runner.
  * @param repoRoot - absolute Git repository root.
@@ -89,7 +116,7 @@ function porcelainKind(letter: string): GitWorkingTreeChangeKind {
 }
 
 /**
- * Split `git status --porcelain` into unstaged and staged change rows.
+ * Split `git status --porcelain --untracked-files=all` into unstaged and staged change rows.
  * Ignored paths never appear in default porcelain output. Unmerged paths
  * are listed as unstaged only.
  * @param stdout - raw porcelain v1 stdout.
@@ -146,14 +173,17 @@ export async function inspectGitWorkingTree(
     const toplevel = await git(run, workspaceRoot, ['rev-parse', '--show-toplevel'], signal)
     const repoRoot = realpathSync.native(toplevel.trim())
     const branch = await readCurrentBranch(run, repoRoot, signal)
-    const porcelain = await git(run, repoRoot, ['status', '--porcelain'], signal)
+    const porcelain = await git(run, repoRoot, GIT_PORCELAIN_UNTRACKED_FILES, signal)
     const { unstaged, staged } = parseWorkingTreePorcelain(porcelain, repoRoot)
+    const publish = await readPublishState(run, repoRoot, branch, signal)
     return {
       availability: 'repository',
       repoRoot,
       branch,
       unstaged,
       staged,
+      pushAvailable: publish.pushAvailable,
+      ...(publish.ahead === undefined ? {} : { ahead: publish.ahead }),
     }
   } catch (error: unknown) {
     if (signal.aborted) throw error
@@ -382,7 +412,7 @@ export async function stageGitPath(
   try {
     const repoRoot = await requireRepository(workspaceRoot, signal)
     const rel = repoRelativePath(repoRoot, absolutePath)
-    const porcelain = await git(run, repoRoot, ['status', '--porcelain', '--', rel], signal)
+    const porcelain = await git(run, repoRoot, [...GIT_PORCELAIN_UNTRACKED_FILES, '--', rel], signal)
     const pair = porcelainPairForPath(porcelain, rel)
     if (pair === undefined || !isUnstagedPair(pair)) throw new GitPathNotFoundError(absolutePath)
     if (hunkHeader !== undefined) {
@@ -422,7 +452,7 @@ export async function unstageGitPath(
   try {
     const repoRoot = await requireRepository(workspaceRoot, signal)
     const rel = repoRelativePath(repoRoot, absolutePath)
-    const porcelain = await git(run, repoRoot, ['status', '--porcelain', '--', rel], signal)
+    const porcelain = await git(run, repoRoot, [...GIT_PORCELAIN_UNTRACKED_FILES, '--', rel], signal)
     const pair = porcelainPairForPath(porcelain, rel)
     if (pair === undefined || !isStagedPair(pair)) throw new GitPathNotFoundError(absolutePath)
     if (hunkHeader !== undefined) {
@@ -457,7 +487,7 @@ export async function discardGitPath(
   try {
     const repoRoot = await requireRepository(workspaceRoot, signal)
     const rel = repoRelativePath(repoRoot, absolutePath)
-    const porcelain = await git(run, repoRoot, ['status', '--porcelain', '--', rel], signal)
+    const porcelain = await git(run, repoRoot, [...GIT_PORCELAIN_UNTRACKED_FILES, '--', rel], signal)
     const pair = porcelainPairForPath(porcelain, rel)
     if (pair === undefined || !isUnstagedPair(pair)) throw new GitPathNotFoundError(absolutePath)
     if (hunkHeader !== undefined) {
@@ -478,26 +508,90 @@ export async function discardGitPath(
 }
 
 /**
+ * True when Git rejected `git push` because the current branch has no upstream.
+ * @param error - rejection from {@link runNativeCommand}.
+ */
+function isMissingUpstreamPushError(error: unknown): boolean {
+  /* v8 ignore next -- runNativeCommand rejects with objects. */
+  if (typeof error !== 'object' || error === null) return false
+  const stderr = 'stderr' in error && typeof error.stderr === 'string' ? error.stderr : ''
+  const message = error instanceof Error ? error.message : String(error)
+  const text = `${message}\n${stderr}`
+  return text.includes('no upstream branch')
+    || text.includes('set-upstream')
+    || text.includes('has no upstream')
+}
+
+/**
+ * Push the current branch. When upstream is unset, falls back to
+ * `git push -u origin HEAD`.
+ * @param run - command runner.
+ * @param repoRoot - absolute Git repository root.
+ * @param signal - caller lifetime.
+ */
+async function pushCurrentBranch(
+  run: NativeCommandRunner,
+  repoRoot: string,
+  signal: AbortSignal,
+): Promise<void> {
+  try {
+    await git(run, repoRoot, ['push'], signal)
+  } catch (error: unknown) {
+    if (signal.aborted || !isMissingUpstreamPushError(error)) throw error
+    await git(run, repoRoot, ['push', '-u', 'origin', 'HEAD'], signal)
+  }
+}
+
+/**
+ * Push the current branch without creating a new commit.
+ * @param workspaceRoot - canonical bound Workspace directory.
+ * @param signal - caller lifetime.
+ * @returns the refreshed working tree.
+ */
+export async function pushGitBranch(
+  workspaceRoot: string,
+  signal: AbortSignal,
+): Promise<GitWorkingTreeResult> {
+  const run = runNativeCommand
+  try {
+    const repoRoot = await requireRepository(workspaceRoot, signal)
+    const branch = await readCurrentBranch(run, repoRoot, signal)
+    if (branch.startsWith('HEAD detached')) {
+      throw new GitCommandFailedError('cannot push detached HEAD')
+    }
+    await pushCurrentBranch(run, repoRoot, signal)
+    return await inspectGitWorkingTree(workspaceRoot, signal)
+  } catch (error: unknown) {
+    remapWriteFailure(error, signal, workspaceRoot)
+  }
+}
+
+/**
  * Create one new commit from the current index. Author comes from Git config.
  * @param workspaceRoot - canonical bound Workspace directory.
- * @param message - commit message; blank after trim is rejected.
+ * @param message - commit message; blank after trim uses `--allow-empty-message`.
  * @param signal - caller lifetime.
+ * @param push - when true, run `git push` after a successful commit.
  * @returns the refreshed working tree.
  */
 export async function commitGitIndex(
   workspaceRoot: string,
   message: string,
   signal: AbortSignal,
+  push = false,
 ): Promise<GitWorkingTreeResult> {
   const run = runNativeCommand
   try {
     const repoRoot = await requireRepository(workspaceRoot, signal)
     const trimmed = message.trim()
-    if (trimmed === '') throw new GitCommandFailedError('Aborting commit due to empty commit message.')
-    const porcelain = await git(run, repoRoot, ['status', '--porcelain'], signal)
+    const porcelain = await git(run, repoRoot, GIT_PORCELAIN_UNTRACKED_FILES, signal)
     const { staged } = parseWorkingTreePorcelain(porcelain, repoRoot)
     if (staged.length === 0) throw new GitCommandFailedError('nothing to commit')
-    await git(run, repoRoot, ['commit', '-m', trimmed], signal)
+    const commitArgs = trimmed === ''
+      ? ['commit', '--allow-empty-message', '-m', '']
+      : ['commit', '-m', trimmed]
+    await git(run, repoRoot, commitArgs, signal)
+    if (push) await pushCurrentBranch(run, repoRoot, signal)
     return await inspectGitWorkingTree(workspaceRoot, signal)
   } catch (error: unknown) {
     remapWriteFailure(error, signal, workspaceRoot)
@@ -525,7 +619,7 @@ export async function readGitDiffPreview(
   try {
     const repoRoot = realpathSync.native((await git(run, workspaceRoot, ['rev-parse', '--show-toplevel'], signal)).trim())
     const rel = repoRelativePath(repoRoot, absolutePath)
-    const porcelain = await git(run, repoRoot, ['status', '--porcelain', '--', rel], signal)
+    const porcelain = await git(run, repoRoot, [...GIT_PORCELAIN_UNTRACKED_FILES, '--', rel], signal)
     const pair = porcelainPairForPath(porcelain, rel)
     if (pair === undefined) throw new GitPathNotFoundError(absolutePath)
 

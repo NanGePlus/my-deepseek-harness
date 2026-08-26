@@ -6,11 +6,14 @@ import type { DiffPreviewRow } from './diff-preview-model.ts'
 export type MinimapMarker = {
   /** Vertical center of the change in scroll order, 0–1. */
   topRatio: number
+  /** First preview-row index for this change segment (for scroll-into-view). */
+  rowIndex: number
   del: boolean
   add: boolean
 }
 
 type MinimapSegment = {
+  rowIndex: number
   del: boolean
   add: boolean
   truncated: boolean
@@ -42,6 +45,7 @@ export function buildMinimapMarkers(
     if (!segment.del && !segment.add) continue
     markers.push({
       topRatio: center / total,
+      rowIndex: segment.rowIndex,
       del: segment.del,
       add: segment.add,
     })
@@ -59,12 +63,13 @@ function collapseRenderSegments(
     if (row === undefined) continue
     const weight = weights[index] ?? 1
     if (row.kind === 'truncated') {
-      segments.push({ del: false, add: false, truncated: true, weight })
+      segments.push({ rowIndex: index, del: false, add: false, truncated: true, weight })
       continue
     }
     const next = rows[index + 1]
     if (row.origin === 'del' && next?.kind === 'line' && next.origin === 'add') {
       segments.push({
+        rowIndex: index,
         del: true,
         add: true,
         truncated: false,
@@ -74,6 +79,7 @@ function collapseRenderSegments(
       continue
     }
     segments.push({
+      rowIndex: index,
       del: row.origin === 'del',
       add: row.origin === 'add',
       truncated: false,

@@ -19,6 +19,7 @@ const editor = {
   setSelection,
   revealLineInCenter,
   onDidChangeModelContent: (listener: () => void): void => { listeners.push(listener) },
+  onDidScrollChange: vi.fn(() => ({ dispose: vi.fn() })),
   onMouseDown: vi.fn(() => ({ dispose: vi.fn() })),
   onMouseMove: vi.fn(() => ({ dispose: vi.fn() })),
   onMouseUp: vi.fn(() => ({ dispose: vi.fn() })),

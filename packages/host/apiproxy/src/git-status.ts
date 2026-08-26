@@ -6,6 +6,9 @@ import { basename, isAbsolute, resolve } from 'node:path'
 import { runNativeCommand, type NativeCommandRunner } from '@deepseek-ai/dsh-native-command'
 import type { GitStatusEntry, GitStatusListing } from './api/host.ts'
 
+/** `git status` argv that lists files inside untracked directories. */
+export const GIT_PORCELAIN_UNTRACKED_FILES = ['status', '--porcelain', '--untracked-files=all'] as const
+
 /** Injectable command runner for host integration tests. */
 export interface GitStatusInternals {
   run?: NativeCommandRunner
@@ -105,12 +108,12 @@ export function parsePorcelainPath(raw: string): string {
  * @param raw - text after the two status columns and separating space.
  */
 export function normalizePorcelainRelativePath(raw: string): string {
-  return parsePorcelainPath(raw).replaceAll('\\', '/')
+  return parsePorcelainPath(raw).replaceAll('\\', '/').replace(/\/+$/, '')
 }
 
 /**
  * Parse porcelain stdout into badge rows relative to `workspaceRoot`.
- * @param stdout - raw `git status --porcelain` output.
+ * @param stdout - raw `git status --porcelain --untracked-files=all` output.
  * @param workspaceRoot - canonical Workspace directory used as `-C`.
  * @returns sorted absolute-path entries for the Client file tree.
  */
@@ -134,7 +137,7 @@ export function parseGitPorcelain(stdout: string, workspaceRoot: string): GitSta
 }
 
 /**
- * Read Git badge letters for one Workspace root via `git status --porcelain`.
+ * Read Git badge letters for one Workspace root via `git status --porcelain --untracked-files=all`.
  * @param workspaceRoot - canonical bound Workspace directory.
  * @param signal - caller lifetime; abort terminates the git child.
  * @param internals - optional test doubles.
@@ -147,7 +150,7 @@ export async function readGitStatus(
 ): Promise<GitStatusListing> {
   const run = internals.run ?? runNativeCommand
   try {
-    const { stdout } = await run('git', ['-C', workspaceRoot, 'status', '--porcelain'], signal)
+    const { stdout } = await run('git', ['-C', workspaceRoot, ...GIT_PORCELAIN_UNTRACKED_FILES], signal)
     return { entries: parseGitPorcelain(stdout, workspaceRoot) }
   } catch (error: unknown) {
     if (signal.aborted) throw error

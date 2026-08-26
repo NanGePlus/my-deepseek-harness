@@ -29,6 +29,15 @@ export function DetailsPanel({
   const sessionId = boundSessionId ?? currentSessionId
   const flushBody = detailsTab === 'editor' || detailsTab === 'git'
   const [dirtyPaths, setDirtyPathsState] = useState<readonly string[]>([])
+  const [diskPathsChanged, setDiskPathsChanged] = useState<{
+    epoch: number
+    paths: readonly string[]
+    reload: boolean
+  }>({
+    epoch: 0,
+    paths: [],
+    reload: true,
+  })
   /** Keep the same array when contents match so the Git occupant does not re-render. */
   const setDirtyPaths = useCallback((paths: readonly string[]) => {
     setDirtyPathsState((current) => {
@@ -37,6 +46,10 @@ export function DetailsPanel({
       }
       return [...paths]
     })
+  }, [])
+  const notifyDiskPathsChanged = useCallback((paths: readonly string[], reload = true) => {
+    if (paths.length === 0) return
+    setDiskPathsChanged(current => ({ epoch: current.epoch + 1, paths: [...paths], reload }))
   }, [])
 
   return (
@@ -69,6 +82,9 @@ export function DetailsPanel({
           {renderSlot('conversation.details.editor', {
             visible: detailsTab === 'editor',
             setDirtyPaths,
+            diskPathsChangedEpoch: diskPathsChanged.epoch,
+            diskPathsChanged: diskPathsChanged.paths,
+            diskPathsChangedReload: diskPathsChanged.reload,
           })}
         </div>
         <div
@@ -79,6 +95,7 @@ export function DetailsPanel({
           {renderSlot('conversation.details.git', {
             visible: detailsTab === 'git',
             dirtyPaths,
+            notifyDiskPathsChanged,
           })}
         </div>
         <div

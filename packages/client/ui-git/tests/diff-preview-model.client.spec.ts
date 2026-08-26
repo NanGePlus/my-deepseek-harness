@@ -110,7 +110,7 @@ describe('buildMinimapMarkers', () => {
     })
     const markers = buildMinimapMarkers(rows)
     expect(markers).toHaveLength(1)
-    expect(markers[0]).toMatchObject({ del: true, add: true })
+    expect(markers[0]).toMatchObject({ del: true, add: true, rowIndex: expect.any(Number) })
   })
 
   it('places change markers near the top when edits are early in the scroll order', () => {
@@ -156,7 +156,7 @@ describe('buildMinimapMarkers', () => {
     const markers = buildMinimapMarkers(rows)
     expect(markers).toHaveLength(2)
     expect(markers.every(marker => marker.del && marker.add)).toBe(true)
-    expect(markers[0]?.topRatio).toBeLessThan(markers[1]?.topRatio ?? 1)
+    expect(markers[0]?.rowIndex).toBeLessThan(markers[1]?.rowIndex ?? Number.MAX_SAFE_INTEGER)
   })
 
   it('centers one marker for a wrapped delete/add pair', () => {

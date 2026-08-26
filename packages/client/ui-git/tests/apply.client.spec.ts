@@ -20,6 +20,7 @@ async function bench() {
     gitUnstage: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitDiscard: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitCommit: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
+    gitPush: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
   }
   ctx.provide('workspaces', workspaces)
   slots.register({
@@ -82,7 +83,7 @@ describe('ui-git apply', () => {
     expect(b.workspaces.gitStage).toHaveBeenCalledWith('ws', '/w/a.ts', '@@ -1,1 +1,1 @@')
     expect(b.workspaces.gitUnstage).toHaveBeenCalledWith('ws', '/w/a.ts', undefined)
     expect(b.workspaces.gitDiscard).toHaveBeenCalledWith('ws', '/w/a.ts', '@@ -2,1 +2,1 @@')
-    expect(b.workspaces.gitCommit).toHaveBeenCalledWith('ws', 'msg')
+    expect(b.workspaces.gitCommit).toHaveBeenCalledWith('ws', 'msg', undefined)
   })
 
   it('unregisters the Git occupant when the plugin fiber disposes', async () => {

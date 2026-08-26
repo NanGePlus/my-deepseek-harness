@@ -127,6 +127,8 @@ export const hostGitWorkingTreeValueSchema = z.discriminatedUnion('availability'
     branch: z.string(),
     unstaged: z.array(gitWorkingTreeChangeSchema),
     staged: z.array(gitWorkingTreeChangeSchema),
+    pushAvailable: z.boolean(),
+    ahead: z.number().int().nonnegative().optional(),
   }),
 ]) satisfies z.ZodType<Wire<ResponseValue<'host.gitWorkingTree'>>>
 
@@ -202,10 +204,19 @@ export const hostGitDiscardValueSchema = hostGitWorkingTreeValueSchema satisfies
 export const hostGitCommitRequestSchema = z.object({
   workspaceId: workspaceIdSchema,
   message: z.string(),
+  push: z.boolean().optional(),
 }) satisfies z.ZodType<Wire<RequestPayload<'host.gitCommit'>>>
 
 /** host.gitCommit response value (refreshed working tree). */
 export const hostGitCommitValueSchema = hostGitWorkingTreeValueSchema satisfies z.ZodType<Wire<ResponseValue<'host.gitCommit'>>>
+
+/** host.gitPush request payload. */
+export const hostGitPushRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'host.gitPush'>>>
+
+/** host.gitPush response value (refreshed working tree). */
+export const hostGitPushValueSchema = hostGitWorkingTreeValueSchema satisfies z.ZodType<Wire<ResponseValue<'host.gitPush'>>>
 
 /** host.readFile request payload. */
 export const hostReadFileRequestSchema = z.object({

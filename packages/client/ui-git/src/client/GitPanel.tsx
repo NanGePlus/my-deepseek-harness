@@ -1,9 +1,13 @@
 /** Git-panel occupant of the details column Git tab. */
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type MutableRefObject, type ReactNode, type RefObject } from 'react'
 import {
-  Button, IconCodeOutline16, IconFolderClose16, IconLoadingOutline16, IconPlusOutline16,
-  IconRefreshOutline16, Tooltip, useScrollRevealScrollbar, type HighlightSpan,
+  useCallback, useEffect, useLayoutEffect, useRef, useState,
+  type CSSProperties, type KeyboardEvent, type MouseEvent, type MutableRefObject, type ReactNode, type RefObject,
+} from 'react'
+import {
+  Button, IconChevronDownOutline14, IconChevronRightOutline14, IconCodeOutline16,
+  IconDiscardOutline16, IconFolderClose16, IconLoadingOutline16,
+  IconPlusOutline16, Menu, Tooltip, useScrollRevealScrollbar, type HighlightSpan,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -26,6 +30,17 @@ import type { createGitPanelStore } from './stores.ts'
 import css from './GitPanel.module.css'
 
 const ICON_TOOLTIP_DELAY_MS = 500
+const ROW_ACTION_ICON_SIZE = 12
+const ACTION_ICON_SIZE = 12
+const TOOLBAR_FEEDBACK_DISMISS_MS = 4000
+
+type ToolbarAction = 'commit' | 'commitPush' | 'push'
+
+type ConfirmAction = ToolbarAction
+
+type ToolbarFeedback =
+  | { kind: 'success'; action: ToolbarAction }
+  | { kind: 'error'; action: ToolbarAction; message: string }
 
 /** Host Git callbacks closed over `ctx.workspaces` in apply. */
 export interface GitPanelInjected {
@@ -98,10 +113,17 @@ export interface GitPanelInjected {
   /**
    * Create one new HEAD commit from the current index.
    * @param workspaceId - Workspace whose bound root is the discovery start.
-   * @param message - commit message; the Host rejects a blank-after-trim value.
+   * @param message - commit message; blank after trim is rejected in the panel before Host.
+   * @param push - when true, push after commit.
    * @returns the refreshed working tree.
    */
-  gitCommit: (workspaceId: WorkspaceId, message: string) => Promise<GitWorkingTreeResult>
+  gitCommit: (workspaceId: WorkspaceId, message: string, push?: boolean) => Promise<GitWorkingTreeResult>
+  /**
+   * Push the current branch without creating a new commit.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @returns the refreshed working tree.
+   */
+  gitPush: (workspaceId: WorkspaceId) => Promise<GitWorkingTreeResult>
 }
 
 /** Full Git-panel props: runtime share, locale, store, visibility, and Host Git callbacks. */
@@ -136,14 +158,153 @@ interface DiscardTarget {
   hunkHeader?: string
 }
 
+const COMMIT_INPUT_MAX_HEIGHT_PX = 120
+
+/** Single-line commit field that grows with content up to a scroll cap. */
+function CommitMessageInput({ className, placeholder, ariaLabel, value, hint, invalid, pending, onChange }: {
+  className: string
+  placeholder: string
+  ariaLabel: string
+  value: string
+  hint?: string
+  invalid?: boolean
+  pending?: boolean
+  onChange: (value: string) => void
+}): ReactNode {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (el === null) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, COMMIT_INPUT_MAX_HEIGHT_PX)}px`
+  }, [value])
+  const inputClass = invalid === true ? `${className} ${css.commitInputInvalid}` : className
+  return (
+    <div className={css.commitField}>
+      <div className={css.commitInputShell} data-pending={pending ? true : undefined}>
+        <textarea
+          ref={ref}
+          className={inputClass}
+          placeholder={placeholder}
+          aria-label={ariaLabel}
+          aria-invalid={invalid === true || undefined}
+          aria-busy={pending === true || undefined}
+          aria-describedby={hint === undefined ? undefined : 'git-commit-message-hint'}
+          rows={1}
+          value={value}
+          disabled={pending === true}
+          onChange={(event) => { onChange(event.target.value) }}
+        />
+      </div>
+      {hint !== undefined && (
+        <p id="git-commit-message-hint" className={css.commitHint} role="status">
+          {hint}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function toolbarFeedbackLabel(
+  t: GitPanelProps['t'],
+  feedback: Extract<ToolbarFeedback, { kind: 'success' }>,
+): string {
+  switch (feedback.action) {
+    case 'commitPush':
+      return t('git.feedback.commitPushOk')
+    case 'push':
+      return t('git.feedback.pushOk')
+    default:
+      return t('git.feedback.commitOk')
+  }
+}
+
+function ToolbarFeedbackView({
+  feedback, t, onRetryCommit,
+}: {
+  feedback: ToolbarFeedback
+  t: GitPanelProps['t']
+  onRetryCommit?: () => void
+}): ReactNode {
+  if (feedback.kind === 'success') {
+    return (
+      <span className={css.toolbarFeedbackOk} role="status">
+        {toolbarFeedbackLabel(t, feedback)}
+      </span>
+    )
+  }
+  return (
+    <span className={css.toolbarFeedbackErr} role="alert">
+      <span className={css.toolbarFeedbackMessage}>{feedback.message}</span>
+      {feedback.action !== 'push' && onRetryCommit !== undefined && (
+        <button type="button" className={css.toolbarFeedbackRetry} onClick={onRetryCommit}>
+          {t('git.commit.retry')}
+        </button>
+      )}
+    </span>
+  )
+}
+
+/** Primary commit action with a chevron menu for commit-only vs commit-and-push. */
+function CommitSplitButton({ t, disabled, onAskCommit }: {
+  t: GitPanelProps['t']
+  disabled: boolean
+  onAskCommit: (push?: boolean) => void
+}): ReactNode {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const submitLabel = t('git.commit.submit')
+  return (
+    <div className={css.commitActions}>
+      <button
+        type="button"
+        className={css.commitPrimary}
+        disabled={disabled}
+        aria-label={submitLabel}
+        onClick={() => { onAskCommit(false) }}
+      >
+        {submitLabel}
+      </button>
+      <Menu
+        open={menuOpen}
+        onClose={() => { setMenuOpen(false) }}
+        align="end"
+        compact
+        portal
+        items={[
+          { id: 'commit', label: t('git.commit.submit') },
+          { id: 'push', label: t('git.commit.push') },
+        ]}
+        onSelect={(id) => {
+          setMenuOpen(false)
+          if (disabled) return
+          onAskCommit(id === 'push')
+        }}
+        anchor={(
+          <button
+            type="button"
+            className={css.commitMenuTrigger}
+            disabled={disabled}
+            aria-label={t('git.commit.menu')}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => { setMenuOpen(open => !open) }}
+          >
+            <IconChevronDownOutline14 className={css.commitMenuChevron} />
+          </button>
+        )}
+      />
+    </div>
+  )
+}
+
 /**
  * Git panel body: branch, commit message, two change lists, and in-panel diff preview.
  * @param props - root runtime share, locale, draft store, visibility, and Host Git callbacks.
  * @returns the Git panel surface.
  */
 export function GitPanel({
-  t, visible, dirtyPaths, useSessions, useWorkspaces, useStore, actions,
-  gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit,
+  t, visible, dirtyPaths, notifyDiskPathsChanged, useSessions, useWorkspaces, useStore, actions,
+  gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit, gitPush,
 }: GitPanelProps) {
   const currentSessionId = useSessions(state => state.current)
   const workspace = useWorkspaces(state =>
@@ -159,12 +320,17 @@ export function GitPanel({
   const [initError, setInitError] = useState<string | null>(null)
   const [initPending, setInitPending] = useState(false)
   const [writeError, setWriteError] = useState<string | null>(null)
-  const [commitError, setCommitError] = useState(false)
+  const [commitMessageHint, setCommitMessageHint] = useState(false)
+  const [toolbarFeedback, setToolbarFeedback] = useState<ToolbarFeedback | null>(null)
+  const lastCommitPushRef = useRef(false)
+  const toolbarFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [busyPath, setBusyPath] = useState<string | null>(null)
   const [busyKind, setBusyKind] = useState<'stage' | 'unstage' | 'discard' | null>(null)
-  const [commitPending, setCommitPending] = useState(false)
+  const [commitPending, setCommitPending] = useState<'commit' | 'push' | false>(false)
+  const [pushPending, setPushPending] = useState(false)
   const [discardTarget, setDiscardTarget] = useState<DiscardTarget | null>(null)
   const [guardTarget, setGuardTarget] = useState<GitWorkingTreeChange | null>(null)
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [preview, setPreview] = useState<PreviewState>({ kind: 'idle' })
   const [opsWidthPx, setOpsWidthPx] = useState<number | null>(null)
@@ -195,6 +361,26 @@ export function GitPanel({
     setOpsDragging(false)
   }, [])
 
+  const clearToolbarFeedbackTimer = useCallback(() => {
+    if (toolbarFeedbackTimerRef.current !== null) {
+      clearTimeout(toolbarFeedbackTimerRef.current)
+      toolbarFeedbackTimerRef.current = null
+    }
+  }, [])
+
+  const showToolbarFeedback = useCallback((feedback: ToolbarFeedback) => {
+    clearToolbarFeedbackTimer()
+    setToolbarFeedback(feedback)
+    if (feedback.kind === 'success') {
+      toolbarFeedbackTimerRef.current = setTimeout(() => {
+        setToolbarFeedback(current => (current === feedback ? null : current))
+        toolbarFeedbackTimerRef.current = null
+      }, TOOLBAR_FEEDBACK_DISMISS_MS)
+    }
+  }, [clearToolbarFeedbackTimer])
+
+  useEffect(() => () => { clearToolbarFeedbackTimer() }, [clearToolbarFeedbackTimer])
+
   useEffect(() => {
     if (!visible || workspaceId === undefined) return
     const ac = new AbortController()
@@ -211,7 +397,6 @@ export function GitPanel({
       if (ac.signal.aborted) return
       setInitError(null)
       setWriteError(null)
-      setCommitError(false)
       setView({ kind: 'ready', tree })
       setSelection(current => retainSelection(current, tree))
       setPreviewEpoch(epoch => epoch + 1)
@@ -241,7 +426,7 @@ export function GitPanel({
     return () => { ac.abort() }
   }, [visible, workspaceId, selection, gitDiffPreview, previewEpoch])
 
-  const writing = busyPath !== null || commitPending
+  const pathWriting = busyPath !== null
   const isDirty = (path: string): boolean => dirtyPaths.includes(path)
 
   const openGuard = (row: GitWorkingTreeChange): boolean => {
@@ -252,7 +437,6 @@ export function GitPanel({
 
   const applyTree = (tree: GitWorkingTreeResult): void => {
     setWriteError(null)
-    setCommitError(false)
     setView({ kind: 'ready', tree })
     setSelection(current => retainSelection(current, tree))
     setPreviewEpoch(epoch => epoch + 1)
@@ -264,15 +448,17 @@ export function GitPanel({
     write: () => Promise<GitWorkingTreeResult>,
   ): Promise<boolean> => {
     /* v8 ignore next -- row actions only render after a Workspace-bound repository read. */
-    if (workspaceId === undefined || writing) return false
+    if (workspaceId === undefined || pathWriting) return false
     setBusyPath(path)
     setBusyKind(kind)
     setWriteError(null)
-    setCommitError(false)
+    if (kind === 'discard') notifyDiskPathsChanged([path], false)
     try {
       applyTree(await write())
+      if (kind === 'discard') notifyDiskPathsChanged([path], true)
       return true
     } catch (error: unknown) {
+      if (kind === 'discard') notifyDiskPathsChanged([path], true)
       setWriteError(hostErrorMessage(error))
       return false
     } finally {
@@ -306,33 +492,93 @@ export function GitPanel({
     })
   }
 
-  const onCommit = (): void => {
+  const onAskCommit = (push = false): void => {
+    /* v8 ignore next -- Submit is disabled until a Session-bound repository has staged files. */
+    if (workspaceId === undefined || currentSessionId === undefined || commitPending) return
     const trimmed = message.trim()
-    /* v8 ignore next -- Submit is disabled until a Session-bound repository has staged files and a message. */
-    if (workspaceId === undefined || currentSessionId === undefined || writing || trimmed === '') return
-    setCommitPending(true)
+    if (trimmed === '') {
+      setCommitMessageHint(true)
+      setWriteError(null)
+      return
+    }
+    setCommitMessageHint(false)
+    setConfirmAction(push === true ? 'commitPush' : 'commit')
+  }
+
+  const onAskPush = (): void => {
+    /* v8 ignore next -- Push only renders after a Workspace-bound repository read. */
+    if (workspaceId === undefined || pushPending || commitPending) return
+    setConfirmAction('push')
+  }
+
+  const onCancelConfirm = (): void => { setConfirmAction(null) }
+
+  const onConfirmAction = (): void => {
+    if (confirmAction === null) return
+    const action = confirmAction
+    setConfirmAction(null)
+    if (action === 'push') onPush()
+    else onCommit(action === 'commitPush')
+  }
+
+  const onCommit = (push = false): void => {
+    /* v8 ignore next -- Submit is disabled until a Session-bound repository has staged files. */
+    if (workspaceId === undefined || currentSessionId === undefined || commitPending) return
+    const trimmed = message.trim()
+    if (trimmed === '') {
+      setCommitMessageHint(true)
+      setWriteError(null)
+      return
+    }
+    setCommitMessageHint(false)
+    clearToolbarFeedbackTimer()
+    setToolbarFeedback(null)
+    const action: ToolbarAction = push === true ? 'commitPush' : 'commit'
+    setCommitPending(push === true ? 'push' : 'commit')
     setWriteError(null)
-    setCommitError(false)
-    void gitCommit(workspaceId, trimmed).then((tree) => {
+    lastCommitPushRef.current = push === true
+    void gitCommit(workspaceId, trimmed, push === true ? true : undefined).then((tree) => {
       setCommitPending(false)
       applyTree(tree)
       actions.clearDraft(currentSessionId)
+      showToolbarFeedback({ kind: 'success', action })
     }).catch((error: unknown) => {
       setCommitPending(false)
-      setCommitError(true)
-      setWriteError(hostErrorMessage(error))
+      showToolbarFeedback({ kind: 'error', action, message: hostErrorMessage(error) })
+    })
+  }
+
+  const onPush = (): void => {
+    /* v8 ignore next -- Push only renders after a Workspace-bound repository read. */
+    if (workspaceId === undefined || pushPending || commitPending) return
+    clearToolbarFeedbackTimer()
+    setToolbarFeedback(null)
+    setPushPending(true)
+    setWriteError(null)
+    void gitPush(workspaceId).then((tree) => {
+      setPushPending(false)
+      applyTree(tree)
+      showToolbarFeedback({ kind: 'success', action: 'push' })
+    }).catch((error: unknown) => {
+      setPushPending(false)
+      showToolbarFeedback({ kind: 'error', action: 'push', message: hostErrorMessage(error) })
     })
   }
 
   return (
     <div className={css.root} data-surface="git-panel">
       {renderBody({
-        view, t, onInit, initError, initPending, writeError, commitError, message, busyPath, busyKind,
-        commitPending, discardTarget, guardTarget, writing, dirtyPaths, selection, preview,
+        view, t, onInit, initError, initPending, writeError, commitMessageHint, toolbarFeedback, message, busyPath, busyKind,
+        commitPending, pushPending, discardTarget, guardTarget, confirmAction, pathWriting, dirtyPaths, selection, preview,
         splitRef, opsWidthPx, opsDragging, beginOpsResize, dragOpsResize, endOpsResize,
         onMessage: (value) => {
           /* v8 ignore next -- the commit field only renders for a current Session. */
           if (currentSessionId === undefined) return
+          setCommitMessageHint(false)
+          clearToolbarFeedbackTimer()
+          setToolbarFeedback(current => (
+            current?.action === 'commit' || current?.action === 'commitPush' ? null : current
+          ))
           actions.setDraft(currentSessionId, value)
         },
         onSelect: (side, row) => {
@@ -392,7 +638,8 @@ export function GitPanel({
           )
         },
         onCancelGuard: () => { setGuardTarget(null) },
-        onCommit, onRetryCommit: onCommit,
+        onAskCommit, onAskPush, onCancelConfirm, onConfirmAction,
+        onCommit, onPush, onRetryCommit: () => { onCommit(lastCommitPushRef.current) },
       })}
     </div>
   )
@@ -405,14 +652,17 @@ interface RepoBody {
   initError: string | null
   initPending: boolean
   writeError: string | null
-  commitError: boolean
+  commitMessageHint: boolean
+  toolbarFeedback: ToolbarFeedback | null
   message: string
   busyPath: string | null
   busyKind: 'stage' | 'unstage' | 'discard' | null
-  commitPending: boolean
+  commitPending: 'commit' | 'push' | false
+  pushPending: boolean
   discardTarget: DiscardTarget | null
   guardTarget: GitWorkingTreeChange | null
-  writing: boolean
+  confirmAction: ConfirmAction | null
+  pathWriting: boolean
   dirtyPaths: readonly string[]
   selection: Selection | null
   preview: PreviewState
@@ -432,7 +682,12 @@ interface RepoBody {
   onCancelDiscard: () => void
   onConfirmDiscard: () => void
   onCancelGuard: () => void
-  onCommit: () => void
+  onAskCommit: (push?: boolean) => void
+  onAskPush: () => void
+  onCancelConfirm: () => void
+  onConfirmAction: () => void
+  onCommit: (push?: boolean) => void
+  onPush: () => void
   onRetryCommit: () => void
 }
 
@@ -500,13 +755,14 @@ function renderRepository(
   refreshing: boolean,
   body: RepoBody,
 ): ReactNode {
-  const { t, message, writeError, commitError, commitPending, discardTarget, guardTarget } = body
-  const clean = tree.unstaged.length === 0 && tree.staged.length === 0
-  const messageEmpty = message.trim() === ''
+  const {
+    t, message, writeError, commitMessageHint, toolbarFeedback,
+    commitPending, pushPending, discardTarget, guardTarget, confirmAction,
+  } = body
   const stagedEmpty = tree.staged.length === 0
   const stagedDirty = tree.staged.some(row => body.dirtyPaths.includes(row.absolutePath))
-  const showEmptyHint = !stagedEmpty && messageEmpty
-  const commitDisabled = stagedEmpty || messageEmpty || commitPending || body.writing || stagedDirty
+  const commitDisabled = stagedEmpty || commitPending !== false || body.pathWriting || stagedDirty
+  const pushDisabled = !tree.pushAvailable || pushPending || commitPending !== false || body.pathWriting
   const opsClass = body.opsWidthPx !== null ? `${css.ops} ${css.opsResized}` : css.ops
   return (
     <div
@@ -523,43 +779,77 @@ function renderRepository(
         {refreshing
           ? <div className={css.refreshBar} role="progressbar" aria-label={t('git.refresh')} />
           : <div className={css.refreshSlot} />}
-        <div className={css.branch}>{t('git.branch', { name: tree.branch })}</div>
-        <textarea
-          className={showEmptyHint ? `${css.commitInput} ${css.commitInputError}` : css.commitInput}
-          placeholder={t('git.commit.placeholder')}
-          aria-label={t('git.commit.placeholder')}
-          aria-invalid={showEmptyHint || undefined}
-          rows={3}
-          value={message}
-          onChange={(event) => { body.onMessage(event.target.value) }}
-        />
-        {showEmptyHint && <div className={css.errorCopy}>{t('git.commit.empty')}</div>}
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={commitDisabled}
-          aria-label={t('git.commit.submit')}
-          onClick={body.onCommit}
-        >
-          {commitPending && (
-            <span className={css.buttonSpinner} role="status" aria-label={t('git.busy.commit')}>
-              <IconLoadingOutline16 size={16} />
-            </span>
-          )}
-          {t('git.commit.submit')}
-        </Button>
-        {writeError !== null && (
-          <div className={css.errorCopy} role="alert">
-            <div>{writeError}</div>
-            {!stagedEmpty && !messageEmpty && commitError && (
-              <button type="button" className={css.retry} onClick={body.onRetryCommit}>
-                {t('git.commit.retry')}
-              </button>
+        <div className={css.branchRow}>
+          <div className={css.branch}>
+            {t('git.branch', { name: tree.branch })}
+            {tree.ahead !== undefined && tree.ahead > 0 && (
+              <span className={css.branchAhead}>{t('git.branch.ahead', { count: tree.ahead })}</span>
             )}
+            {tree.pushAvailable && tree.ahead === undefined && (
+              <span className={css.branchAhead}>{t('git.branch.unpublished')}</span>
+            )}
+          </div>
+        </div>
+        <CommitMessageInput
+          className={css.commitInput}
+          placeholder={t('git.commit.placeholder')}
+          ariaLabel={t('git.commit.placeholder')}
+          value={message}
+          invalid={commitMessageHint}
+          hint={commitMessageHint ? t('git.commit.required') : undefined}
+          pending={commitPending !== false}
+          onChange={body.onMessage}
+        />
+        <div className={css.commitToolbar}>
+          <CommitSplitButton
+            t={t}
+            disabled={commitDisabled}
+            onAskCommit={body.onAskCommit}
+          />
+          {toolbarFeedback !== null
+            && (toolbarFeedback.action === 'commit' || toolbarFeedback.action === 'commitPush')
+            && commitPending === false && (
+            <ToolbarFeedbackView
+              feedback={toolbarFeedback}
+              t={t}
+              onRetryCommit={toolbarFeedback.kind === 'error' ? body.onRetryCommit : undefined}
+            />
+          )}
+          {tree.pushAvailable && (
+            <div className={css.pushButtonShell} data-pending={pushPending ? true : undefined}>
+              <Tooltip
+                label={
+                  tree.ahead !== undefined && tree.ahead > 0
+                    ? t('git.push.hintAhead', { count: tree.ahead, branch: tree.branch })
+                    : t('git.push.hintUnpublished', { branch: tree.branch })
+                }
+                side="bottom"
+                delayMs={ICON_TOOLTIP_DELAY_MS}
+                disabled={pushPending || commitPending !== false || body.pathWriting}
+              >
+                <button
+                  type="button"
+                  className={css.pushButton}
+                  disabled={pushDisabled}
+                  aria-busy={pushPending || undefined}
+                  aria-label={t('git.push')}
+                  onClick={body.onAskPush}
+                >
+                  {t('git.push')}
+                </button>
+              </Tooltip>
+            </div>
+          )}
+          {toolbarFeedback !== null && toolbarFeedback.action === 'push' && !pushPending && (
+            <ToolbarFeedbackView feedback={toolbarFeedback} t={t} />
+          )}
+        </div>
+        {writeError !== null && (
+          <div className={css.listWriteError} role="alert">
+            {writeError}
           </div>
         )}
         <div className={css.lists}>
-          {clean && <div className={css.cleanEmpty}>{t('git.empty.clean')}</div>}
           <ChangeSection
             id="unstaged"
             title={t('git.section.unstaged')}
@@ -596,6 +886,16 @@ function renderRepository(
           onCancel={body.onCancelGuard}
         />
       )}
+      {confirmAction !== null && (
+        <ActionConfirmDialog
+          action={confirmAction}
+          branch={tree.branch}
+          ahead={tree.ahead}
+          t={t}
+          onCancel={body.onCancelConfirm}
+          onConfirm={body.onConfirmAction}
+        />
+      )}
     </div>
   )
 }
@@ -610,7 +910,10 @@ function DiffPreviewPane({ body }: { body: RepoBody }): ReactNode {
   }, [scrollRef, scrollRevealRef])
   useEffect(() => {
     if (preview.kind !== 'ready') return
-    scrollRef.current?.scrollTo({ top: 0 })
+    const scrollEl = scrollRef.current
+    if (scrollEl !== null && typeof scrollEl.scrollTo === 'function') {
+      scrollEl.scrollTo({ top: 0 })
+    }
   }, [preview, scrollRef, selection])
   return (
     <div className={css.preview} role="region" aria-label={t('git.preview.region')}>
@@ -672,17 +975,19 @@ function WholeFilePreviewActions({
       <span className={css.rowActions}>
         <IconAction
           label={t('git.stage')}
-          disabled={body.writing || guarded}
+          inactive={body.pathWriting || guarded}
+          suppressTooltip={body.pathWriting}
           onClick={() => { body.onStage(row) }}
         >
-          <IconPlusOutline16 size={14} />
+          <IconPlusOutline16 size={ROW_ACTION_ICON_SIZE} />
         </IconAction>
         <IconAction
           label={t('git.discard')}
-          disabled={body.writing || guarded}
+          inactive={body.pathWriting || guarded}
+          suppressTooltip={body.pathWriting}
           onClick={() => { body.onAskDiscard(row) }}
         >
-          <IconRefreshOutline16 size={14} />
+          <IconDiscardOutline16 size={ROW_ACTION_ICON_SIZE} />
         </IconAction>
       </span>
     )
@@ -691,10 +996,11 @@ function WholeFilePreviewActions({
     <span className={css.rowActions}>
       <IconAction
         label={t('git.unstage')}
-        disabled={body.writing}
+        inactive={body.pathWriting}
+        suppressTooltip={body.pathWriting}
         onClick={() => { body.onUnstage(row) }}
       >
-        <IconMinus size={14} />
+        <IconMinus size={ROW_ACTION_ICON_SIZE} />
       </IconAction>
     </span>
   )
@@ -785,18 +1091,20 @@ function HunkGutterActions({
     return (
       <>
         <IconAction
-          label={t('git.hunk.stage')}
-          disabled={body.writing || guarded}
+          label={t('git.stage')}
+          inactive={body.pathWriting || guarded}
+          suppressTooltip={body.pathWriting}
           onClick={() => { body.onStage(row, hunkHeader) }}
         >
-          <IconPlusOutline16 size={14} />
+          <IconPlusOutline16 size={ACTION_ICON_SIZE} />
         </IconAction>
         <IconAction
           label={t('git.hunk.discard')}
-          disabled={body.writing || guarded}
+          inactive={body.pathWriting || guarded}
+          suppressTooltip={body.pathWriting}
           onClick={() => { body.onAskDiscard(row, hunkHeader) }}
         >
-          <IconRefreshOutline16 size={14} />
+          <IconDiscardOutline16 size={ACTION_ICON_SIZE} />
         </IconAction>
       </>
     )
@@ -804,10 +1112,10 @@ function HunkGutterActions({
   return (
     <IconAction
       label={t('git.hunk.unstage')}
-      disabled={body.writing}
+      disabled={body.pathWriting}
       onClick={() => { body.onUnstage(row, hunkHeader) }}
     >
-      <IconMinus size={14} />
+      <IconMinus size={ACTION_ICON_SIZE} />
     </IconAction>
   )
 }
@@ -880,29 +1188,65 @@ function ChangeSection({
   body: RepoBody
 }) {
   const { t } = body
+  const [expanded, setExpanded] = useState(true)
   const sectionGuarded = id === 'unstaged' && rows.some(row => body.dirtyPaths.includes(row.absolutePath))
   const sectionAction = id === 'unstaged'
     ? { label: t('git.stageAll'), onClick: () => { body.onStageAll(rows) } }
     : { label: t('git.unstageAll'), onClick: () => { body.onUnstageAll(rows) } }
+  const toggleLabel = expanded ? t('git.section.collapse', { title }) : t('git.section.expand', { title })
+  const toggleExpanded = useCallback(() => {
+    setExpanded(open => !open)
+  }, [])
+  const onHeadKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    toggleExpanded()
+  }
+  const listId = `git-section-${id}-list`
   return (
     <section className={css.section}>
-      <div className={css.sectionHead}>
-        <h2 className={css.sectionTitle}>{title}</h2>
-        {rows.length > 0 && (
-          <IconAction
-            label={sectionAction.label}
-            disabled={body.writing || sectionGuarded}
-            onClick={sectionAction.onClick}
-          >
-            {id === 'unstaged' ? <IconPlusOutline16 size={14} /> : <IconMinus size={14} />}
-          </IconAction>
-        )}
+      <div
+        className={css.sectionHead}
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        aria-controls={listId}
+        aria-label={toggleLabel}
+        onClick={toggleExpanded}
+        onKeyDown={onHeadKeyDown}
+      >
+        <span className={css.sectionChevron} aria-hidden="true">
+          {expanded
+            ? <IconChevronDownOutline14 size={14} />
+            : <IconChevronRightOutline14 size={14} />}
+        </span>
+        <h2 id={`git-section-${id}-title`} className={css.sectionTitle}>{title}</h2>
+        <div
+          className={css.sectionHeadActions}
+          onClick={(event) => { event.stopPropagation() }}
+        >
+          {rows.length > 0 && (
+            <IconAction
+              label={sectionAction.label}
+              inactive={body.pathWriting || sectionGuarded}
+              suppressTooltip={body.pathWriting}
+              onClick={sectionAction.onClick}
+            >
+              {id === 'unstaged' ? <IconPlusOutline16 size={ACTION_ICON_SIZE} /> : <IconMinus size={ACTION_ICON_SIZE} />}
+            </IconAction>
+          )}
+          <span className={css.sectionCount} aria-label={t('git.section.count', { count: rows.length })}>
+            {rows.length}
+          </span>
+        </div>
       </div>
-      <ul className={css.rowList}>
-        {rows.map(row => (
-          <ChangeRow key={`${id}:${row.absolutePath}`} id={id} row={row} body={body} />
-        ))}
-      </ul>
+      {expanded && (
+        <ul id={listId} className={css.rowList} aria-labelledby={`git-section-${id}-title`}>
+          {rows.map(row => (
+            <ChangeRow key={`${id}:${row.absolutePath}`} id={id} row={row} body={body} />
+          ))}
+        </ul>
+      )}
     </section>
   )
 }
@@ -957,51 +1301,104 @@ function ChangeRow({
         <span className={css.rowFileName}>{fileName}</span>
         {parentDir !== '' && <span className={css.rowParentDir}>{parentDir}</span>}
       </span>
-      <span
-        className={`${css.rowBadge} ${statusClass}`}
-        aria-label={t('git.change.status', { letter: statusLetter })}
-      >
-        {statusLetter}
+      <span className={css.rowTail}>
+        {busy
+          ? (
+            <span className={css.rowSpinner} role="status" aria-label={busyLabel}>
+              <IconLoadingOutline16 size={16} />
+            </span>
+          )
+          : (
+            <span className={css.rowActions}>
+              {id === 'unstaged'
+                ? (
+                  <>
+                    <IconAction
+                      label={t('git.stage')}
+                      inactive={body.pathWriting || guarded}
+                      suppressTooltip={body.pathWriting}
+                      onClick={() => { body.onStage(row) }}
+                    >
+                      <IconPlusOutline16 size={ROW_ACTION_ICON_SIZE} />
+                    </IconAction>
+                    <IconAction
+                      label={t('git.discard')}
+                      inactive={body.pathWriting || guarded}
+                      suppressTooltip={body.pathWriting}
+                      onClick={() => { body.onAskDiscard(row) }}
+                    >
+                      <IconDiscardOutline16 size={ROW_ACTION_ICON_SIZE} />
+                    </IconAction>
+                  </>
+                )
+                : (
+                  <IconAction
+                    label={t('git.unstage')}
+                    inactive={body.pathWriting}
+                    suppressTooltip={body.pathWriting}
+                    onClick={() => { body.onUnstage(row) }}
+                  >
+                    <IconMinus size={ROW_ACTION_ICON_SIZE} />
+                  </IconAction>
+                )}
+            </span>
+          )}
+        <span
+          className={`${css.rowBadge} ${statusClass}`}
+          aria-label={t('git.change.status', { letter: statusLetter })}
+        >
+          {statusLetter}
+        </span>
       </span>
-      {busy
-        ? (
-          <span className={css.rowSpinner} role="status" aria-label={busyLabel}>
-            <IconLoadingOutline16 size={16} />
-          </span>
-        )
-        : (
-          <span className={css.rowActions}>
-            {id === 'unstaged'
-              ? (
-                <>
-                  <IconAction
-                    label={t('git.stage')}
-                    disabled={body.writing || guarded}
-                    onClick={() => { body.onStage(row) }}
-                  >
-                    <IconPlusOutline16 size={14} />
-                  </IconAction>
-                  <IconAction
-                    label={t('git.discard')}
-                    disabled={body.writing || guarded}
-                    onClick={() => { body.onAskDiscard(row) }}
-                  >
-                    <IconRefreshOutline16 size={14} />
-                  </IconAction>
-                </>
-              )
-              : (
-                <IconAction
-                  label={t('git.unstage')}
-                  disabled={body.writing}
-                  onClick={() => { body.onUnstage(row) }}
-                >
-                  <IconMinus size={14} />
-                </IconAction>
-              )}
-          </span>
-        )}
     </li>
+  )
+}
+
+function ActionConfirmDialog({
+  action, branch, ahead, t, onCancel, onConfirm,
+}: {
+  action: ConfirmAction
+  branch: string
+  ahead: number | undefined
+  t: GitPanelProps['t']
+  onCancel: () => void
+  onConfirm: () => void
+}): ReactNode {
+  const title = action === 'commitPush'
+    ? t('git.confirm.commitPush.title')
+    : action === 'push'
+      ? t('git.confirm.push.title')
+      : t('git.confirm.commit.title')
+  const body = action === 'commitPush'
+    ? t('git.confirm.commitPush.body', { branch })
+    : action === 'push'
+      ? (ahead !== undefined && ahead > 0
+        ? t('git.confirm.push.bodyAhead', { branch, count: ahead })
+        : t('git.confirm.push.body', { branch }))
+      : t('git.confirm.commit.body', { branch })
+  const confirmLabel = action === 'commitPush'
+    ? t('git.confirm.commitPush.confirm')
+    : action === 'push'
+      ? t('git.confirm.push.confirm')
+      : t('git.confirm.commit.confirm')
+  return (
+    <div className={css.dialogRoot}>
+      <div
+        className={css.dialogCard}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        <h2 className={css.dialogTitle}>{title}</h2>
+        <p className={css.dialogBody}>{body}</p>
+        <div className={css.dialogActions}>
+          <Button variant="outline" size="sm" onClick={onCancel}>{t('git.confirm.cancel')}</Button>
+          <Button variant="primary" size="sm" onClick={onConfirm}>
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -1048,6 +1445,9 @@ function DiscardDialog({
     : target.kind === 'deleted'
       ? t('git.discard.deleted.body')
       : t('git.discard.modified.body')
+  const confirmLabel = target.kind === 'untracked'
+    ? t('git.discard.untracked.confirm')
+    : t('git.discard.confirm')
   return (
     <div className={css.dialogRoot}>
       <div
@@ -1062,7 +1462,7 @@ function DiscardDialog({
         <div className={css.dialogActions}>
           <Button variant="outline" size="sm" onClick={onCancel}>{t('git.discard.cancel')}</Button>
           <Button variant="primary" size="sm" className={css.danger} onClick={onConfirm}>
-            {t('git.discard')}
+            {confirmLabel}
           </Button>
         </div>
       </div>
@@ -1071,24 +1471,30 @@ function DiscardDialog({
 }
 
 function IconAction({
-  label, disabled, onClick, children,
+  label, inactive, suppressTooltip, onClick, children,
 }: {
   label: string
-  disabled: boolean
+  /** Marks the control inactive for styling and assistive tech. */
+  inactive: boolean
+  /** Suppresses the hover tooltip while an operation is in flight. */
+  suppressTooltip?: boolean | undefined
   onClick: () => void
   children: ReactNode
 }) {
   return (
-    <Tooltip label={label} side="bottom" delayMs={ICON_TOOLTIP_DELAY_MS} disabled={disabled}>
+    <Tooltip
+      label={label}
+      side="bottom"
+      delayMs={ICON_TOOLTIP_DELAY_MS}
+      disabled={suppressTooltip ?? inactive}
+    >
       <button
         type="button"
         className={css.iconButton}
         aria-label={label}
-        disabled={disabled}
-        aria-disabled={disabled || undefined}
+        aria-disabled={inactive || undefined}
         onClick={(event: MouseEvent<HTMLButtonElement>) => {
           event.stopPropagation()
-          if (disabled) return
           onClick()
         }}
       >

@@ -125,6 +125,7 @@ describe('host.gitWorkingTree', () => {
       branch: 'main',
       unstaged: [],
       staged: [],
+      pushAvailable: true,
     })
   })
 
@@ -167,6 +168,7 @@ describe('host.gitWorkingTree', () => {
     expect(tree).toMatchObject({
       availability: 'repository',
       branch: `HEAD detached at ${sha}`,
+      pushAvailable: false,
     })
   })
 
@@ -208,6 +210,38 @@ describe('host.gitWorkingTree', () => {
     expect(tree.staged).toEqual([
       { path: 'staged.txt', absolutePath: join(workspace.path, 'staged.txt'), kind: 'untracked' },
     ])
+  })
+
+  it('lists files inside an untracked directory and previews the file, not the directory', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    commitFile(workspacePath, 'tracked.txt', 'v1', 'init')
+    mkdirSync(join(workspacePath, 'tests', 'hahah'), { recursive: true })
+    writeFileSync(join(workspacePath, 'tests', 'hahah', 'test.md'), 'hello\n')
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const tree = expectOk(await api.host.gitWorkingTree(
+      request({ workspaceId: workspace.workspaceId }),
+      new AbortController().signal,
+    ))
+    expect(tree.availability).toBe('repository')
+    if (tree.availability !== 'repository') throw new Error('unreachable')
+    const nested = join(workspace.path, 'tests', 'hahah', 'test.md')
+    expect(tree.unstaged).toEqual([
+      { path: 'tests/hahah/test.md', absolutePath: nested, kind: 'untracked' },
+    ])
+
+    const preview = expectOk(await api.host.gitDiffPreview(
+      request({
+        workspaceId: workspace.workspaceId,
+        path: nested,
+        side: 'unstaged' as const,
+      }),
+      new AbortController().signal,
+    ))
+    expect(preview).toEqual({ kind: 'untracked-text', text: 'hello\n' })
   })
 
   it('lists the same path in both segments when only part of its diff is staged', async () => {

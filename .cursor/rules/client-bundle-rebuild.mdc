@@ -1,44 +1,61 @@
 ---
-description: 修改 web 客户端插件源码后，结束前必须 rebuild 对应 lib/client.js bundle
+description: 改 web/Host 相关代码后，结束前必须 rebuild 并在本机重启 pnpm dsh web
 alwaysApply: true
 ---
 
-# 客户端 bundle 重建
+# Web 开发：重建 + 重启
 
-`pnpm dsh web` 浏览器加载的是各插件已构建的 **`lib/client.js`**，不是 `src/` 源码。只改源码不 rebuild，页面上**不会变化**。
+`pnpm dsh web` 加载的是**已构建产物**，不是 `src/` 源码。用户要求：**每次改完相关代码，Agent 必须代为 rebuild 并重启服务**，不要只提醒用户手动操作。
 
-## 何时必须 rebuild
+## 何时必须 rebuild + 重启
 
-在同一轮对话中，只要改动了会进入浏览器 bundle 的路径，**向用户宣称「完成 / 请验证」之前**必须 rebuild 受影响的包：
+在同一轮对话中，只要改动了会影响 `dsh web` 行为的路径，**向用户宣称「完成 / 请验证」之前**必须：
 
-- `packages/*/*/src/client/**`（及同包的 `src/client/` 入口链）
-- 会改变 client bundle 内容的 CSS module、locale、client 侧 types
-- `apps/web/` 中影响前端组装的改动（通常需 `pnpm run build` 或对应 web 构建）
+1. rebuild 受影响的包（见下表）
+2. **重启** `pnpm dsh web`（见「怎么重启」）
 
-不必 rebuild：纯测试、纯 docs、仅 Node 侧 `lib/index.js`（无 `./client` export）、与 web UI 无关的后端包。
+| 改动路径 | rebuild 命令 |
+|---|---|
+| `packages/client/*/src/client/**`、CSS module、locale | `pnpm --filter <包名> run bundle` |
+| `packages/client/runtime/src/client/**` | `cd packages/client/runtime && pnpm exec tsdown` |
+| `packages/host/apiproxy/src/**`（Git RPC、Host API 等） | `pnpm run build:lib:host` **且** `cd packages/client/connection && pnpm exec tsdown`（RPC 响应 schema 在 connection bundle 里校验） |
+| `apps/web/` 组装层 | `pnpm run build:web` 或 `pnpm run build` |
+| 跨多包、不确定影响面 | `pnpm run build` |
 
-## 怎么 rebuild
+不必 rebuild：纯测试、纯 docs、与 web/Host 无关的后端包。
 
-**按改动包逐个 bundle**（优先，最快）：
+## 怎么 rebuild（client 逐包，优先最快）
 
 ```sh
+pnpm --filter @deepseek-ai/dsh-client-ui-git run bundle
 pnpm --filter @deepseek-ai/dsh-client-ui-conversation run bundle
-pnpm --filter @deepseek-ai/dsh-client-ui-file-editor run bundle
-# 其他包：pnpm --filter <package.json 的 name> run bundle
+# 从路径推断包名：packages/client/ui-git/... → @deepseek-ai/dsh-client-ui-git
 ```
 
-从文件路径推断包名：`packages/client/ui-conversation/src/...` → `@deepseek-ai/dsh-client-ui-conversation`。
-
-**长期本地开发**（可选，与用户并行）：另开终端 `pnpm run dev:web`，源码变更自动 watch rebuild；`dsh web` 会 stat 轮询并 HMR 推送新 rev。
-
-**全量**（跨多包、发布前、或不确定影响面时）：
+Host 单独改动时至少：
 
 ```sh
-pnpm run build
+pnpm run build:lib:host
+cd packages/client/connection && pnpm exec tsdown
 ```
+
+## 怎么重启 `dsh web`
+
+1. 若已有 `pnpm dsh web` 在跑，先结束旧进程（同端口占用或已知终端里的 web 进程）。
+2. 在仓库根目录后台启动：
+
+```sh
+pnpm dsh web
+```
+
+3. 等待输出 `dsh web: http://127.0.0.1:xxxx`，在回复中给出 URL。
+4. 提醒用户 **硬刷新**（`Cmd+Shift+R`）；仅 rebuild client 而不重启 Host 时，Host 改动仍须重启 web 进程。
+
+**长期并行开发**（可选）：另开终端 `pnpm run dev:web` watch client bundle；Host 改动仍须 `build:lib:host` + 重启 web。
 
 ## 完成前自检
 
-- [ ] 已对所改动的每个 web client 插件执行 `run bundle`（或确认 `dev:web` 正在 watch）
-- [ ] 若用户用 `pnpm dsh web` 验证 UI，回复中提醒 **硬刷新**（`Cmd+Shift+R`）或重启 web 进程
-- [ ] 在回复中**简要列出**实际执行的 rebuild 命令（不要默认用户已手动 bundle）
+- [ ] 已 rebuild 本轮改动的每个 client / runtime / host 面
+- [ ] 已重启 `pnpm dsh web`（或确认等价 watch 进程正在跑且 Host 已 rebuild）
+- [ ] 回复中列出实际执行的 rebuild 命令与 web URL
+- [ ] 已提醒硬刷新（若仅 client bundle 变更且 web 未重启 Host 时可省略重启说明中的 Host 部分，但 Host 改动必须重启）

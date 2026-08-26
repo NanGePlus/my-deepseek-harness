@@ -10,7 +10,7 @@ Web 文件编辑器须感知已打开文件在磁盘上的外部变更（Agent �
 
 ## 决策
 
-`packages/host/apiproxy` 在现有 Host RPC seam 上新增 `host.watchPath`。客户端以 SSE 打开 `GET /api/host.watchPath?workspaceId=…&path=…`；每次外部变更投递一条带绝对路径的 `host/path-changed` 帧。中止流即关闭该路径的 Host `fs.watch` 句柄——不对 Workspace 根递归 watch，也不轮询 mtime（[PRD watchPath 切片](../../../../docs/prd/file-editor-v1.md)）。
+`packages/host/apiproxy` 在现有 Host RPC seam 上新增 `host.watchPath`。客户端以 SSE 打开 `GET /api/host.watchPath?workspaceId=…&path=…`；每次外部变更投递一条带绝对路径的 `host/path-changed` 帧。中止流即关闭 Host `fs.watch` 句柄——不对 Workspace 根递归 watch，也不轮询 mtime（[PRD watchPath 切片](../../../../docs/prd/file-editor-v1.md)）。文件目标监视父目录并按 basename 过滤，因此原子发布（临时文件 rename 到目标路径）不会把 watcher 留在已被替换的 inode 上；目录目标监视自身。
 
 路径须通过 `pathWithinWorkspace` 落在已注册 Workspace 根内；未知 Workspace 与越界路径以 `stream/error` 帧应答。实现位于 `watch-path.ts`；线型类型与文件编辑器其他 RPC 一样扩展 `HostApi`。
 
@@ -24,12 +24,13 @@ Web 文件编辑器须感知已打开文件在磁盘上的外部变更（Agent �
 
 ## 后果
 
-- 下游 `ui-file-editor` 外部变更对话框经 Client 载体的 `host.watchPath` 订阅；每个打开 Tab 一条订阅，关 Tab 即释放。
+- 文件路径订阅监视父目录而非文件 inode，因为 `fs-local` 的 write/edit 以 rename 发布到目标路径。
+- 下游 `ui-file-editor` 经 Client 载体的 `host.watchPath` 订阅；每个打开 Tab 一条订阅，关 Tab 即释放。
 - 网络文件系统可能漏事件；V1 接受 `fs.watch` 覆盖范围，不做内容哈希对账。
 - `watchPath` 与其他 `/api` 路由共用浏览器载体信任栅栏。
 
 ## 测试
 
-`packages/host/apiproxy/tests/watch-path.spec.ts` 覆盖注入式 `fs.watch` 投递与 abort 清理。
+`packages/host/apiproxy/tests/watch-path.spec.ts` 覆盖注入式 `fs.watch` 投递、abort 清理、同目录兄弟文件名过滤，以及第二次同目录原子 rename。
 
-`packages/host/apiproxy/tests/api-proxy-watch-path.spec.ts` 经 `createApiProxy` 覆盖外部改写与 abort 后静默。
+`packages/host/apiproxy/tests/api-proxy-watch-path.spec.ts` 经 `createApiProxy` 覆盖外部改写、第二次原子替换与 abort 后静默。

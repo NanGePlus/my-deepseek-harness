@@ -45,7 +45,9 @@ export function apply(ctx: ClientContext): void {
         ctx.workspaces.gitUnstage(workspaceId, path, hunkHeader),
       gitDiscard: (workspaceId, path, hunkHeader) =>
         ctx.workspaces.gitDiscard(workspaceId, path, hunkHeader),
-      gitCommit: (workspaceId, message) => ctx.workspaces.gitCommit(workspaceId, message),
+      gitCommit: (workspaceId, message, push) =>
+        ctx.workspaces.gitCommit(workspaceId, message, push === true ? true : undefined),
+      gitPush: (workspaceId, signal) => ctx.workspaces.gitPush(workspaceId, signal),
     }),
   }, GitPanel))
 }

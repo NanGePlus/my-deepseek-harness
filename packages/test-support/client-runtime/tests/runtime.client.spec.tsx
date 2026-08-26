@@ -416,6 +416,7 @@ describe('workspaces', () => {
       branch: 'main',
       unstaged: [],
       staged: [],
+      pushAvailable: false,
     })))
     await expect(runtime.workspaces.gitWorkingTree('w1' as WorkspaceId, scan.signal))
       .resolves.toMatchObject({ availability: 'repository', branch: 'main' })

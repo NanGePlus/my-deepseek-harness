@@ -3,10 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from 'react'
 import type { DiffPreviewRow } from './diff-preview-model.ts'
 import { buildMinimapMarkers, type MinimapMarker } from './diff-minimap-model.ts'
+import {
+  DIFF_ROW_ATTR,
+  scrollPreviewToMinimapMarker,
+  scrollPreviewToMinimapTrackClick,
+} from './diff-minimap-scroll.ts'
 import css from './GitPanel.module.css'
 
-/** Marker attribute on each minimap-tracked preview row element. */
-export const DIFF_ROW_ATTR = 'data-diff-row'
+export { DIFF_ROW_ATTR } from './diff-minimap-scroll.ts'
 
 /**
  * Render change markers beside the diff preview (red/green blocks only).
@@ -71,9 +75,15 @@ export function DiffMinimap({
   const onTrackClick = (event: MouseEvent<HTMLDivElement>): void => {
     const scrollEl = scrollRef.current
     const trackEl = trackRef.current
-    if (scrollEl === null || trackEl === null || trackEl.clientHeight <= 0) return
-    const ratio = event.nativeEvent.offsetY / trackEl.clientHeight
-    scrollEl.scrollTop = ratio * scrollEl.scrollHeight
+    if (scrollEl === null || trackEl === null) return
+    scrollPreviewToMinimapTrackClick(scrollEl, trackEl, event.clientY)
+  }
+
+  const onMarkerClick = (event: MouseEvent<HTMLDivElement>, marker: MinimapMarker): void => {
+    event.stopPropagation()
+    const scrollEl = scrollRef.current
+    if (scrollEl === null) return
+    scrollPreviewToMinimapMarker(scrollEl, marker)
   }
 
   if (markers.length === 0) return null
@@ -82,18 +92,29 @@ export function DiffMinimap({
     <div className={css.minimap} aria-hidden="true">
       <div className={css.minimapTrack} ref={trackRef} onClick={onTrackClick}>
         {markers.map((marker, index) => (
-          <MinimapMarkerView key={index} marker={marker} />
+          <MinimapMarkerView
+            key={index}
+            marker={marker}
+            onClick={(event) => { onMarkerClick(event, marker) }}
+          />
         ))}
       </div>
     </div>
   )
 }
 
-function MinimapMarkerView({ marker }: { marker: MinimapMarker }): ReactNode {
+function MinimapMarkerView({
+  marker,
+  onClick,
+}: {
+  marker: MinimapMarker
+  onClick: (event: MouseEvent<HTMLDivElement>) => void
+}): ReactNode {
   return (
     <div
       className={css.minimapMarkerAnchor}
       style={{ top: `${marker.topRatio * 100}%` }}
+      onClick={onClick}
     >
       {marker.del && marker.add
         ? (

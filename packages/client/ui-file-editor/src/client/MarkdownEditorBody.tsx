@@ -3,6 +3,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import clsx from 'clsx'
 import type { HostLspHover } from '@deepseek-ai/dsh-client-runtime/client'
+import { useScrollRevealScrollbar } from '@deepseek-ai/dsh-client-ui-primitives'
 import { EditableMarkdownPreview } from './EditableMarkdownPreview.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { MonacoEditor, type MonacoSourceLineRange } from './MonacoEditor.tsx'
@@ -66,6 +67,7 @@ export function MarkdownEditorBody({
   sourceLineRange, onSourceLineRangeApplied,
 }: MarkdownEditorBodyProps) {
   const [viewsByPath, setViewsByPath] = useState<Partial<Record<string, MarkdownViewMode>>>({})
+  const { ref: previewScrollRevealRef, active: previewScrollActive } = useScrollRevealScrollbar()
   const view = viewsByPath[tab.path] ?? 'source'
   useEffect(() => {
     if (sourceLineRange === undefined) return
@@ -123,9 +125,13 @@ export function MarkdownEditorBody({
       </div>
       <div className={css.markdownBody}>
         {view === 'preview' ? (
-          <div className={css.markdownPreview}>
+          <div
+            ref={previewScrollRevealRef}
+            className={clsx(css.markdownPreview, previewScrollActive && css.markdownPreviewActive)}
+          >
             <EditableMarkdownPreview
               value={tab.buffer}
+              diskReloadTicket={tab.diskReloadTicket ?? 0}
               ariaLabel={t('editor.markdown.preview.label', { name: tab.name })}
               t={t}
               codeLabels={codeLabels}
@@ -137,6 +143,7 @@ export function MarkdownEditorBody({
           <MonacoEditor
             path={tab.path}
             value={tab.buffer}
+            diskReloadTicket={tab.diskReloadTicket ?? 0}
             language={tab.language}
             surface="document"
             ariaLabel={t('editor.buffer.label', {

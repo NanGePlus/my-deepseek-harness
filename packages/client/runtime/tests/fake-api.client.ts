@@ -164,6 +164,9 @@ export class FakeApiClient implements IApiClient {
   onGitCommit: (payload: unknown) => Promise<RpcResponse<GitWorkingTreeResult>> =
     () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
 
+  onGitPush: (payload: unknown) => Promise<RpcResponse<GitWorkingTreeResult>> =
+    () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
+
   onReadFile: (payload: unknown) => Promise<RpcResponse<FileReadResult>> = (payload) => {
     const request = payload as { path: string; kind: 'text' | 'bytes' }
     if (request.kind === 'bytes') {
@@ -256,6 +259,7 @@ export class FakeApiClient implements IApiClient {
     gitUnstage: (payload: unknown) => this.record('host.gitUnstage', payload, this.onGitUnstage(payload)),
     gitDiscard: (payload: unknown) => this.record('host.gitDiscard', payload, this.onGitDiscard(payload)),
     gitCommit: (payload: unknown) => this.record('host.gitCommit', payload, this.onGitCommit(payload)),
+    gitPush: (payload: unknown) => this.record('host.gitPush', payload, this.onGitPush(payload)),
     readFile: (payload: unknown) => this.record('host.readFile', payload, this.onReadFile(payload)),
     writeFile: (payload: unknown) => this.record('host.writeFile', payload, this.onWriteFile(payload)),
     deletePath: (payload: unknown) => this.record('host.deletePath', payload, this.onDeletePath(payload)),

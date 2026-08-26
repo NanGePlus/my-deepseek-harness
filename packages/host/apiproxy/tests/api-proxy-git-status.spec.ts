@@ -131,6 +131,31 @@ describe('host.gitStatus', () => {
     ]))
   })
 
+  it('lists files inside an untracked directory instead of the directory itself', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    writeFileSync(join(workspacePath, 'tracked.txt'), 'v1')
+    execSync('git add tracked.txt', { cwd: workspacePath, stdio: 'ignore' })
+    execSync('git commit -m "init"', { cwd: workspacePath, stdio: 'ignore' })
+
+    mkdirSync(join(workspacePath, 'tests', 'hahah'), { recursive: true })
+    writeFileSync(join(workspacePath, 'tests', 'hahah', 'test.md'), 'hello\n')
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const status = expectOk(await api.host.gitStatus(
+      request({ workspaceId: workspace.workspaceId }),
+      new AbortController().signal,
+    ))
+
+    const nested = join(workspace.path, 'tests', 'hahah', 'test.md')
+    expect(status.entries).toEqual(expect.arrayContaining([
+      { path: nested, letter: 'U' },
+    ]))
+    expect(status.entries.map(entry => entry.path)).not.toContain(join(workspace.path, 'tests', 'hahah'))
+  })
+
   it('returns an empty entry list when the Workspace is not a git repository', async () => {
     const { api, root } = await harness()
     const workspacePath = join(root, 'plain')

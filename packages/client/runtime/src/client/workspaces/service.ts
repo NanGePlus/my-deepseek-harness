@@ -372,16 +372,33 @@ export class WorkspaceRuntime implements IWorkspaces {
   /**
    * Create one new commit from the current index.
    * @param workspaceId - Workspace whose bound root is the discovery start.
-   * @param message - commit message; blank after trim is rejected by the Host.
+   * @param message - commit message; empty after trim is allowed by the Host.
+   * @param push - when true, run `git push` after commit.
    * @param signal - aborts the wire request when the caller supersedes it.
    * @returns the refreshed working tree.
    */
   async gitCommit(
     workspaceId: WorkspaceId,
     message: string,
+    push?: boolean,
     signal?: AbortSignal,
   ): Promise<GitWorkingTreeResult> {
-    const response = await this.api.host.gitCommit({ workspaceId, message }, signal)
+    const response = await this.api.host.gitCommit(
+      { workspaceId, message, ...(push === true ? { push: true } : {}) },
+      signal,
+    )
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Push the current branch without creating a new commit.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  async gitPush(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitWorkingTreeResult> {
+    const response = await this.api.host.gitPush({ workspaceId }, signal)
     if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
     return response.result.value
   }

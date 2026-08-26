@@ -1,13 +1,14 @@
 /** Monaco (or textarea fallback) for an editable-text tab. */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import type { HostLspDiagnostic, HostLspHover } from '@deepseek-ai/dsh-client-runtime/client'
+import { SCROLL_REVEAL_LINGER_MS, useScrollRevealScrollbar } from '@deepseek-ai/dsh-client-ui-primitives'
 import { loadMonacoEditor, type MonacoEditorModule, type MonacoStandaloneEditor } from './monaco-load.ts'
 import { ensureMonacoConfigured } from './monaco-config.ts'
 import { monacoOptionsForContent, monacoSurfaceOptionsForLanguage } from './editor-file-policy.ts'
 import { installMonacoClickSelectionGuard } from './monaco-click-selection.ts'
-import { emitMonacoBuffer, shouldSyncMonacoBuffer } from './monaco-buffer-sync.ts'
+import { emitMonacoBuffer, markMonacoBufferPropApplied, planMonacoBufferPropApply } from './monaco-buffer-sync.ts'
 import { setLspHoverHandler } from './monaco-hover.ts'
 import { installMonacoEnvironment } from './monaco-environment.ts'
 import { MonacoSourceSelectionToolbar } from './MonacoSourceSelectionToolbar.tsx'
@@ -43,6 +44,8 @@ export interface MonacoEditorProps {
   path: string
   /** Current edit-buffer text. */
   value: string
+  /** Bumps when the tab reloads from external disk; forces buffer sync while focused. */
+  diskReloadTicket?: number
   /** Monaco language id. */
   language: string
   /** Language-server diagnostics for the current buffer. */
@@ -149,6 +152,7 @@ export function installMonacoImeGuards(
  */
 export function MonacoEditor({
   path, value, language, diagnostics, ariaLabel, dark, surface = 'sidebar', onChange, onHover,
+  diskReloadTicket = 0,
   sourceSelectionActions, sourceLineRange, onSourceLineRangeApplied,
 }: MonacoEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -157,12 +161,21 @@ export function MonacoEditor({
   const monacoRef = useRef<MonacoEditorModule | null>(null)
   const valueRef = useRef(value)
   const lastEmitted = useRef(value)
+  const lastDiskReloadTicket = useRef(diskReloadTicket)
   const syncState = useRef<SyncState>({ composing: false, focused: false })
   const onChangeRef = useRef(onChange)
   const onHoverRef = useRef(onHover)
   const pendingSourceLineRangeRef = useRef(sourceLineRange)
   const onSourceLineRangeAppliedRef = useRef(onSourceLineRangeApplied)
   const [fallback, setFallback] = useState(true)
+  const [monacoScrollActive, setMonacoScrollActive] = useState(false)
+  const monacoScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { ref: fallbackScrollRevealRef, active: fallbackScrollActive } = useScrollRevealScrollbar()
+  const scrollActive = fallback ? fallbackScrollActive : monacoScrollActive
+  const setFallbackNode = useCallback((node: HTMLTextAreaElement | null): void => {
+    fallbackRef.current = node
+    fallbackScrollRevealRef(node)
+  }, [fallbackScrollRevealRef])
   const [liveEditor, setLiveEditor] = useState<MonacoStandaloneEditor | null>(null)
   valueRef.current = value
   onChangeRef.current = onChange
@@ -180,6 +193,7 @@ export function MonacoEditor({
   }
 
   useEffect(() => {
+    lastDiskReloadTicket.current = diskReloadTicket
     lastEmitted.current = value
   }, [path])
 
@@ -197,6 +211,7 @@ export function MonacoEditor({
     let cancelled = false
     let removeImeGuards: (() => void) | undefined
     let removeClickGuard: (() => void) | undefined
+    let removeScrollSubscription: (() => void) | undefined
     void loadMonacoEditor().then((monaco) => {
       if (cancelled) return
       if (monaco === undefined) return
@@ -227,7 +242,15 @@ export function MonacoEditor({
           wrappingStrategy: surfaceOptions.wrappingStrategy,
           accessibilitySupport: surfaceOptions.accessibilitySupport,
           largeFileOptimizations: contentOptions.largeFileOptimizations,
-          scrollbar: { horizontal: 'auto', vertical: 'auto' },
+          scrollbar: {
+            horizontal: 'auto',
+            vertical: 'auto',
+            verticalScrollbarSize: 8,
+            horizontalScrollbarSize: 8,
+            useShadows: false,
+            verticalHasArrows: false,
+            horizontalHasArrows: false,
+          },
           renderLineHighlight: 'none',
           overviewRulerLanes: 0,
           fixedOverflowWidgets: true,
@@ -262,6 +285,16 @@ export function MonacoEditor({
         if (syncState.current.composing) return
         flushBuffer()
       })
+      const revealMonacoScroll = (): void => {
+        setMonacoScrollActive(true)
+        if (monacoScrollTimerRef.current !== null) clearTimeout(monacoScrollTimerRef.current)
+        monacoScrollTimerRef.current = setTimeout(() => {
+          monacoScrollTimerRef.current = null
+          setMonacoScrollActive(false)
+        }, SCROLL_REVEAL_LINGER_MS)
+      }
+      const scrollSubscription = editor.onDidScrollChange(() => { revealMonacoScroll() })
+      removeScrollSubscription = (): void => { scrollSubscription.dispose() }
       editorRef.current = {
         setValue: (next) => {
           if (editor.getValue() !== next) editor.setValue(next)
@@ -288,6 +321,12 @@ export function MonacoEditor({
       cancelled = true
       removeImeGuards?.()
       removeClickGuard?.()
+      removeScrollSubscription?.()
+      if (monacoScrollTimerRef.current !== null) {
+        clearTimeout(monacoScrollTimerRef.current)
+        monacoScrollTimerRef.current = null
+      }
+      setMonacoScrollActive(false)
       editorRef.current?.dispose()
       editorRef.current = null
       setLiveEditor(null)
@@ -299,22 +338,41 @@ export function MonacoEditor({
   useEffect(() => {
     const handle = editorRef.current
     if (handle === null) return
-    if (!shouldSyncMonacoBuffer(value, lastEmitted.current, syncState.current)) return
-    const id = window.requestAnimationFrame(() => {
+    const plan = planMonacoBufferPropApply(
+      value,
+      diskReloadTicket,
+      lastEmitted,
+      lastDiskReloadTicket,
+      syncState.current,
+    )
+    if (!plan.shouldApply) return
+    const apply = (): void => {
       handle.setValue(value)
-      lastEmitted.current = value
+      markMonacoBufferPropApplied(value, diskReloadTicket, plan.force, lastEmitted, lastDiskReloadTicket)
       flushPendingSourceLineRange()
-    })
+    }
+    if (plan.force) {
+      apply()
+      return
+    }
+    const id = window.requestAnimationFrame(apply)
     return () => { window.cancelAnimationFrame(id) }
-  }, [value, liveEditor])
+  }, [value, liveEditor, diskReloadTicket])
 
   useEffect(() => {
     if (!fallback) return
     const textarea = fallbackRef.current
     if (textarea === null) return
-    if (!shouldSyncMonacoBuffer(value, lastEmitted.current, syncState.current)) return
+    const plan = planMonacoBufferPropApply(
+      value,
+      diskReloadTicket,
+      lastEmitted,
+      lastDiskReloadTicket,
+      syncState.current,
+    )
+    if (!plan.shouldApply) return
     if (textarea.value !== value) textarea.value = value
-    lastEmitted.current = value
+    markMonacoBufferPropApplied(value, diskReloadTicket, plan.force, lastEmitted, lastDiskReloadTicket)
     const range = pendingSourceLineRangeRef.current
     if (range === undefined) return
     const lines = value.split('\n')
@@ -328,7 +386,7 @@ export function MonacoEditor({
     textarea.setSelectionRange(selectionStart, endOffset)
     pendingSourceLineRangeRef.current = undefined
     onSourceLineRangeAppliedRef.current?.(range.ticket)
-  }, [value, fallback])
+  }, [value, fallback, diskReloadTicket])
 
   useEffect(() => {
     if (!fallback) return
@@ -350,10 +408,13 @@ export function MonacoEditor({
   }, [liveEditor, sourceLineRange])
 
   return (
-    <div className={clsx(css.wrap, surface === 'document' && css.document)}>
+    <div
+      className={clsx(css.wrap, surface === 'document' && css.document, scrollActive && css.scrollActive)}
+      data-surface={surface === 'document' ? 'document' : 'sidebar'}
+    >
       {fallback && (
         <textarea
-          ref={fallbackRef}
+          ref={setFallbackNode}
           className={clsx(css.fallback, surface === 'document' && css.document)}
           aria-label={ariaLabel}
           defaultValue={value}

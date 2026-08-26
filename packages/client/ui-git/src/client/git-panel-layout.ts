@@ -2,7 +2,7 @@
 export const OPS_WIDTH_MIN = 180
 
 /** Default ops-pane width in pixels before the user drags the split. */
-export const OPS_WIDTH_DEFAULT = OPS_WIDTH_MIN
+export const OPS_WIDTH_DEFAULT = 260
 
 /** Maximum ops-pane width as a fraction of the Git panel width. */
 export const OPS_WIDTH_MAX_RATIO = 0.7

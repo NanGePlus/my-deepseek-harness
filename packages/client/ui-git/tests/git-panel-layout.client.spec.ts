@@ -5,7 +5,8 @@ import {
 
 describe('git panel layout constants', () => {
   it('defaults to the minimum practical ops-pane width', () => {
-    expect(OPS_WIDTH_DEFAULT).toBe(OPS_WIDTH_MIN)
+    expect(OPS_WIDTH_DEFAULT).toBeGreaterThanOrEqual(OPS_WIDTH_MIN)
+    expect(OPS_WIDTH_DEFAULT).toBe(260)
   })
 })
 
