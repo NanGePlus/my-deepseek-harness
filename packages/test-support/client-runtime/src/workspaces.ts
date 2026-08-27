@@ -321,6 +321,44 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
+   * Add `origin` (recorded). The default is not-a-repository.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param url - remote URL forwarded like production.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns the refreshed working tree.
+   */
+  async gitAddRemote(
+    workspaceId: WorkspaceId,
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    this.calls.push({ method: 'gitAddRemote', args: [workspaceId, url, signal] })
+    const stub = this.stubs.get('gitAddRemote')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, url, signal) as Promise<GitWorkingTreeResult>)
+    }
+    return { availability: 'not-a-repository' }
+  }
+
+  /**
+   * Remove `origin` (recorded). The default is not-a-repository.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns the refreshed working tree.
+   */
+  async gitRemoveRemote(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    this.calls.push({ method: 'gitRemoveRemote', args: [workspaceId, signal] })
+    const stub = this.stubs.get('gitRemoveRemote')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, signal) as Promise<GitWorkingTreeResult>)
+    }
+    return { availability: 'not-a-repository' }
+  }
+
+  /**
    * Read commit history (recorded). The default is not-a-repository.
    * @param workspaceId - Workspace whose bound root is the discovery start.
    * @param query - optional page size and skip forwarded like production.

@@ -118,7 +118,7 @@ import {
   WorkspacePathOutOfBoundsError,
 } from './list-workspace-entries.ts'
 import { readGitStatus } from './git-status.ts'
-import { inspectGitWorkingTree, initGitRepository, readGitDiffPreview, stageGitPath, unstageGitPath, discardGitPath, commitGitIndex, pushGitBranch, GitUnavailableError, AlreadyAGitRepositoryError, GitCommandFailedError, GitPathNotFoundError } from './git-working-tree.ts'
+import { inspectGitWorkingTree, initGitRepository, readGitDiffPreview, stageGitPath, unstageGitPath, discardGitPath, commitGitIndex, pushGitBranch, addGitRemote, removeGitRemote, GitUnavailableError, AlreadyAGitRepositoryError, GitCommandFailedError, GitPathNotFoundError } from './git-working-tree.ts'
 import { GIT_LOG_DEFAULT_LIMIT, readGitLog } from './git-log.ts'
 import { readGitCommitDiff } from './git-commit-diff.ts'
 import { watchWorkspacePath } from './watch-path.ts'
@@ -3281,6 +3281,32 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           return ok(request, await pushGitBranch(workspace.path, signal))
         } catch (error: unknown) {
           return gitWriteFailure(request, error, signal, 'git push was aborted')
+        }
+      },
+
+      async gitAddRemote(request, signal) {
+        const { workspaceId, url } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await addGitRemote(workspace.path, url, signal))
+        } catch (error: unknown) {
+          return gitWriteFailure(request, error, signal, 'git add remote was aborted')
+        }
+      },
+
+      async gitRemoveRemote(request, signal) {
+        const { workspaceId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await removeGitRemote(workspace.path, signal))
+        } catch (error: unknown) {
+          return gitWriteFailure(request, error, signal, 'git remove remote was aborted')
         }
       },
 

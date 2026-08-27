@@ -24,6 +24,8 @@ import {
   hostGitDiscardValueSchema,
   hostGitCommitValueSchema,
   hostGitPushValueSchema,
+  hostGitAddRemoteValueSchema,
+  hostGitRemoveRemoteValueSchema,
   hostGitLogValueSchema,
   hostGitCommitDiffValueSchema,
   hostListDirectoryValueSchema, hostListWorkspaceEntriesValueSchema,
@@ -141,6 +143,8 @@ export interface IApiClient {
     gitDiscard(payload: RequestPayload<'host.gitDiscard'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitDiscard'>>>
     gitCommit(payload: RequestPayload<'host.gitCommit'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitCommit'>>>
     gitPush(payload: RequestPayload<'host.gitPush'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitPush'>>>
+    gitAddRemote(payload: RequestPayload<'host.gitAddRemote'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitAddRemote'>>>
+    gitRemoveRemote(payload: RequestPayload<'host.gitRemoveRemote'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitRemoveRemote'>>>
     gitLog(payload: RequestPayload<'host.gitLog'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitLog'>>>
     gitCommitDiff(payload: RequestPayload<'host.gitCommitDiff'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitCommitDiff'>>>
     readFile(payload: RequestPayload<'host.readFile'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.readFile'>>>
@@ -246,6 +250,8 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'host.gitDiscard': hostGitDiscardValueSchema,
   'host.gitCommit': hostGitCommitValueSchema,
   'host.gitPush': hostGitPushValueSchema,
+  'host.gitAddRemote': hostGitAddRemoteValueSchema,
+  'host.gitRemoveRemote': hostGitRemoveRemoteValueSchema,
   'host.gitLog': hostGitLogValueSchema,
   'host.gitCommitDiff': hostGitCommitDiffValueSchema,
   'host.readFile': hostReadFileValueSchema,
@@ -536,6 +542,8 @@ export abstract class AbstractApiClient implements IApiClient {
       signal,
       'caller-signal-only',
     ),
+    gitAddRemote: (payload, signal) => this.callUnary('host.gitAddRemote', payload, signal),
+    gitRemoveRemote: (payload, signal) => this.callUnary('host.gitRemoveRemote', payload, signal),
     gitLog: (payload, signal) => this.callUnary('host.gitLog', payload, signal),
     gitCommitDiff: (payload, signal) => this.callUnary('host.gitCommitDiff', payload, signal),
     readFile: (payload, signal) => this.callUnary('host.readFile', payload, signal),

@@ -167,6 +167,28 @@ export interface IWorkspaces {
     signal?: AbortSignal,
   ): Promise<GitWorkingTreeResult>
   /**
+   * Add `origin` with the given URL. Does not fetch or push.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param url - remote URL passed to `git remote add origin`.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  gitAddRemote(
+    workspaceId: WorkspaceId,
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult>
+  /**
+   * Remove remote `origin`. Does not fetch or push.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  gitRemoveRemote(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult>
+  /**
    * Read one page of commit history for the Git repository discovered from a registered Workspace.
    * @param workspaceId - Workspace whose bound root is the discovery start.
    * @param query - optional page size and skip from the newest end of history.

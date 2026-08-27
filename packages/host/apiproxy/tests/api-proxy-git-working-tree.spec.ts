@@ -126,6 +126,7 @@ describe('host.gitWorkingTree', () => {
       unstaged: [],
       staged: [],
       pushAvailable: true,
+      hasRemote: false,
     })
   })
 

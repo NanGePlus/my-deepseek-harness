@@ -47,6 +47,10 @@ function confirmPush(): void {
   fireEvent.click(screen.getByRole('button', { name: '确认推送' }))
 }
 
+function confirmRemoveRemote(): void {
+  fireEvent.click(screen.getByRole('button', { name: '确认删除' }))
+}
+
 function mockAnchorRect(el: HTMLElement, right: number, bottom: number): void {
   el.getBoundingClientRect = () => ({
     x: right - 120, y: bottom - 28, left: right - 120, top: bottom - 28,
@@ -122,6 +126,18 @@ const AHEAD_REPO: GitWorkingTreeResult = {
 const UNPUBLISHED_REPO: GitWorkingTreeResult = {
   ...CLEAN_REPO,
   pushAvailable: true,
+}
+
+const NO_REMOTE_REPO: GitWorkingTreeResult = {
+  ...CLEAN_REPO,
+  hasRemote: false,
+  pushAvailable: true,
+}
+
+const ORIGIN_REPO: GitWorkingTreeResult = {
+  ...CLEAN_REPO,
+  hasRemote: true,
+  originUrl: 'https://github.com/org/repo.git',
 }
 
 const DIRTY_REPO: GitWorkingTreeResult = {
@@ -214,6 +230,8 @@ function mount(over: {
   gitDiscard?: GitPanelProps['gitDiscard']
   gitCommit?: GitPanelProps['gitCommit']
   gitPush?: GitPanelProps['gitPush']
+  gitAddRemote?: GitPanelProps['gitAddRemote']
+  gitRemoveRemote?: GitPanelProps['gitRemoveRemote']
   gitLog?: GitPanelProps['gitLog']
   gitCommitDiff?: GitPanelProps['gitCommitDiff']
   notifyDiskPathsChanged?: GitPanelProps['notifyDiskPathsChanged']
@@ -229,6 +247,8 @@ function mount(over: {
   const gitDiscard = vi.fn(over.gitDiscard ?? (async () => CLEAN_REPO))
   const gitCommit = vi.fn(over.gitCommit ?? (async () => CLEAN_REPO))
   const gitPush = vi.fn(over.gitPush ?? (async () => CLEAN_REPO))
+  const gitAddRemote = vi.fn(over.gitAddRemote ?? (async () => CLEAN_REPO))
+  const gitRemoveRemote = vi.fn(over.gitRemoveRemote ?? (async () => CLEAN_REPO))
   const gitLog = vi.fn(over.gitLog ?? (async () => ({
     availability: 'repository' as const,
     repoRoot: ROOT,
@@ -265,6 +285,8 @@ function mount(over: {
     gitDiscard,
     gitCommit,
     gitPush,
+    gitAddRemote,
+    gitRemoveRemote,
     gitLog,
     gitCommitDiff,
   } as GitPanelProps
@@ -273,6 +295,8 @@ function mount(over: {
     view, props, sessionsStore, workspacesStore, panelStore,
     gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit, gitLog,
     gitCommitDiff,
+    gitAddRemote,
+    gitRemoveRemote,
     notifyDiskPathsChanged,
   }
 }
@@ -1693,7 +1717,8 @@ describe('GitPanel', () => {
     confirmCommitPush()
     await waitFor(() => { expect(screen.getByText('没有配置远程仓库地址')).toBeTruthy() })
     expect(screen.queryByText(/fatal: No config/)).toBeNull()
-    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '添加远程地址' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
   })
 
   it('maps a missing-remote standalone push failure to 没有配置远程仓库地址', async () => {
@@ -1708,6 +1733,146 @@ describe('GitPanel', () => {
     confirmPush()
     await waitFor(() => { expect(screen.getByText('没有配置远程仓库地址')).toBeTruthy() })
     expect(screen.queryByText('no remote configured')).toBeNull()
+    expect(screen.getByRole('button', { name: '添加远程地址' })).toBeTruthy()
+  })
+
+  it('shows an add-remote entry when the repository has no remotes', async () => {
+    mount({ tree: NO_REMOTE_REPO })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '添加远程地址' })).toBeTruthy() })
+    expect(screen.getByText('没有配置远程仓库地址')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '推送' })).toBeNull()
+  })
+
+  it('adds origin from the no-remote entry and hides the entry', async () => {
+    const gitAddRemote = vi.fn(async () => ({
+      ...NO_REMOTE_REPO,
+      hasRemote: true,
+      originUrl: 'https://github.com/org/repo.git',
+      pushAvailable: true,
+    }))
+    mount({ tree: NO_REMOTE_REPO, gitAddRemote })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '添加远程地址' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '添加远程地址' }))
+    fireEvent.change(screen.getByPlaceholderText('https://github.com/org/repo.git'), {
+      target: { value: 'https://github.com/org/repo.git' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '添加' }))
+    await waitFor(() => {
+      expect(gitAddRemote).toHaveBeenCalledWith(WID, 'https://github.com/org/repo.git')
+    })
+    await waitFor(() => { expect(screen.queryByRole('button', { name: '添加远程地址' })).toBeNull() })
+    expect(screen.getByRole('button', { name: '删除远程地址' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '推送' })).toBeTruthy()
+  })
+
+  it('does not call Host when the remote URL is blank', async () => {
+    const gitAddRemote = vi.fn(async () => CLEAN_REPO)
+    mount({ tree: NO_REMOTE_REPO, gitAddRemote })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '添加远程地址' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '添加远程地址' }))
+    fireEvent.click(screen.getByRole('button', { name: '添加' }))
+    expect(gitAddRemote).not.toHaveBeenCalled()
+    expect(screen.getByText('请填写远程仓库地址')).toBeTruthy()
+  })
+
+  it('cancels the add-remote editor without calling Host', async () => {
+    const gitAddRemote = vi.fn(async () => CLEAN_REPO)
+    mount({ tree: NO_REMOTE_REPO, gitAddRemote })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '添加远程地址' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '添加远程地址' }))
+    fireEvent.change(screen.getByPlaceholderText('https://github.com/org/repo.git'), {
+      target: { value: 'https://example.com/repo.git' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(gitAddRemote).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '添加远程地址' })).toBeTruthy()
+    expect(screen.queryByPlaceholderText('https://github.com/org/repo.git')).toBeNull()
+  })
+
+  it('maps Host add-remote failures onto the form', async () => {
+    const gitAddRemote = vi.fn()
+      .mockRejectedValueOnce(new DirectoryBrowseError({
+        code: 'git-failed',
+        message: 'empty remote url',
+        details: {},
+      }))
+      .mockRejectedValueOnce(new DirectoryBrowseError({
+        code: 'git-failed',
+        message: 'fatal: remote origin already exists.',
+        details: {},
+      }))
+    mount({ tree: NO_REMOTE_REPO, gitAddRemote })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '添加远程地址' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '添加远程地址' }))
+    const urlField = () => screen.getByPlaceholderText('https://github.com/org/repo.git')
+    fireEvent.change(urlField(), { target: { value: 'https://example.com/repo.git' } })
+    fireEvent.keyDown(urlField(), { key: 'Enter' })
+    await waitFor(() => { expect(screen.getByText('请填写远程仓库地址')).toBeTruthy() })
+    fireEvent.change(urlField(), { target: { value: 'https://example.com/other.git' } })
+    fireEvent.click(screen.getByRole('button', { name: '添加' }))
+    await waitFor(() => { expect(screen.getByText('fatal: remote origin already exists.')).toBeTruthy() })
+  })
+
+  it('opens the add-remote editor from a missing-remote push error', async () => {
+    const gitPush = vi.fn().mockRejectedValue(new DirectoryBrowseError({
+      code: 'git-failed',
+      message: 'no remote configured',
+      details: {},
+    }))
+    mount({ tree: AHEAD_REPO, gitPush })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '推送' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '推送' }))
+    confirmPush()
+    await waitFor(() => { expect(screen.getByRole('button', { name: '添加远程地址' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '添加远程地址' }))
+    expect(screen.getByPlaceholderText('https://github.com/org/repo.git')).toBeTruthy()
+  })
+
+  it('shows origin URL and a delete control when originUrl is set', async () => {
+    mount({ tree: ORIGIN_REPO })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '删除远程地址' })).toBeTruthy() })
+    expect(screen.getByText('https://github.com/org/repo.git')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '添加远程地址' })).toBeNull()
+  })
+
+  it('removes origin after confirm and shows the add-remote entry', async () => {
+    const gitRemoveRemote = vi.fn(async () => NO_REMOTE_REPO)
+    mount({ tree: ORIGIN_REPO, gitRemoveRemote })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '删除远程地址' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '删除远程地址' }))
+    expect(screen.getByRole('dialog', { name: '确认删除远程地址' })).toBeTruthy()
+    confirmRemoveRemote()
+    await waitFor(() => { expect(gitRemoveRemote).toHaveBeenCalledWith(WID) })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '添加远程地址' })).toBeTruthy() })
+    expect(screen.queryByRole('button', { name: '删除远程地址' })).toBeNull()
+    expect(screen.getByText('已删除远程地址')).toBeTruthy()
+  })
+
+  it('does not call Host when remove-remote confirm is cancelled', async () => {
+    const gitRemoveRemote = vi.fn(async () => NO_REMOTE_REPO)
+    mount({ tree: ORIGIN_REPO, gitRemoveRemote })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '删除远程地址' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '删除远程地址' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(gitRemoveRemote).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '删除远程地址' })).toBeTruthy()
+  })
+
+  it('maps Host remove-remote failures onto the origin row', async () => {
+    const gitRemoveRemote = vi.fn().mockRejectedValue(new DirectoryBrowseError({
+      code: 'git-failed',
+      message: "fatal: could not remove config section 'remote.origin'",
+      details: {},
+    }))
+    mount({ tree: ORIGIN_REPO, gitRemoveRemote })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '删除远程地址' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '删除远程地址' }))
+    confirmRemoveRemote()
+    await waitFor(() => {
+      expect(screen.getByText("fatal: could not remove config section 'remote.origin'")).toBeTruthy()
+    })
+    expect(screen.getByRole('button', { name: '删除远程地址' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
   })
 
   it('keeps the commit draft when hiding the Git tab', async () => {

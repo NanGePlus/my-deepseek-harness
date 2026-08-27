@@ -129,6 +129,8 @@ export const hostGitWorkingTreeValueSchema = z.discriminatedUnion('availability'
     unstaged: z.array(gitWorkingTreeChangeSchema),
     staged: z.array(gitWorkingTreeChangeSchema),
     pushAvailable: z.boolean(),
+    hasRemote: z.boolean().optional(),
+    originUrl: z.string().min(1).optional(),
     ahead: z.number().int().nonnegative().optional(),
   }),
 ]) satisfies z.ZodType<Wire<ResponseValue<'host.gitWorkingTree'>>>
@@ -218,6 +220,23 @@ export const hostGitPushRequestSchema = z.object({
 
 /** host.gitPush response value (refreshed working tree). */
 export const hostGitPushValueSchema = hostGitWorkingTreeValueSchema satisfies z.ZodType<Wire<ResponseValue<'host.gitPush'>>>
+
+/** host.gitAddRemote request payload. */
+export const hostGitAddRemoteRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  url: z.string(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.gitAddRemote'>>>
+
+/** host.gitAddRemote response value (refreshed working tree). */
+export const hostGitAddRemoteValueSchema = hostGitWorkingTreeValueSchema satisfies z.ZodType<Wire<ResponseValue<'host.gitAddRemote'>>>
+
+/** host.gitRemoveRemote request payload. */
+export const hostGitRemoveRemoteRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'host.gitRemoveRemote'>>>
+
+/** host.gitRemoveRemote response value (refreshed working tree). */
+export const hostGitRemoveRemoteValueSchema = hostGitWorkingTreeValueSchema satisfies z.ZodType<Wire<ResponseValue<'host.gitRemoveRemote'>>>
 
 /** One commit row of host.gitLog. */
 export const gitLogEntrySchema = z.object({

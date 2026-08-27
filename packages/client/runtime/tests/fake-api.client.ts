@@ -167,6 +167,12 @@ export class FakeApiClient implements IApiClient {
   onGitPush: (payload: unknown) => Promise<RpcResponse<GitWorkingTreeResult>> =
     () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
 
+  onGitAddRemote: (payload: unknown) => Promise<RpcResponse<GitWorkingTreeResult>> =
+    () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
+
+  onGitRemoveRemote: (payload: unknown) => Promise<RpcResponse<GitWorkingTreeResult>> =
+    () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
+
   onGitLog: (payload: unknown) => Promise<RpcResponse<GitLogResult>> =
     () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
 
@@ -266,6 +272,8 @@ export class FakeApiClient implements IApiClient {
     gitDiscard: (payload: unknown) => this.record('host.gitDiscard', payload, this.onGitDiscard(payload)),
     gitCommit: (payload: unknown) => this.record('host.gitCommit', payload, this.onGitCommit(payload)),
     gitPush: (payload: unknown) => this.record('host.gitPush', payload, this.onGitPush(payload)),
+    gitAddRemote: (payload: unknown) => this.record('host.gitAddRemote', payload, this.onGitAddRemote(payload)),
+    gitRemoveRemote: (payload: unknown) => this.record('host.gitRemoveRemote', payload, this.onGitRemoveRemote(payload)),
     gitLog: (payload: unknown) => this.record('host.gitLog', payload, this.onGitLog(payload)),
     gitCommitDiff: (payload: unknown) => this.record('host.gitCommitDiff', payload, this.onGitCommitDiff(payload)),
     readFile: (payload: unknown) => this.record('host.readFile', payload, this.onReadFile(payload)),

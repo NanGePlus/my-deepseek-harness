@@ -52,6 +52,8 @@ export interface RpcMethodMap {
   'host.gitDiscard': HostApi['gitDiscard']
   'host.gitCommit': HostApi['gitCommit']
   'host.gitPush': HostApi['gitPush']
+  'host.gitAddRemote': HostApi['gitAddRemote']
+  'host.gitRemoveRemote': HostApi['gitRemoveRemote']
   'host.gitLog': HostApi['gitLog']
   'host.gitCommitDiff': HostApi['gitCommitDiff']
   'host.readFile': HostApi['readFile']

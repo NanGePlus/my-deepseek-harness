@@ -404,6 +404,38 @@ export class WorkspaceRuntime implements IWorkspaces {
   }
 
   /**
+   * Add `origin` with the given URL. Does not fetch or push.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param url - remote URL passed to `git remote add origin`.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  async gitAddRemote(
+    workspaceId: WorkspaceId,
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    const response = await this.api.host.gitAddRemote({ workspaceId, url }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Remove remote `origin`. Does not fetch or push.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  async gitRemoveRemote(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    const response = await this.api.host.gitRemoveRemote({ workspaceId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
    * Read one page of commit history for the Git repository discovered from a registered Workspace.
    * @param workspaceId - Workspace whose bound root is the discovery start.
    * @param query - optional page size and skip from the newest end of history.

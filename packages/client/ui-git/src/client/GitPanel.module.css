@@ -178,6 +178,70 @@
   color: var(--dsw-alias-state-business-primary);
 }
 
+.remoteCopy {
+  flex: 1;
+  min-width: 0;
+  color: var(--dsw-alias-label-caption);
+}
+
+.remoteUrl {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-caption);
+}
+
+.remoteEditor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.remoteUrlInput {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.remoteUrlInput:focus {
+  outline: none;
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.remoteUrlInvalid,
+.remoteUrlInvalid:focus {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.remoteCancel {
+  flex: none;
+  height: 28px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.remoteCancel:disabled {
+  cursor: default;
+}
+
 .commitToolbar {
   display: flex;
   flex: none;

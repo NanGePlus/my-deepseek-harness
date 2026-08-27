@@ -39,7 +39,7 @@ const TOOLBAR_FEEDBACK_DISMISS_MS = 4000
 /** Commits fetched per Graph page; matches Host `GIT_LOG_DEFAULT_LIMIT`. */
 export const GIT_GRAPH_PAGE_SIZE = 50
 
-type ToolbarAction = 'commit' | 'commitPush' | 'push'
+type ToolbarAction = 'commit' | 'commitPush' | 'push' | 'removeRemote'
 
 type ConfirmAction = ToolbarAction
 
@@ -130,6 +130,20 @@ export interface GitPanelInjected {
    * @returns the refreshed working tree.
    */
   gitPush: (workspaceId: WorkspaceId, signal?: AbortSignal) => Promise<GitWorkingTreeResult>
+  /**
+   * Add `origin` with the given URL.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param url - remote URL passed to Host.
+   * @returns the refreshed working tree.
+   */
+  gitAddRemote: (workspaceId: WorkspaceId, url: string) => Promise<GitWorkingTreeResult>
+  /**
+   * Remove remote `origin`.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param signal - aborts a superseded remove.
+   * @returns the refreshed working tree.
+   */
+  gitRemoveRemote: (workspaceId: WorkspaceId, signal?: AbortSignal) => Promise<GitWorkingTreeResult>
   /**
    * Read one page of commit history for the discovered repository.
    * @param workspaceId - Workspace whose bound root is the discovery start.
@@ -256,17 +270,20 @@ function toolbarFeedbackLabel(
       return t('git.feedback.commitPushOk')
     case 'push':
       return t('git.feedback.pushOk')
-    default:
+    case 'removeRemote':
+      return t('git.feedback.remoteRemoved')
+    case 'commit':
       return t('git.feedback.commitOk')
   }
 }
 
 function ToolbarFeedbackView({
-  feedback, t, onRetryCommit,
+  feedback, t, onRetryCommit, onAddRemote,
 }: {
   feedback: ToolbarFeedback
   t: GitPanelProps['t']
   onRetryCommit?: (() => void) | undefined
+  onAddRemote?: (() => void) | undefined
 }): ReactNode {
   if (feedback.kind === 'success') {
     return (
@@ -275,15 +292,118 @@ function ToolbarFeedbackView({
       </span>
     )
   }
+  const missingRemote = feedback.message === t('git.feedback.noRemote')
   return (
     <span className={css.toolbarFeedbackErr} role="alert">
       <span className={css.toolbarFeedbackMessage}>{feedback.message}</span>
-      {feedback.action !== 'push' && onRetryCommit !== undefined && (
+      {missingRemote && onAddRemote !== undefined && (
+        <button type="button" className={css.toolbarFeedbackRetry} onClick={onAddRemote}>
+          {t('git.remote.add')}
+        </button>
+      )}
+      {(feedback.action === 'commit' || feedback.action === 'commitPush')
+        && onRetryCommit !== undefined && !missingRemote && (
         <button type="button" className={css.toolbarFeedbackRetry} onClick={onRetryCommit}>
           {t('git.commit.retry')}
         </button>
       )}
     </span>
+  )
+}
+
+function AddRemoteRow({
+  t, editorOpen, url, hint, pending, error, onOpen, onChange, onCancel, onSubmit,
+}: {
+  t: GitPanelProps['t']
+  editorOpen: boolean
+  url: string
+  hint: boolean
+  pending: boolean
+  error: string | null
+  onOpen: () => void
+  onChange: (value: string) => void
+  onCancel: () => void
+  onSubmit: () => void
+}): ReactNode {
+  if (!editorOpen) {
+    return (
+      <div className={css.pushRow} data-git-add-remote-row="true">
+        <span className={css.remoteCopy}>{t('git.feedback.noRemote')}</span>
+        <button
+          type="button"
+          className={css.pushButton}
+          aria-label={t('git.remote.add')}
+          onClick={onOpen}
+        >
+          {t('git.remote.add')}
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className={css.remoteEditor} data-git-add-remote-row="true">
+      <input
+        className={hint ? `${css.remoteUrlInput} ${css.remoteUrlInvalid}` : css.remoteUrlInput}
+        value={url}
+        placeholder={t('git.remote.urlPlaceholder')}
+        aria-label={t('git.remote.urlPlaceholder')}
+        aria-invalid={hint || undefined}
+        disabled={pending}
+        onChange={(event) => { onChange(event.target.value) }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            onSubmit()
+          }
+        }}
+      />
+      <button
+        type="button"
+        className={css.pushButton}
+        disabled={pending}
+        aria-busy={pending || undefined}
+        onClick={onSubmit}
+      >
+        {t('git.remote.submit')}
+      </button>
+      <button type="button" className={css.remoteCancel} disabled={pending} onClick={onCancel}>
+        {t('git.confirm.cancel')}
+      </button>
+      {hint && <div className={css.commitHint}>{t('git.remote.urlRequired')}</div>}
+      {error !== null && <div className={css.listWriteError} role="alert">{error}</div>}
+    </div>
+  )
+}
+
+function OriginRemoteRow({
+  t, url, pending, disabled, feedback, onAskRemove,
+}: {
+  t: GitPanelProps['t']
+  url: string | undefined
+  pending: boolean
+  disabled: boolean
+  feedback: ToolbarFeedback | null
+  onAskRemove: (anchor: HTMLElement) => void
+}): ReactNode {
+  return (
+    <div className={css.pushRow} data-git-origin-row="true">
+      {url !== undefined && <span className={css.remoteUrl} title={url}>{url}</span>}
+      {url !== undefined && (
+        <div className={css.pushButtonShell} data-pending={pending ? true : undefined}>
+          <button
+            type="button"
+            className={css.pushButton}
+            disabled={disabled}
+            aria-busy={pending || undefined}
+            aria-label={t('git.remote.remove')}
+            onClick={(event) => { onAskRemove(event.currentTarget) }}
+          >
+            {t('git.remote.remove')}
+          </button>
+        </div>
+      )}
+      {feedback !== null && <ToolbarFeedbackView feedback={feedback} t={t} />}
+    </div>
   )
 }
 
@@ -351,8 +471,8 @@ function CommitSplitButton({ t, disabled, onAskCommit }: {
  */
 export function GitPanel({
   t, visible, dirtyPaths, notifyDiskPathsChanged, useSessions, useWorkspaces, useStore, actions,
-  gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit, gitPush, gitLog,
-  gitCommitDiff,
+  gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit, gitPush,
+  gitAddRemote, gitRemoveRemote, gitLog, gitCommitDiff,
 }: GitPanelProps) {
   const currentSessionId = useSessions(state => state.current)
   const workspace = useWorkspaces(state =>
@@ -376,6 +496,13 @@ export function GitPanel({
   const [busyKind, setBusyKind] = useState<'stage' | 'unstage' | 'discard' | null>(null)
   const [commitPending, setCommitPending] = useState<'commit' | 'push' | false>(false)
   const [pushPending, setPushPending] = useState(false)
+  const [removeRemotePending, setRemoveRemotePending] = useState(false)
+  const [remoteEditorOpen, setRemoteEditorOpen] = useState(false)
+  const [remoteUrl, setRemoteUrl] = useState('')
+  const [remoteHint, setRemoteHint] = useState(false)
+  const [remotePending, setRemotePending] = useState(false)
+  const [remoteError, setRemoteError] = useState<string | null>(null)
+  const [addRemoteForced, setAddRemoteForced] = useState(false)
   const [discardTarget, setDiscardTarget] = useState<DiscardTarget | null>(null)
   const [guardTarget, setGuardTarget] = useState<GitWorkingTreeChange | null>(null)
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
@@ -435,6 +562,15 @@ export function GitPanel({
   }, [clearToolbarFeedbackTimer])
 
   useEffect(() => () => { clearToolbarFeedbackTimer() }, [clearToolbarFeedbackTimer])
+
+  useEffect(() => {
+    setRemoteEditorOpen(false)
+    setRemoteUrl('')
+    setRemoteHint(false)
+    setRemotePending(false)
+    setRemoteError(null)
+    setAddRemoteForced(false)
+  }, [workspaceId])
 
   useEffect(() => {
     if (!visible || workspaceId === undefined) return
@@ -687,6 +823,7 @@ export function GitPanel({
     setConfirmAction(null)
     setConfirmAnchor(null)
     if (action === 'push') onPush()
+    else if (action === 'removeRemote') onRemoveRemote()
     else onCommit(action === 'commitPush')
   }
 
@@ -734,12 +871,73 @@ export function GitPanel({
     })
   }
 
+  const onAskRemoveRemote = (anchor: HTMLElement): void => {
+    /* v8 ignore next -- Remove only renders after a Workspace-bound repository read. */
+    if (workspaceId === undefined || removeRemotePending || pushPending || commitPending) return
+    setConfirmAnchor(anchor)
+    setConfirmAction('removeRemote')
+  }
+
+  const onRemoveRemote = (): void => {
+    /* v8 ignore next -- Remove only renders after a Workspace-bound repository read. */
+    if (workspaceId === undefined || removeRemotePending || pushPending || commitPending) return
+    clearToolbarFeedbackTimer()
+    setToolbarFeedback(null)
+    setRemoveRemotePending(true)
+    setWriteError(null)
+    void gitRemoveRemote(workspaceId).then((tree) => {
+      setRemoveRemotePending(false)
+      applyTree(tree)
+      showToolbarFeedback({ kind: 'success', action: 'removeRemote' })
+    }).catch((error: unknown) => {
+      setRemoveRemotePending(false)
+      showToolbarFeedback({
+        kind: 'error',
+        action: 'removeRemote',
+        message: toolbarGitErrorMessage(t, error),
+      })
+    })
+  }
+
+  const onOpenRemoteEditor = (): void => {
+    setAddRemoteForced(true)
+    setRemoteEditorOpen(true)
+    setRemoteHint(false)
+    setRemoteError(null)
+  }
+
+  const onSubmitRemote = (): void => {
+    if (workspaceId === undefined || remotePending) return
+    const trimmed = remoteUrl.trim()
+    if (trimmed === '') {
+      setRemoteHint(true)
+      setRemoteError(null)
+      return
+    }
+    setRemoteHint(false)
+    setRemotePending(true)
+    setRemoteError(null)
+    void gitAddRemote(workspaceId, trimmed).then((tree) => {
+      setRemotePending(false)
+      setRemoteEditorOpen(false)
+      setAddRemoteForced(false)
+      setRemoteUrl('')
+      applyTree(tree)
+    }).catch((error: unknown) => {
+      setRemotePending(false)
+      const raw = hostErrorMessage(error)
+      setRemoteError(raw === 'empty remote url' ? t('git.remote.urlRequired') : toolbarGitErrorMessage(t, error))
+    })
+  }
+
   return (
     <div className={css.root} data-surface="git-panel">
       {renderBody({
         view, logView, selectedCommitHash, commitDiff, t, onInit, initError, initPending, writeError,
         commitMessageHint, toolbarFeedback, message, busyPath, busyKind,
-        commitPending, pushPending, discardTarget, guardTarget, confirmAction, confirmAnchor, pathWriting, dirtyPaths, selection, preview,
+        commitPending, pushPending, removeRemotePending, discardTarget, guardTarget,
+        confirmAction, confirmAnchor, pathWriting, dirtyPaths, selection, preview,
+        remoteEditorOpen, remoteUrl, remoteHint, remotePending, remoteError, addRemoteForced,
         splitRef, opsWidthPx, opsDragging, beginOpsResize, dragOpsResize, endOpsResize,
         onMessage: (value) => {
           /* v8 ignore next -- the commit field only renders for a current Session. */
@@ -809,8 +1007,21 @@ export function GitPanel({
           )
         },
         onCancelGuard: () => { setGuardTarget(null) },
-        onAskCommit, onAskPush, onCancelConfirm, onConfirmAction,
-        onCommit, onPush,         onRetryCommit: () => { onCommit(lastCommitPushRef.current) },
+        onAskCommit, onAskPush, onAskRemoveRemote, onCancelConfirm, onConfirmAction,
+        onCommit, onPush, onRetryCommit: () => { onCommit(lastCommitPushRef.current) },
+        onOpenRemoteEditor, onSubmitRemote,
+        onRemoteUrl: (value) => {
+          setRemoteUrl(value)
+          setRemoteHint(false)
+          setRemoteError(null)
+        },
+        onCancelRemote: () => {
+          setRemoteEditorOpen(false)
+          setAddRemoteForced(false)
+          setRemoteUrl('')
+          setRemoteHint(false)
+          setRemoteError(null)
+        },
         onSelectCommit: (hash) => {
           setSelection(null)
           setSelectedCommitHash(hash)
@@ -838,6 +1049,13 @@ interface RepoBody {
   busyKind: 'stage' | 'unstage' | 'discard' | null
   commitPending: 'commit' | 'push' | false
   pushPending: boolean
+  removeRemotePending: boolean
+  remoteEditorOpen: boolean
+  remoteUrl: string
+  remoteHint: boolean
+  remotePending: boolean
+  remoteError: string | null
+  addRemoteForced: boolean
   discardTarget: DiscardTarget | null
   guardTarget: GitWorkingTreeChange | null
   confirmAction: ConfirmAction | null
@@ -864,11 +1082,16 @@ interface RepoBody {
   onCancelGuard: () => void
   onAskCommit: (push: boolean, anchor: HTMLElement) => void
   onAskPush: (anchor: HTMLElement) => void
+  onAskRemoveRemote: (anchor: HTMLElement) => void
   onCancelConfirm: () => void
   onConfirmAction: () => void
   onCommit: (push?: boolean) => void
   onPush: () => void
   onRetryCommit: () => void
+  onOpenRemoteEditor: () => void
+  onSubmitRemote: () => void
+  onRemoteUrl: (value: string) => void
+  onCancelRemote: () => void
   onSelectCommit: (hash: string) => void
   onLoadMore: () => void
 }
@@ -946,6 +1169,9 @@ function renderRepository(
   const commitDisabled = stagedEmpty || commitPending !== false || stagedDirty
   const pushDisabled = !tree.pushAvailable || pushPending || commitPending !== false
   const pushFeedbackVisible = toolbarFeedback !== null && toolbarFeedback.action === 'push' && !pushPending
+  const removeFeedbackVisible = toolbarFeedback !== null
+    && toolbarFeedback.action === 'removeRemote'
+    && !body.removeRemotePending
   const opsClass = body.opsWidthPx !== null ? `${css.ops} ${css.opsResized}` : css.ops
   return (
     <div
@@ -968,7 +1194,36 @@ function renderRepository(
               <div className={css.branch}>
                 {t('git.branch', { name: tree.branch })}
               </div>
-              {(tree.pushAvailable || pushFeedbackVisible) && (
+              {(tree.hasRemote === false || body.addRemoteForced) && (
+                <AddRemoteRow
+                  t={t}
+                  editorOpen={body.remoteEditorOpen}
+                  url={body.remoteUrl}
+                  hint={body.remoteHint}
+                  pending={body.remotePending}
+                  error={body.remoteError}
+                  onOpen={body.onOpenRemoteEditor}
+                  onChange={body.onRemoteUrl}
+                  onCancel={body.onCancelRemote}
+                  onSubmit={body.onSubmitRemote}
+                />
+              )}
+              {tree.originUrl !== undefined || removeFeedbackVisible ? (
+                <OriginRemoteRow
+                  t={t}
+                  url={tree.originUrl}
+                  pending={body.removeRemotePending}
+                  disabled={
+                    body.removeRemotePending
+                    || pushPending
+                    || commitPending !== false
+                    || body.remotePending
+                  }
+                  feedback={removeFeedbackVisible ? toolbarFeedback : null}
+                  onAskRemove={body.onAskRemoveRemote}
+                />
+              ) : null}
+              {tree.hasRemote !== false && (tree.pushAvailable || pushFeedbackVisible) && (
                 <div className={css.pushRow} data-git-push-row="true">
                   {tree.pushAvailable && (
                     <>
@@ -1003,7 +1258,11 @@ function renderRepository(
                     </>
                   )}
                   {pushFeedbackVisible && toolbarFeedback !== null && (
-                    <ToolbarFeedbackView feedback={toolbarFeedback} t={t} />
+                    <ToolbarFeedbackView
+                      feedback={toolbarFeedback}
+                      t={t}
+                      onAddRemote={body.onOpenRemoteEditor}
+                    />
                   )}
                 </div>
               )}
@@ -1031,6 +1290,7 @@ function renderRepository(
                   feedback={toolbarFeedback}
                   t={t}
                   onRetryCommit={toolbarFeedback.kind === 'error' ? body.onRetryCommit : undefined}
+                  onAddRemote={toolbarFeedback.kind === 'error' ? body.onOpenRemoteEditor : undefined}
                 />
               )}
             </div>
@@ -1094,6 +1354,7 @@ function renderRepository(
           anchor={confirmAnchor}
           branch={tree.branch}
           ahead={tree.ahead}
+          originUrl={tree.originUrl}
           t={t}
           onCancel={body.onCancelConfirm}
           onConfirm={body.onConfirmAction}
@@ -1742,11 +2003,12 @@ function ChangeRow({
 }
 
 function ActionConfirmDialog({
-  action, branch, ahead, t, anchor, onCancel, onConfirm,
+  action, branch, ahead, originUrl, t, anchor, onCancel, onConfirm,
 }: {
   action: ConfirmAction
   branch: string
   ahead: number | undefined
+  originUrl: string | undefined
   t: GitPanelProps['t']
   anchor: HTMLElement
   onCancel: () => void
@@ -1754,23 +2016,33 @@ function ActionConfirmDialog({
 }): ReactNode {
   const cardRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<CSSProperties>({ top: 0, left: 0 })
-  const title = action === 'commitPush'
-    ? t('git.confirm.commitPush.title')
-    : action === 'push'
-      ? t('git.confirm.push.title')
-      : t('git.confirm.commit.title')
-  const body = action === 'commitPush'
-    ? t('git.confirm.commitPush.body', { branch })
-    : action === 'push'
-      ? (ahead !== undefined && ahead > 0
+  let title: string
+  let body: string
+  let confirmLabel: string
+  switch (action) {
+    case 'commitPush':
+      title = t('git.confirm.commitPush.title')
+      body = t('git.confirm.commitPush.body', { branch })
+      confirmLabel = t('git.confirm.commitPush.confirm')
+      break
+    case 'push':
+      title = t('git.confirm.push.title')
+      body = ahead !== undefined && ahead > 0
         ? t('git.confirm.push.bodyAhead', { branch, count: ahead })
-        : t('git.confirm.push.body', { branch }))
-      : t('git.confirm.commit.body', { branch })
-  const confirmLabel = action === 'commitPush'
-    ? t('git.confirm.commitPush.confirm')
-    : action === 'push'
-      ? t('git.confirm.push.confirm')
-      : t('git.confirm.commit.confirm')
+        : t('git.confirm.push.body', { branch })
+      confirmLabel = t('git.confirm.push.confirm')
+      break
+    case 'removeRemote':
+      title = t('git.confirm.remoteRemove.title')
+      body = t('git.confirm.remoteRemove.body', { url: originUrl ?? '' })
+      confirmLabel = t('git.confirm.remoteRemove.confirm')
+      break
+    case 'commit':
+      title = t('git.confirm.commit.title')
+      body = t('git.confirm.commit.body', { branch })
+      confirmLabel = t('git.confirm.commit.confirm')
+      break
+  }
   useLayoutEffect(() => {
     const place = () => {
       const card = cardRef.current

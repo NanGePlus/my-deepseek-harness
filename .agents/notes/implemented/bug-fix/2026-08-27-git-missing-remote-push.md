@@ -16,11 +16,11 @@ Host lists remotes with `git remote` before any push. Empty output fails with `g
 
 **Show Git's full stderr in a tooltip.** Rejected: the request is product copy that names the missing remote, not a longer fatal dump.
 
-**Disable Commit & push until a remote exists.** Rejected for this change: the panel still has no add-remote RPC; a clear error is the immediate fix. Standalone **Commit** stays available.
+**Disable Commit & push until a remote exists.** Rejected for this change: a clear error is the immediate fix. Standalone **Commit** stays available. Adding a remote from the panel is [Git panel add-remote entry](../feature/2026-08-27-git-add-remote.md).
 
 ## Consequences
 
-Users still cannot add a remote from the panel. Other push failures keep Git's own text.
+Users add `origin` from the panel when `hasRemote` is false; see [Git panel add-remote entry](../feature/2026-08-27-git-add-remote.md). Other push failures keep Git's own text.
 
 ## Testing
 

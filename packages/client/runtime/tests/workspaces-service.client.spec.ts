@@ -496,6 +496,28 @@ describe('WorkspaceRuntime', () => {
     await expect(workspaces.gitPush(wid('alpha')))
       .rejects.toMatchObject({ rpcError: { code: 'git-failed' } })
 
+    api.onGitAddRemote = () => Promise.resolve(ok({ ...treeOk, hasRemote: true }))
+    await expect(workspaces.gitAddRemote(wid('alpha'), 'https://example.com/repo.git'))
+      .resolves.toMatchObject({ hasRemote: true })
+    expect(api.callsOf('host.gitAddRemote')).toEqual([
+      { workspaceId: 'alpha', url: 'https://example.com/repo.git' },
+    ])
+    api.onGitAddRemote = () => Promise.resolve(err({
+      code: 'git-failed', message: 'empty remote url', details: {},
+    }))
+    await expect(workspaces.gitAddRemote(wid('alpha'), '   '))
+      .rejects.toMatchObject({ rpcError: { code: 'git-failed' } })
+
+    api.onGitRemoveRemote = () => Promise.resolve(ok({ ...treeOk, hasRemote: false }))
+    await expect(workspaces.gitRemoveRemote(wid('alpha')))
+      .resolves.toMatchObject({ hasRemote: false })
+    expect(api.callsOf('host.gitRemoveRemote')).toEqual([{ workspaceId: 'alpha' }])
+    api.onGitRemoveRemote = () => Promise.resolve(err({
+      code: 'git-failed', message: "No such remote: 'origin'", details: {},
+    }))
+    await expect(workspaces.gitRemoveRemote(wid('alpha')))
+      .rejects.toMatchObject({ rpcError: { code: 'git-failed' } })
+
     api.onGitLog = () => Promise.resolve(ok({
       availability: 'repository' as const,
       repoRoot: '/w/alpha',
