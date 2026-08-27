@@ -1,5 +1,6 @@
 /**
  * Git panel row actions use compact icon buttons and the discard (not refresh) glyph.
+ * Change sections keep content height so a long unstaged list does not paint over 待提交.
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -18,6 +19,19 @@ describe('GitPanel icon sizing and discard glyph', () => {
   it('uses 12px glyphs in compact row actions', () => {
     expect(gitPanelSource).toContain('const ROW_ACTION_ICON_SIZE = 12')
     expect(gitPanelSource).toContain('<IconDiscardOutline16 size={ROW_ACTION_ICON_SIZE} />')
+  })
+
+  it('keeps each change section at content height so a long unstaged list pushes 待提交 down', () => {
+    const listsRule = /\.lists\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(listsRule).not.toBeNull()
+    const listsDecls = (listsRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(listsDecls).toContain('overflow: auto')
+
+    const sectionRule = /\.section\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(sectionRule).not.toBeNull()
+    const sectionDecls = (sectionRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(sectionDecls).toContain('flex: none')
+    expect(sectionDecls.some(part => part.startsWith('min-height:'))).toBe(false)
   })
 
   it('sizes row and gutter icon buttons smaller than section actions', () => {

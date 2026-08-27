@@ -662,8 +662,8 @@
 
 .section {
   display: flex;
+  flex: none;
   flex-direction: column;
-  min-height: 0;
 }
 
 .sectionTitle {
