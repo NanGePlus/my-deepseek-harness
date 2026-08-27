@@ -4,7 +4,8 @@
 
 import { z } from 'zod'
 import type {
-  DirectoryEntry, GitStatusEntry, GitWorkingTreeChange, GitLogEntry, GitDiffLine, GitDiffHunk, WorkspaceEntry, FileTextRead, FileBytesRead,
+  DirectoryEntry, GitStatusEntry, GitWorkingTreeChange, GitLogEntry,
+  GitCommitDiffFile, GitDiffLine, GitDiffHunk, WorkspaceEntry, FileTextRead, FileBytesRead,
 } from './host.ts'
 import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
@@ -248,6 +249,31 @@ export const hostGitLogValueSchema = z.discriminatedUnion('availability', [
     hasMore: z.boolean(),
   }),
 ]) satisfies z.ZodType<Wire<ResponseValue<'host.gitLog'>>>
+
+/** host.gitCommitDiff request payload. */
+export const hostGitCommitDiffRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  hash: z.string().min(4).max(64).regex(/^[0-9a-fA-F]+$/),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.gitCommitDiff'>>>
+
+/** One file of host.gitCommitDiff. */
+export const gitCommitDiffFileSchema = z.object({
+  path: z.string(),
+  status: z.enum(['added', 'modified', 'deleted', 'renamed']),
+  preview: hostGitDiffPreviewValueSchema,
+}) satisfies z.ZodType<Wire<GitCommitDiffFile>>
+
+/** host.gitCommitDiff response value. */
+export const hostGitCommitDiffValueSchema = z.discriminatedUnion('availability', [
+  z.object({ availability: z.literal('git-unavailable') }),
+  z.object({ availability: z.literal('not-a-repository') }),
+  z.object({
+    availability: z.literal('repository'),
+    hash: z.string(),
+    files: z.array(gitCommitDiffFileSchema),
+    truncated: z.boolean(),
+  }),
+]) satisfies z.ZodType<Wire<ResponseValue<'host.gitCommitDiff'>>>
 
 /** host.readFile request payload. */
 export const hostReadFileRequestSchema = z.object({

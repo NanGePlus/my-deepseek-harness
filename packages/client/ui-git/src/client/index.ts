@@ -49,6 +49,8 @@ export function apply(ctx: ClientContext): void {
         ctx.workspaces.gitCommit(workspaceId, message, push === true ? true : undefined),
       gitPush: (workspaceId, signal) => ctx.workspaces.gitPush(workspaceId, signal),
       gitLog: (workspaceId, query, signal) => ctx.workspaces.gitLog(workspaceId, query, signal),
+      gitCommitDiff: (workspaceId, hash, signal) =>
+        ctx.workspaces.gitCommitDiff(workspaceId, hash, signal),
     }),
   }, GitPanel))
 }

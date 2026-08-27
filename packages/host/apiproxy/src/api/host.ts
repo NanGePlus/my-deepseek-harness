@@ -140,6 +140,36 @@ export type GitLogResult =
     hasMore: boolean
   }
 
+/** Nature of one file changed in a commit relative to its first parent (or empty tree for a root). */
+export type GitCommitDiffFileStatus = 'added' | 'modified' | 'deleted' | 'renamed'
+
+/** One file of host.gitCommitDiff. */
+export interface GitCommitDiffFile {
+  /** Path relative to the Git repository root (POSIX separators); the new path after a rename. */
+  path: string
+  /** First-parent name-status letter mapped onto the panel badge. */
+  status: GitCommitDiffFileStatus
+  /** Same preview kinds as {@link GitDiffPreview}; added text uses `untracked-text`. */
+  preview: GitDiffPreview
+}
+
+/**
+ * host.gitCommitDiff success value. Git unavailable and not-a-repository are product
+ * states, not RPC errors. An unknown hash fails with `git-failed`.
+ */
+export type GitCommitDiffResult =
+  | { availability: 'git-unavailable' }
+  | { availability: 'not-a-repository' }
+  | {
+    availability: 'repository'
+    /** Full commit hash after `rev-parse`. */
+    hash: string
+    /** Changed files versus the first parent; Host caps the list at 80 files. */
+    files: GitCommitDiffFile[]
+    /** True when more files existed than the cap. */
+    truncated: boolean
+  }
+
 /** Which change list a gitDiffPreview request reads. */
 export type GitDiffSide = 'unstaged' | 'staged'
 
@@ -424,8 +454,10 @@ export interface HostApi {
    * from Git config. Does not amend. Returns the refreshed working tree.
    * An empty trimmed message is allowed via `--allow-empty-message`. When
    * `push` is true, runs `git push` after a successful commit. Empty staged
-   * area fails with `git-failed`; missing git with `git-unavailable`; other
-   * Git failures with `git-failed` carrying Git's own text.
+   * area fails with `git-failed`; a repository with no remotes fails with
+   * `git-failed` `no remote configured` before creating the commit; missing git
+   * with `git-unavailable`; other Git failures with `git-failed` carrying Git's
+   * own text.
    */
   gitCommit(
     request: RpcRequest<{ workspaceId: WorkspaceId; message: string; push?: boolean }>,
@@ -434,7 +466,8 @@ export interface HostApi {
 
   /**
    * Push the current branch without creating a new commit. Detached HEAD fails
-   * with `git-failed`. When upstream is unset, runs `git push -u origin HEAD`.
+   * with `git-failed`. A repository with no remotes fails with `git-failed`
+   * `no remote configured`. When upstream is unset, runs `git push -u origin HEAD`.
    * Returns the refreshed working tree.
    */
   gitPush(
@@ -451,6 +484,17 @@ export interface HostApi {
     request: RpcRequest<{ workspaceId: WorkspaceId; limit?: number; skip?: number }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<GitLogResult>>
+
+  /**
+   * Read the first-parent file diffs of one commit for the Git repository
+   * discovered from a registered Workspace. Distinguishes Git unavailable from
+   * not-a-repository. An unknown hash fails with `git-failed`. Does not expose
+   * an arbitrary git argv.
+   */
+  gitCommitDiff(
+    request: RpcRequest<{ workspaceId: WorkspaceId; hash: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<GitCommitDiffResult>>
 
   /**
    * Read one regular file inside a registered Workspace; the path must lie

@@ -4,7 +4,7 @@ import type {
   DirectoryListing, GitStatusListing, IWorkspaces, SessionId, SnapshotStore,
   WorkspaceEntriesListing, WorkspaceId, WorkspaceListState, WorkspaceView,
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
-  GitWorkingTreeResult, GitInitResult, GitLogResult, GitDiffSide, GitDiffPreview,
+  GitWorkingTreeResult, GitInitResult, GitLogResult, GitCommitDiffResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { workspaceListState } from './fixtures.ts'
@@ -336,6 +336,26 @@ export class TestWorkspaces implements IWorkspaces {
     const stub = this.stubs.get('gitLog')
     if (stub !== undefined) {
       return await (stub(workspaceId, query, signal) as Promise<GitLogResult>)
+    }
+    return { availability: 'not-a-repository' }
+  }
+
+  /**
+   * Read first-parent commit file diffs (recorded). The default is not-a-repository.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param hash - abbreviated or full commit hash.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns changed files or availability discriminants.
+   */
+  async gitCommitDiff(
+    workspaceId: WorkspaceId,
+    hash: string,
+    signal?: AbortSignal,
+  ): Promise<GitCommitDiffResult> {
+    this.calls.push({ method: 'gitCommitDiff', args: [workspaceId, hash, signal] })
+    const stub = this.stubs.get('gitCommitDiff')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, hash, signal) as Promise<GitCommitDiffResult>)
     }
     return { availability: 'not-a-repository' }
   }

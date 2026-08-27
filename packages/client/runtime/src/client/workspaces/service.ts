@@ -5,7 +5,7 @@ import type {
   DirectoryListing, GitStatusListing, IApiClient, RpcError,
   SessionId, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
-  GitWorkingTreeResult, GitInitResult, GitLogResult, GitDiffSide, GitDiffPreview,
+  GitWorkingTreeResult, GitInitResult, GitLogResult, GitCommitDiffResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '../contract/store.ts'
@@ -419,6 +419,23 @@ export class WorkspaceRuntime implements IWorkspaces {
     if (query?.limit !== undefined) payload.limit = query.limit
     if (query?.skip !== undefined && query.skip > 0) payload.skip = query.skip
     const response = await this.api.host.gitLog(payload, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Read first-parent file diffs for one Graph commit.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param hash - abbreviated or full commit hash from gitLog.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns changed files or availability discriminants.
+   */
+  async gitCommitDiff(
+    workspaceId: WorkspaceId,
+    hash: string,
+    signal?: AbortSignal,
+  ): Promise<GitCommitDiffResult> {
+    const response = await this.api.host.gitCommitDiff({ workspaceId, hash }, signal)
     if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
     return response.result.value
   }

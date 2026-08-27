@@ -10,6 +10,7 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore, DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { GitPanel, type GitPanelProps } from '../src/client/GitPanel.tsx'
+import { CONFIRM_POPOVER_GAP } from '../src/client/git-confirm-popover.ts'
 import { GIT_GRAPH_LANE_WIDTH } from '../src/client/git-graph-layout.ts'
 import { createGitPanelStore } from '../src/client/stores.ts'
 import { zh } from '../src/client/locales.ts'
@@ -44,6 +45,13 @@ function confirmCommitPush(): void {
 
 function confirmPush(): void {
   fireEvent.click(screen.getByRole('button', { name: '确认推送' }))
+}
+
+function mockAnchorRect(el: HTMLElement, right: number, bottom: number): void {
+  el.getBoundingClientRect = () => ({
+    x: right - 120, y: bottom - 28, left: right - 120, top: bottom - 28,
+    right, bottom, width: 120, height: 28, toJSON() { return {} },
+  })
 }
 
 function workspace(over: Partial<WorkspaceView> = {}): WorkspaceView {
@@ -207,6 +215,7 @@ function mount(over: {
   gitCommit?: GitPanelProps['gitCommit']
   gitPush?: GitPanelProps['gitPush']
   gitLog?: GitPanelProps['gitLog']
+  gitCommitDiff?: GitPanelProps['gitCommitDiff']
   notifyDiskPathsChanged?: GitPanelProps['notifyDiskPathsChanged']
 } = {}) {
   const gitWorkingTree = vi.fn(over.gitWorkingTree ?? (async () => {
@@ -225,6 +234,12 @@ function mount(over: {
     repoRoot: ROOT,
     commits: [],
     hasMore: false,
+  })))
+  const gitCommitDiff = vi.fn(over.gitCommitDiff ?? (async () => ({
+    availability: 'repository' as const,
+    hash: 'a'.repeat(40),
+    files: [],
+    truncated: false,
   })))
   const notifyDiskPathsChanged = vi.fn(over.notifyDiskPathsChanged)
   const items = over.items ?? [workspace()]
@@ -251,11 +266,13 @@ function mount(over: {
     gitCommit,
     gitPush,
     gitLog,
+    gitCommitDiff,
   } as GitPanelProps
   const view = render(<GitPanel {...props} />)
   return {
     view, props, sessionsStore, workspacesStore, panelStore,
     gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit, gitLog,
+    gitCommitDiff,
     notifyDiskPathsChanged,
   }
 }
@@ -317,7 +334,7 @@ describe('GitPanel', () => {
     await waitFor(() => { expect(screen.getByText('提交到分支 main')).toBeTruthy() })
     expect(screen.getByPlaceholderText('请填写提交备注信息')).toBeTruthy()
     expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(true)
-    expect(screen.getByText('选择一个文件以查看差异')).toBeTruthy()
+    expect(screen.getByText('选择一个文件或 Graph 中的提交以查看差异')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '初始化仓库' })).toBeNull()
     expect(screen.queryByRole('button', { name: '推送' })).toBeNull()
     expect(screen.queryByText('有 2 个提交尚未推送')).toBeNull()
@@ -371,6 +388,123 @@ describe('GitPanel', () => {
     expect(screen.queryByText('Merge feature')).toBeNull()
     fireEvent.keyDown(screen.getByRole('button', { name: '展开Graph' }), { key: ' ' })
     expect(screen.getByText('Merge feature')).toBeTruthy()
+  })
+
+  it('graph: clicking a commit loads its files in the preview without hunk actions', async () => {
+    const hash = 'm'.repeat(40)
+    const gitCommitDiff = vi.fn(async () => ({
+      availability: 'repository' as const,
+      hash,
+      truncated: true,
+      files: [
+        {
+          path: 'src/app.ts',
+          status: 'modified' as const,
+          preview: TEXT_PREVIEW,
+        },
+        {
+          path: 'pkg/extra.py',
+          status: 'added' as const,
+          preview: { kind: 'untracked-text' as const, text: 'brand new\n' },
+        },
+        {
+          path: 'gone.bin',
+          status: 'deleted' as const,
+          preview: { kind: 'deleted-binary' as const },
+        },
+      ],
+    }))
+    mount({
+      tree: DIRTY_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [
+          logEntry({
+            hash, shortHash: 'merge01', parents: ['a'.repeat(40), 'b'.repeat(40)],
+            subject: 'Merge feature',
+          }),
+        ],
+        hasMore: false,
+      })),
+      gitCommitDiff,
+    })
+    await waitFor(() => { expect(screen.getByText('Merge feature')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '提交 Merge feature' }))
+    await waitFor(() => { expect(gitCommitDiff).toHaveBeenCalledWith(WID, hash, expect.any(AbortSignal)) })
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    const commitGlyph = document.querySelector('[data-commit-file="src/app.ts"] img')
+    expect(commitGlyph).toBeTruthy()
+    fireEvent.error(commitGlyph!)
+    fireEvent.error(commitGlyph!)
+    expect(screen.getByText('extra.py')).toBeTruthy()
+    expect(screen.getByText('gone.bin')).toBeTruthy()
+    expect(screen.getByText('brand new')).toBeTruthy()
+    expect(screen.getByText('二进制文件有差异')).toBeTruthy()
+    expect(screen.getByText('仅显示前 3 个文件')).toBeTruthy()
+    const preview = screen.getByRole('region', { name: '差异预览' })
+    expect(within(preview).queryByRole('button', { name: '选入提交' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '收起 src/app.ts' }))
+    expect(screen.getByRole('button', { name: '展开 src/app.ts' })).toBeTruthy()
+    expect(screen.getByText('brand new')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '展开 src/app.ts' }))
+    expect(screen.getByRole('button', { name: '收起 src/app.ts' })).toBeTruthy()
+    fireEvent.click(screen.getByText('README.md'))
+    await waitFor(() => {
+      expect(screen.queryByText('选择一个文件或 Graph 中的提交以查看差异')).toBeNull()
+      expect(within(screen.getByRole('region', { name: '差异预览' })).queryByRole('button', { name: '选入提交' })).not.toBeNull()
+    })
+  })
+
+  it('graph: an empty commit shows the empty-commit copy', async () => {
+    mount({
+      tree: CLEAN_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [logEntry({ hash: 'e'.repeat(40), shortHash: 'empty01', subject: 'empty' })],
+        hasMore: false,
+      })),
+      gitCommitDiff: vi.fn(async () => ({
+        availability: 'repository' as const,
+        hash: 'e'.repeat(40),
+        files: [],
+        truncated: false,
+      })),
+    })
+    await waitFor(() => { expect(screen.getByText('empty')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '提交 empty' }))
+    await waitFor(() => { expect(screen.getByText('该提交没有文件变更')).toBeTruthy() })
+  })
+
+  it('graph: commit diff errors and availability failures surface in the preview', async () => {
+    const gitCommitDiff = vi.fn()
+      .mockRejectedValueOnce(new DirectoryBrowseError({
+        code: 'git-failed', message: 'bad object', details: {},
+      }))
+      .mockResolvedValueOnce({ availability: 'git-unavailable' as const })
+      .mockResolvedValueOnce({ availability: 'not-a-repository' as const })
+    mount({
+      tree: CLEAN_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [
+          logEntry({ hash: 'a'.repeat(40), shortHash: 'aaa', subject: 'one' }),
+          logEntry({ hash: 'b'.repeat(40), shortHash: 'bbb', subject: 'two' }),
+          logEntry({ hash: 'c'.repeat(40), shortHash: 'ccc', subject: 'three' }),
+        ],
+        hasMore: false,
+      })),
+      gitCommitDiff,
+    })
+    await waitFor(() => { expect(screen.getByText('one')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '提交 one' }))
+    await waitFor(() => { expect(screen.getByText('bad object')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '提交 two' }))
+    await waitFor(() => { expect(screen.getByText('Git 不可用')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '提交 three' }))
+    await waitFor(() => { expect(screen.getByText('不是 Git 仓库')).toBeTruthy() })
   })
 
   it('graph: each row hugs its own node or stroke instead of the page-wide max lane', async () => {
@@ -751,7 +885,7 @@ describe('GitPanel', () => {
     expect(screen.getByText('note.md')).toBeTruthy()
     expect(screen.getByText('docs')).toBeTruthy()
     expect(screen.queryByText('node_modules/pkg.js')).toBeNull()
-    expect(screen.getByText('选择一个文件以查看差异')).toBeTruthy()
+    expect(screen.getByText('选择一个文件或 Graph 中的提交以查看差异')).toBeTruthy()
     expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(false)
     expect(screen.queryByRole('button', { name: '初始化仓库' })).toBeNull()
   })
@@ -804,6 +938,23 @@ describe('GitPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '收起Changes' }))
     expect(document.querySelector('[data-git-changes]')?.getAttribute('data-collapsed')).toBe('true')
     expect(screen.getByRole('button', { name: '收起Graph' })).toBeTruthy()
+  })
+
+  it('shows the unstaged plus staged row count on the CHANGES folder head', async () => {
+    mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    const count = document.querySelector('[data-git-changes-count]')
+    expect(count?.textContent).toBe(String(DIRTY_REPO.unstaged.length + DIRTY_REPO.staged.length))
+    expect(count?.getAttribute('aria-label')).toBe(String(DIRTY_REPO.unstaged.length + DIRTY_REPO.staged.length))
+    fireEvent.click(screen.getByRole('button', { name: '收起Changes' }))
+    expect(document.querySelector('[data-git-changes-count]')?.textContent)
+      .toBe(String(DIRTY_REPO.unstaged.length + DIRTY_REPO.staged.length))
+  })
+
+  it('shows zero on the CHANGES folder head when the working tree is clean', async () => {
+    mount({ tree: CLEAN_REPO })
+    await waitFor(() => { expect(document.getElementById('git-section-changes-title')).toBeTruthy() })
+    expect(document.querySelector('[data-git-changes-count]')?.textContent).toBe('0')
   })
 
   it('does not toggle section collapse when clicking the bulk stage control', async () => {
@@ -1296,6 +1447,32 @@ describe('GitPanel', () => {
     expect(screen.queryByRole('dialog', { name: '确认提交' })).toBeNull()
   })
 
+  it('commit-confirm: popover sits at the submit button bottom-right', async () => {
+    mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByPlaceholderText('请填写提交备注信息')).toBeTruthy() })
+    fireEvent.change(screen.getByPlaceholderText('请填写提交备注信息'), { target: { value: 'ship it' } })
+    const submit = screen.getByRole('button', { name: '提交' })
+    mockAnchorRect(submit, 160, 108)
+    fireEvent.click(submit)
+    const dialog = await screen.findByRole('dialog', { name: '确认提交' })
+    expect(dialog.style.left).toBe(`${160 + CONFIRM_POPOVER_GAP}px`)
+    expect(dialog.style.top).toBe(`${108 + CONFIRM_POPOVER_GAP}px`)
+    fireEvent(window, new Event('resize'))
+    fireEvent(window, new Event('scroll'))
+    expect(dialog.style.left).toBe(`${160 + CONFIRM_POPOVER_GAP}px`)
+  })
+
+  it('push-confirm: popover sits at the push button bottom-right', async () => {
+    mount({ tree: AHEAD_REPO })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '推送' })).toBeTruthy() })
+    const push = screen.getByRole('button', { name: '推送' })
+    mockAnchorRect(push, 90, 40)
+    fireEvent.click(push)
+    const dialog = await screen.findByRole('dialog', { name: '确认推送' })
+    expect(dialog.style.left).toBe(`${90 + CONFIRM_POPOVER_GAP}px`)
+    expect(dialog.style.top).toBe(`${40 + CONFIRM_POPOVER_GAP}px`)
+  })
+
   it('push-confirm: cancel does not call Host', async () => {
     const gitPush = vi.fn(async () => CLEAN_REPO)
     mount({ tree: AHEAD_REPO, gitPush })
@@ -1447,6 +1624,8 @@ describe('GitPanel', () => {
     const pushRow = screen.getByText('尚未推送到远程').closest('[data-git-push-row]')
     expect(pushRow).toBeTruthy()
     expect(within(pushRow as HTMLElement).getByRole('button', { name: '推送' })).toBeTruthy()
+    fireEvent.click(within(pushRow as HTMLElement).getByRole('button', { name: '推送' }))
+    expect(await screen.findByText('将把本地 commit 推送到远程分支 main。')).toBeTruthy()
   })
 
   it('pushes unpublished commits without staging new changes', async () => {
@@ -1498,6 +1677,37 @@ describe('GitPanel', () => {
     await waitFor(() => {
       expect((screen.getByPlaceholderText('请填写提交备注信息') as HTMLTextAreaElement).value).toBe('')
     })
+  })
+
+  it('maps a missing-remote commit-and-push failure to 没有配置远程仓库地址', async () => {
+    const gitCommit = vi.fn().mockRejectedValue(new DirectoryBrowseError({
+      code: 'git-failed',
+      message: 'fatal: No configured push destination.\nEither specify the URL from the command-line or configure a remote repository using\n\n    git remote add origin <URL>\n',
+      details: {},
+    }))
+    mount({ tree: DIRTY_REPO, gitCommit })
+    await waitFor(() => { expect(screen.getByPlaceholderText('请填写提交备注信息')).toBeTruthy() })
+    fireEvent.change(screen.getByPlaceholderText('请填写提交备注信息'), { target: { value: 'ship' } })
+    fireEvent.click(screen.getByRole('button', { name: '更多提交选项' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: '提交并推送' }))
+    confirmCommitPush()
+    await waitFor(() => { expect(screen.getByText('没有配置远程仓库地址')).toBeTruthy() })
+    expect(screen.queryByText(/fatal: No config/)).toBeNull()
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
+  })
+
+  it('maps a missing-remote standalone push failure to 没有配置远程仓库地址', async () => {
+    const gitPush = vi.fn().mockRejectedValue(new DirectoryBrowseError({
+      code: 'git-failed',
+      message: 'no remote configured',
+      details: {},
+    }))
+    mount({ tree: AHEAD_REPO, gitPush })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '推送' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '推送' }))
+    confirmPush()
+    await waitFor(() => { expect(screen.getByText('没有配置远程仓库地址')).toBeTruthy() })
+    expect(screen.queryByText('no remote configured')).toBeNull()
   })
 
   it('keeps the commit draft when hiding the Git tab', async () => {
@@ -1589,7 +1799,7 @@ describe('GitPanel', () => {
     expect(within(preview).getByText('README.md')).toBeTruthy()
     expect(within(preview).getAllByRole('button', { name: '选入提交' }).length).toBeGreaterThanOrEqual(1)
     expect(within(preview).getByRole('button', { name: '撤销更改' })).toBeTruthy()
-    expect(screen.queryByText('选择一个文件以查看差异')).toBeNull()
+    expect(screen.queryByText('选择一个文件或 Graph 中的提交以查看差异')).toBeNull()
     expect(screen.queryByRole('button', { name: '在编辑器中打开' })).toBeNull()
     expect(screen.getAllByText('README.md').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('note.md')).toBeTruthy()
@@ -1985,7 +2195,7 @@ describe('GitPanel', () => {
     await waitFor(() => { expect(within(previewPane()).getByText('keep')).toBeTruthy() })
     b.view.rerender(<GitPanel {...b.props} visible={false} />)
     b.view.rerender(<GitPanel {...b.props} visible={true} />)
-    await waitFor(() => { expect(screen.getByText('选择一个文件以查看差异')).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByText('选择一个文件或 Graph 中的提交以查看差异')).toBeTruthy() })
     expect(screen.queryByText('README.md')).toBeNull()
   })
 
@@ -2003,7 +2213,7 @@ describe('GitPanel', () => {
     await waitFor(() => { expect(within(previewPane()).getByRole('button', { name: '移出此块' })).toBeTruthy() })
     b.view.rerender(<GitPanel {...b.props} visible={false} />)
     b.view.rerender(<GitPanel {...b.props} visible={true} />)
-    await waitFor(() => { expect(screen.getByText('选择一个文件以查看差异')).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByText('选择一个文件或 Graph 中的提交以查看差异')).toBeTruthy() })
     expect(screen.queryByText('note.md')).toBeNull()
   })
 

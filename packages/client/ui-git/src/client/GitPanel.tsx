@@ -12,11 +12,13 @@ import {
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
-  GitDiffLine, GitDiffPreview, GitDiffSide, GitInitResult, GitLogEntry, GitLogResult, GitWorkingTreeChange,
-  GitWorkingTreeResult, WorkspaceId,
+  GitCommitDiffFile, GitCommitDiffResult, GitDiffLine, GitDiffPreview, GitDiffSide, GitInitResult,
+  GitLogEntry, GitLogResult, GitWorkingTreeChange, GitWorkingTreeResult, WorkspaceId,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
-import { changeKindLetter, splitChangePath } from './change-path-label.ts'
+import { changeKindLetter, commitDiffStatusLetter, splitChangePath } from './change-path-label.ts'
+import { isMissingRemoteGitError } from './git-error-copy.ts'
+import { confirmPopoverPosition } from './git-confirm-popover.ts'
 import { fileIconUrlForPath, FILE_ICON_BASE_URL } from './file-icon.ts'
 import { buildDiffPreviewRows, type DiffPreviewRow } from './diff-preview-model.ts'
 import { DIFF_ROW_ATTR } from './DiffMinimap.tsx'
@@ -140,6 +142,18 @@ export interface GitPanelInjected {
     query?: { limit?: number; skip?: number },
     signal?: AbortSignal,
   ) => Promise<GitLogResult>
+  /**
+   * Read first-parent file diffs for one Graph commit.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param hash - abbreviated or full commit hash from gitLog.
+   * @param signal - aborts a superseded read.
+   * @returns changed files or availability discriminants.
+   */
+  gitCommitDiff: (
+    workspaceId: WorkspaceId,
+    hash: string,
+    signal?: AbortSignal,
+  ) => Promise<GitCommitDiffResult>
 }
 
 /** Full Git-panel props: runtime share, locale, store, visibility, and Host Git callbacks. */
@@ -173,6 +187,12 @@ type LogViewState =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'ready'; commits: readonly GitLogEntry[]; hasMore: boolean; loadingMore: boolean }
+  | { kind: 'error'; message: string }
+
+type CommitDiffView =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'ready'; result: Extract<GitCommitDiffResult, { availability: 'repository' }> }
   | { kind: 'error'; message: string }
 
 interface DiscardTarget {
@@ -271,9 +291,10 @@ function ToolbarFeedbackView({
 function CommitSplitButton({ t, disabled, onAskCommit }: {
   t: GitPanelProps['t']
   disabled: boolean
-  onAskCommit: (push?: boolean) => void
+  onAskCommit: (push: boolean, anchor: HTMLElement) => void
 }): ReactNode {
   const [menuOpen, setMenuOpen] = useState(false)
+  const menuTriggerRef = useRef<HTMLButtonElement>(null)
   const submitLabel = t('git.commit.submit')
   return (
     <div className={css.commitActions}>
@@ -282,7 +303,7 @@ function CommitSplitButton({ t, disabled, onAskCommit }: {
         className={css.commitPrimary}
         disabled={disabled}
         aria-label={submitLabel}
-        onClick={() => { onAskCommit(false) }}
+        onClick={(event) => { onAskCommit(false, event.currentTarget) }}
       >
         {submitLabel}
       </button>
@@ -299,10 +320,14 @@ function CommitSplitButton({ t, disabled, onAskCommit }: {
         onSelect={(id) => {
           setMenuOpen(false)
           if (disabled) return
-          onAskCommit(id === 'push')
+          const anchor = menuTriggerRef.current
+          /* v8 ignore next -- the chevron is mounted while the menu is open. */
+          if (anchor === null) return
+          onAskCommit(id === 'push', anchor)
         }}
         anchor={(
           <button
+            ref={menuTriggerRef}
             type="button"
             className={css.commitMenuTrigger}
             disabled={disabled}
@@ -327,6 +352,7 @@ function CommitSplitButton({ t, disabled, onAskCommit }: {
 export function GitPanel({
   t, visible, dirtyPaths, notifyDiskPathsChanged, useSessions, useWorkspaces, useStore, actions,
   gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit, gitPush, gitLog,
+  gitCommitDiff,
 }: GitPanelProps) {
   const currentSessionId = useSessions(state => state.current)
   const workspace = useWorkspaces(state =>
@@ -353,10 +379,12 @@ export function GitPanel({
   const [discardTarget, setDiscardTarget] = useState<DiscardTarget | null>(null)
   const [guardTarget, setGuardTarget] = useState<GitWorkingTreeChange | null>(null)
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
+  const [confirmAnchor, setConfirmAnchor] = useState<HTMLElement | null>(null)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [preview, setPreview] = useState<PreviewState>({ kind: 'idle' })
   const [logView, setLogView] = useState<LogViewState>({ kind: 'idle' })
   const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null)
+  const [commitDiff, setCommitDiff] = useState<CommitDiffView>({ kind: 'idle' })
   const [opsWidthPx, setOpsWidthPx] = useState<number | null>(null)
   const [opsDragging, setOpsDragging] = useState(false)
   const splitRef = useRef<HTMLDivElement>(null)
@@ -533,6 +561,34 @@ export function GitPanel({
     return () => { ac.abort() }
   }, [visible, workspaceId, selection, gitDiffPreview, previewEpoch])
 
+  useEffect(() => {
+    if (selectedCommitHash === null) {
+      setCommitDiff({ kind: 'idle' })
+      return
+    }
+    if (!visible || workspaceId === undefined) return
+    const ac = new AbortController()
+    const hash = selectedCommitHash
+    setCommitDiff({ kind: 'loading' })
+    void gitCommitDiff(workspaceId, hash, ac.signal).then((value) => {
+      if (ac.signal.aborted) return
+      if (value.availability !== 'repository') {
+        setCommitDiff({
+          kind: 'error',
+          message: value.availability === 'git-unavailable'
+            ? t('git.empty.unavailable.title')
+            : t('git.empty.notRepo.title'),
+        })
+        return
+      }
+      setCommitDiff({ kind: 'ready', result: value })
+    }).catch((error: unknown) => {
+      if (isAbortError(error) || ac.signal.aborted) return
+      setCommitDiff({ kind: 'error', message: hostErrorMessage(error) })
+    })
+    return () => { ac.abort() }
+  }, [visible, workspaceId, selectedCommitHash, gitCommitDiff, t])
+
   const pathWriting = busyPath !== null
   const isDirty = (path: string): boolean => dirtyPaths.includes(path)
 
@@ -599,7 +655,7 @@ export function GitPanel({
     })
   }
 
-  const onAskCommit = (push = false): void => {
+  const onAskCommit = (push: boolean, anchor: HTMLElement): void => {
     /* v8 ignore next -- Submit is disabled until a Session-bound repository has staged files. */
     if (workspaceId === undefined || currentSessionId === undefined || commitPending) return
     const trimmed = message.trim()
@@ -609,21 +665,27 @@ export function GitPanel({
       return
     }
     setCommitMessageHint(false)
+    setConfirmAnchor(anchor)
     setConfirmAction(push === true ? 'commitPush' : 'commit')
   }
 
-  const onAskPush = (): void => {
+  const onAskPush = (anchor: HTMLElement): void => {
     /* v8 ignore next -- Push only renders after a Workspace-bound repository read. */
     if (workspaceId === undefined || pushPending || commitPending) return
+    setConfirmAnchor(anchor)
     setConfirmAction('push')
   }
 
-  const onCancelConfirm = (): void => { setConfirmAction(null) }
+  const onCancelConfirm = (): void => {
+    setConfirmAction(null)
+    setConfirmAnchor(null)
+  }
 
   const onConfirmAction = (): void => {
     if (confirmAction === null) return
     const action = confirmAction
     setConfirmAction(null)
+    setConfirmAnchor(null)
     if (action === 'push') onPush()
     else onCommit(action === 'commitPush')
   }
@@ -651,7 +713,7 @@ export function GitPanel({
       showToolbarFeedback({ kind: 'success', action })
     }).catch((error: unknown) => {
       setCommitPending(false)
-      showToolbarFeedback({ kind: 'error', action, message: hostErrorMessage(error) })
+      showToolbarFeedback({ kind: 'error', action, message: toolbarGitErrorMessage(t, error) })
     })
   }
 
@@ -668,16 +730,16 @@ export function GitPanel({
       showToolbarFeedback({ kind: 'success', action: 'push' })
     }).catch((error: unknown) => {
       setPushPending(false)
-      showToolbarFeedback({ kind: 'error', action: 'push', message: hostErrorMessage(error) })
+      showToolbarFeedback({ kind: 'error', action: 'push', message: toolbarGitErrorMessage(t, error) })
     })
   }
 
   return (
     <div className={css.root} data-surface="git-panel">
       {renderBody({
-        view, logView, selectedCommitHash, t, onInit, initError, initPending, writeError,
+        view, logView, selectedCommitHash, commitDiff, t, onInit, initError, initPending, writeError,
         commitMessageHint, toolbarFeedback, message, busyPath, busyKind,
-        commitPending, pushPending, discardTarget, guardTarget, confirmAction, pathWriting, dirtyPaths, selection, preview,
+        commitPending, pushPending, discardTarget, guardTarget, confirmAction, confirmAnchor, pathWriting, dirtyPaths, selection, preview,
         splitRef, opsWidthPx, opsDragging, beginOpsResize, dragOpsResize, endOpsResize,
         onMessage: (value) => {
           /* v8 ignore next -- the commit field only renders for a current Session. */
@@ -690,6 +752,7 @@ export function GitPanel({
           actions.setDraft(currentSessionId, value)
         },
         onSelect: (side, row) => {
+          setSelectedCommitHash(null)
           setSelection((current) => {
             if (current?.side === side && current.row.absolutePath === row.absolutePath) return current
             return { side, row }
@@ -748,7 +811,10 @@ export function GitPanel({
         onCancelGuard: () => { setGuardTarget(null) },
         onAskCommit, onAskPush, onCancelConfirm, onConfirmAction,
         onCommit, onPush,         onRetryCommit: () => { onCommit(lastCommitPushRef.current) },
-        onSelectCommit: setSelectedCommitHash,
+        onSelectCommit: (hash) => {
+          setSelection(null)
+          setSelectedCommitHash(hash)
+        },
         onLoadMore,
       })}
     </div>
@@ -759,6 +825,7 @@ interface RepoBody {
   view: ViewState
   logView: LogViewState
   selectedCommitHash: string | null
+  commitDiff: CommitDiffView
   t: GitPanelProps['t']
   onInit: () => void
   initError: string | null
@@ -774,6 +841,7 @@ interface RepoBody {
   discardTarget: DiscardTarget | null
   guardTarget: GitWorkingTreeChange | null
   confirmAction: ConfirmAction | null
+  confirmAnchor: HTMLElement | null
   pathWriting: boolean
   dirtyPaths: readonly string[]
   selection: Selection | null
@@ -794,8 +862,8 @@ interface RepoBody {
   onCancelDiscard: () => void
   onConfirmDiscard: () => void
   onCancelGuard: () => void
-  onAskCommit: (push?: boolean) => void
-  onAskPush: () => void
+  onAskCommit: (push: boolean, anchor: HTMLElement) => void
+  onAskPush: (anchor: HTMLElement) => void
   onCancelConfirm: () => void
   onConfirmAction: () => void
   onCommit: (push?: boolean) => void
@@ -871,7 +939,7 @@ function renderRepository(
 ): ReactNode {
   const {
     t, message, writeError, commitMessageHint, toolbarFeedback,
-    commitPending, pushPending, discardTarget, guardTarget, confirmAction,
+    commitPending, pushPending, discardTarget, guardTarget, confirmAction, confirmAnchor,
   } = body
   const stagedEmpty = tree.staged.length === 0
   const stagedDirty = tree.staged.some(row => body.dirtyPaths.includes(row.absolutePath))
@@ -895,7 +963,7 @@ function renderRepository(
           ? <div className={css.refreshBar} role="progressbar" aria-label={t('git.refresh')} />
           : <div className={css.refreshSlot} />}
         <div className={css.lists} data-git-lists="">
-          <ChangesSection t={t}>
+          <ChangesSection t={t} changeCount={tree.unstaged.length + tree.staged.length}>
             <div className={css.branchRow}>
               <div className={css.branch}>
                 {t('git.branch', { name: tree.branch })}
@@ -926,7 +994,7 @@ function renderRepository(
                             disabled={pushDisabled}
                             aria-busy={pushPending || undefined}
                             aria-label={t('git.push')}
-                            onClick={body.onAskPush}
+                            onClick={(event) => { body.onAskPush(event.currentTarget) }}
                           >
                             {t('git.push')}
                           </button>
@@ -1020,9 +1088,10 @@ function renderRepository(
           onCancel={body.onCancelGuard}
         />
       )}
-      {confirmAction !== null && (
+      {confirmAction !== null && confirmAnchor !== null && (
         <ActionConfirmDialog
           action={confirmAction}
+          anchor={confirmAnchor}
           branch={tree.branch}
           ahead={tree.ahead}
           t={t}
@@ -1034,7 +1103,131 @@ function renderRepository(
   )
 }
 
+function CommitDiffPane({ body }: { body: RepoBody }): ReactNode {
+  const { t, commitDiff, selectedCommitHash } = body
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
+  const { ref: scrollRevealRef, active: scrollActive } = useScrollRevealScrollbar()
+  useEffect(() => {
+    setCollapsed(new Set())
+  }, [selectedCommitHash])
+  return (
+    <div className={css.preview} role="region" aria-label={t('git.preview.region')}>
+      {commitDiff.kind === 'idle' || commitDiff.kind === 'loading'
+        ? (
+          <div className={css.previewFeedback} role="status" aria-label={t('git.loading')}>
+            <span className={css.spinner} aria-hidden="true">
+              <IconLoadingOutline16 size={24} />
+            </span>
+          </div>
+        )
+        : commitDiff.kind === 'error'
+          ? <div className={css.previewFeedback} role="alert">{commitDiff.message}</div>
+          : commitDiff.result.files.length === 0
+            ? <div className={css.previewEmpty}>{t('git.empty.commit')}</div>
+            : (
+              <div
+                className={scrollActive ? `${css.previewBody} ${css.previewBodyActive}` : css.previewBody}
+                ref={scrollRevealRef}
+              >
+                {commitDiff.result.files.map(file => (
+                  <CommitDiffFileBlock
+                    key={file.path}
+                    file={file}
+                    expanded={!collapsed.has(file.path)}
+                    onToggle={() => {
+                      setCollapsed((current) => {
+                        const next = new Set(current)
+                        if (next.has(file.path)) next.delete(file.path)
+                        else next.add(file.path)
+                        return next
+                      })
+                    }}
+                    body={body}
+                  />
+                ))}
+                {commitDiff.result.truncated && (
+                  <div className={css.previewTruncated} role="note">
+                    {t('git.commitDiff.truncated', { count: commitDiff.result.files.length })}
+                  </div>
+                )}
+              </div>
+            )}
+    </div>
+  )
+}
+
+function CommitDiffFileBlock({
+  file, expanded, onToggle, body,
+}: {
+  file: GitCommitDiffFile
+  expanded: boolean
+  onToggle: () => void
+  body: RepoBody
+}): ReactNode {
+  const { t } = body
+  const { fileName, parentDir } = splitChangePath(file.path)
+  const letter = commitDiffStatusLetter(file.status)
+  const statusClass = file.status === 'added'
+    ? css.rowBadgeUntracked
+    : file.status === 'deleted'
+      ? css.rowBadgeDeleted
+      : css.rowBadgeModified
+  const label = expanded
+    ? t('git.commitDiff.collapse', { path: file.path })
+    : t('git.commitDiff.expand', { path: file.path })
+  return (
+    <section className={css.commitFile} data-commit-file={file.path}>
+      <button
+        type="button"
+        className={css.commitFileHead}
+        aria-expanded={expanded}
+        aria-label={label}
+        onClick={onToggle}
+      >
+        {expanded
+          ? <IconChevronDownOutline14 size={14} />
+          : <IconChevronRightOutline14 size={14} />}
+        <span className={css.rowIcon} role="img" aria-label={t('git.icon.file')}>
+          <img
+            className={css.rowGlyph}
+            src={fileIconUrlForPath(file.path)}
+            width={16}
+            height={16}
+            alt=""
+            decoding="async"
+            onError={(event) => {
+              const img = event.currentTarget
+              if (img.src.endsWith(`${FILE_ICON_BASE_URL}/file.svg`)) return
+              img.src = `${FILE_ICON_BASE_URL}/file.svg`
+            }}
+          />
+        </span>
+        <span className={css.rowLabel}>
+          <span className={css.rowFileName}>{fileName}</span>
+          {parentDir !== '' && <span className={css.rowParentDir}>{parentDir}</span>}
+        </span>
+        <span className={[css.rowBadge, statusClass].join(' ')} aria-label={t('git.change.status', { letter })}>
+          {letter}
+        </span>
+      </button>
+      {expanded && (
+        <div className={css.commitFileBody}>
+          <DiffPreviewContent
+            preview={file.preview}
+            path={file.path}
+            selection={null}
+            body={body}
+          />
+        </div>
+      )}
+    </section>
+  )
+}
+
 function DiffPreviewPane({ body }: { body: RepoBody }): ReactNode {
+  if (body.selectedCommitHash !== null) {
+    return <CommitDiffPane body={body} />
+  }
   const { t, selection, preview } = body
   const scrollRef = useRef<HTMLDivElement | null>(null) as MutableRefObject<HTMLDivElement | null>
   const { ref: scrollRevealRef, active: scrollActive } = useScrollRevealScrollbar()
@@ -1077,6 +1270,7 @@ function DiffPreviewPane({ body }: { body: RepoBody }): ReactNode {
                 {preview.kind === 'ready' && (
                   <DiffPreviewContent
                     preview={preview.preview}
+                    path={selection.row.absolutePath}
                     selection={selection}
                     body={body}
                   />
@@ -1141,16 +1335,17 @@ function WholeFilePreviewActions({
 }
 
 function DiffPreviewContent({
-  preview, selection, body,
+  preview, path, selection, body,
 }: {
   preview: GitDiffPreview
-  selection: Selection
+  path: string
+  selection: Selection | null
   body: RepoBody
 }): ReactNode {
   const rows = preview.kind === 'binary' || preview.kind === 'deleted-binary'
     ? []
     : buildDiffPreviewRows(preview)
-  const syntaxByRow = useDiffSyntaxHighlights(rows, selection.row.absolutePath)
+  const syntaxByRow = useDiffSyntaxHighlights(rows, path)
   switch (preview.kind) {
     case 'binary':
     case 'deleted-binary':
@@ -1178,7 +1373,7 @@ function DiffPreviewRowView({
   row, selection, body, syntaxSpans,
 }: {
   row: DiffPreviewRow
-  selection: Selection
+  selection: Selection | null
   body: RepoBody
   syntaxSpans?: readonly HighlightSpan[] | undefined
 }): ReactNode {
@@ -1189,7 +1384,7 @@ function DiffPreviewRowView({
       </div>
     )
   }
-  const gutter = row.hunkLineIndex === 0 && row.hunkHeader !== ''
+  const gutter = selection !== null && row.hunkLineIndex === 0 && row.hunkHeader !== ''
     ? (
       <HunkGutterActions
         side={selection.side}
@@ -1321,7 +1516,13 @@ function onFolderHeadKeyDown(event: KeyboardEvent<HTMLDivElement>, toggle: () =>
 }
 
 /** Working-tree chrome folder: branch, commit, and the two change lists. */
-function ChangesSection({ t, children }: { t: GitPanelProps['t']; children: ReactNode }) {
+function ChangesSection({
+  t, changeCount, children,
+}: {
+  t: GitPanelProps['t']
+  changeCount: number
+  children: ReactNode
+}) {
   const [expanded, setExpanded] = useState(true)
   const title = t('git.section.changes')
   const toggleLabel = expanded ? t('git.section.collapse', { title }) : t('git.section.expand', { title })
@@ -1351,6 +1552,15 @@ function ChangesSection({ t, children }: { t: GitPanelProps['t']; children: Reac
             : <IconChevronRightOutline14 size={14} />}
         </span>
         <h2 id="git-section-changes-title" className={`${css.sectionTitle} ${css.folderTitle}`}>{title}</h2>
+        <div className={css.sectionHeadActions} onClick={(event) => { event.stopPropagation() }}>
+          <span
+            className={css.sectionCount}
+            data-git-changes-count=""
+            aria-label={String(changeCount)}
+          >
+            {changeCount}
+          </span>
+        </div>
       </div>
       {expanded && (
         <div id={bodyId} className={css.changesBody} aria-labelledby="git-section-changes-title">
@@ -1532,15 +1742,18 @@ function ChangeRow({
 }
 
 function ActionConfirmDialog({
-  action, branch, ahead, t, onCancel, onConfirm,
+  action, branch, ahead, t, anchor, onCancel, onConfirm,
 }: {
   action: ConfirmAction
   branch: string
   ahead: number | undefined
   t: GitPanelProps['t']
+  anchor: HTMLElement
   onCancel: () => void
   onConfirm: () => void
 }): ReactNode {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<CSSProperties>({ top: 0, left: 0 })
   const title = action === 'commitPush'
     ? t('git.confirm.commitPush.title')
     : action === 'push'
@@ -1558,22 +1771,42 @@ function ActionConfirmDialog({
     : action === 'push'
       ? t('git.confirm.push.confirm')
       : t('git.confirm.commit.confirm')
+  useLayoutEffect(() => {
+    const place = () => {
+      const card = cardRef.current
+      /* v8 ignore next -- the card is attached before this layout effect. */
+      if (card === null) return
+      const box = confirmPopoverPosition(
+        anchor.getBoundingClientRect(),
+        { width: card.offsetWidth, height: card.offsetHeight },
+        { width: window.innerWidth, height: window.innerHeight },
+      )
+      setPos({ top: box.top, left: box.left })
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [anchor])
   return (
-    <div className={css.dialogRoot}>
-      <div
-        className={css.dialogCard}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-      >
-        <h2 className={css.dialogTitle}>{title}</h2>
-        <p className={css.dialogBody}>{body}</p>
-        <div className={css.dialogActions}>
-          <Button variant="outline" size="sm" onClick={onCancel}>{t('git.confirm.cancel')}</Button>
-          <Button variant="primary" size="sm" onClick={onConfirm}>
-            {confirmLabel}
-          </Button>
-        </div>
+    <div
+      ref={cardRef}
+      className={`${css.dialogPopover} ${css.dialogCard}`}
+      style={pos}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <h2 className={css.dialogTitle}>{title}</h2>
+      <p className={css.dialogBody}>{body}</p>
+      <div className={css.dialogActions}>
+        <Button variant="outline" size="sm" onClick={onCancel}>{t('git.confirm.cancel')}</Button>
+        <Button variant="primary" size="sm" onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
       </div>
     </div>
   )
@@ -1734,6 +1967,11 @@ function diffRowClass(origin: GitDiffLine['origin']): string {
 function hostErrorMessage(error: unknown): string {
   if (error instanceof DirectoryBrowseError) return error.rpcError.message
   return error instanceof Error ? error.message : String(error)
+}
+
+function toolbarGitErrorMessage(t: GitPanelProps['t'], error: unknown): string {
+  const raw = hostErrorMessage(error)
+  return isMissingRemoteGitError(raw) ? t('git.feedback.noRemote') : raw
 }
 
 function isAbortError(error: unknown): boolean {

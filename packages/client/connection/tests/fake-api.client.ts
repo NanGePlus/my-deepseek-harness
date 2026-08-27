@@ -160,6 +160,7 @@ export class FakeApiClient implements IApiClient {
     gitCommit: payload => this.record('host.gitCommit', payload, Promise.resolve(ok({ availability: 'not-a-repository' as const }))),
     gitPush: payload => this.record('host.gitPush', payload, Promise.resolve(ok({ availability: 'not-a-repository' as const }))),
     gitLog: payload => this.record('host.gitLog', payload, Promise.resolve(ok({ availability: 'not-a-repository' as const }))),
+    gitCommitDiff: payload => this.record('host.gitCommitDiff', payload, Promise.resolve(ok({ availability: 'not-a-repository' as const }))),
     readFile: payload => this.record('host.readFile', payload, Promise.resolve(ok({ kind: 'text', path: '', text: '' }))),
     writeFile: payload => this.record('host.writeFile', payload, Promise.resolve(ok({ path: '' }))),
     deletePath: payload => this.record('host.deletePath', payload, Promise.resolve(ok({ path: '' }))),

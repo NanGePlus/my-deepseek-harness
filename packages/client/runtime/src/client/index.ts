@@ -66,7 +66,8 @@ export type { WorkspaceListState } from './workspaces/service.ts'
 export type {
   DirectoryEntry, DirectoryListing, GitStatusEntry, GitStatusListing,
   GitWorkingTreeChange, GitWorkingTreeResult, GitInitResult,
-  GitLogEntry, GitLogResult, GitDiffSide, GitDiffLine, GitDiffHunk, GitDiffPreview,
+  GitLogEntry, GitLogResult, GitCommitDiffFile, GitCommitDiffFileStatus,
+  GitCommitDiffResult, GitDiffSide, GitDiffLine, GitDiffHunk, GitDiffPreview,
   WorkspaceEntry, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
   FileReadKind, FileTextRead, FileBytesRead, FileReadResult, FileWriteResult, PathMutationResult,
   HostLspDiagnostic, LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult, HostLspHover,

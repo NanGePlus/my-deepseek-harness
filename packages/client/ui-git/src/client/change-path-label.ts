@@ -1,6 +1,6 @@
 /** Split a repository-relative change path for Git-panel row labels. */
 
-import type { GitWorkingTreeChange } from '@deepseek-ai/dsh-client-runtime/client'
+import type { GitCommitDiffFileStatus, GitWorkingTreeChange } from '@deepseek-ai/dsh-client-runtime/client'
 
 type GitWorkingTreeChangeKind = GitWorkingTreeChange['kind']
 
@@ -31,6 +31,19 @@ export function changeKindLetter(kind: GitWorkingTreeChangeKind): 'M' | 'U' | 'D
   switch (kind) {
     case 'untracked': return 'U'
     case 'deleted': return 'D'
+    default: return 'M'
+  }
+}
+
+/**
+ * Map a commit-diff file status to the single-letter badge shown on Graph previews.
+ * @param status - Host first-parent name-status mapping.
+ */
+export function commitDiffStatusLetter(status: GitCommitDiffFileStatus): 'A' | 'M' | 'D' | 'R' {
+  switch (status) {
+    case 'added': return 'A'
+    case 'deleted': return 'D'
+    case 'renamed': return 'R'
     default: return 'M'
   }
 }

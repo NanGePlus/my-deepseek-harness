@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-27-git-panel-changes-folder.md
-2026-08-27-git-panel-changes-folder.md: 3715000dba3d1ede5edaed8f597d8ac70e9177e0
-2026-08-27-git-panel-changes-folder.zh.md: 403b7ff32a0ab9e28f8d746655223aaefa89752a
+2026-08-27-git-panel-changes-folder.md: e021c1f534751ef98108bbe8a9bac5bfd6138add
+2026-08-27-git-panel-changes-folder.zh.md: ae118c03693835ad888a25d3d076f6353faffedf

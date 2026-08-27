@@ -9,7 +9,7 @@
 import type {
   DirectoryListing, GitStatusListing, SessionId, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
-  GitWorkingTreeResult, GitInitResult, GitLogResult, GitDiffSide, GitDiffPreview,
+  GitWorkingTreeResult, GitInitResult, GitLogResult, GitCommitDiffResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceListState } from '../workspaces/service.ts'
@@ -178,6 +178,18 @@ export interface IWorkspaces {
     query?: { limit?: number; skip?: number },
     signal?: AbortSignal,
   ): Promise<GitLogResult>
+  /**
+   * Read first-parent file diffs for one Graph commit.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param hash - abbreviated or full commit hash from gitLog.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns changed files or availability discriminants.
+   */
+  gitCommitDiff(
+    workspaceId: WorkspaceId,
+    hash: string,
+    signal?: AbortSignal,
+  ): Promise<GitCommitDiffResult>
   /**
    * Read one file inside a registered Workspace.
    * @param workspaceId - Workspace whose root bounds the path.

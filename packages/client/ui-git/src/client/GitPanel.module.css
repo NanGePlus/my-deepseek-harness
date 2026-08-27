@@ -620,8 +620,16 @@
 .dialogCard {
   width: min(280px, 100%);
   padding: 12px;
-  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
   background: var(--dsw-alias-bg-layer-3);
+  box-shadow: var(--dsw-shadow-lv3);
+}
+
+.dialogPopover {
+  position: fixed;
+  z-index: 1100;
+  width: min(280px, calc(100vw - 16px));
 }
 
 .dialogTitle {
@@ -847,6 +855,36 @@
   min-height: 0;
   flex-direction: column;
   background: var(--dsw-alias-markdown-code-block);
+}
+
+.commitFile {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  border-bottom: 1px solid var(--dsw-alias-divider);
+}
+
+.commitFileHead {
+  display: flex;
+  flex: none;
+  height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.commitFileHead:hover {
+  background: var(--editor-hover-tint);
+}
+
+.commitFileBody {
+  display: flex;
+  flex-direction: column;
 }
 
 .previewEmpty,

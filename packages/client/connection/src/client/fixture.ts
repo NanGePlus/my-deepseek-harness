@@ -2610,6 +2610,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       gitCommit: request => ok(request, { availability: 'not-a-repository' as const }),
       gitPush: request => ok(request, { availability: 'not-a-repository' as const }),
       gitLog: request => ok(request, { availability: 'not-a-repository' as const }),
+      gitCommitDiff: request => ok(request, { availability: 'not-a-repository' as const }),
       readFile: request => ok(request, { kind: 'text', path: request.payload.path, text: '' }),
       writeFile: request => ok(request, { path: request.payload.path }),
       deletePath: request => ok(request, { path: request.payload.path }),
@@ -3168,6 +3169,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'host.gitCommit': return this.api.host.gitCommit(request, signal)
       case 'host.gitPush': return this.api.host.gitPush(request, signal)
       case 'host.gitLog': return this.api.host.gitLog(request, signal)
+      case 'host.gitCommitDiff': return this.api.host.gitCommitDiff(request, signal)
       case 'host.readFile': return this.api.host.readFile(request, signal)
       case 'host.writeFile': return this.api.host.writeFile(request, signal)
       case 'host.deletePath': return this.api.host.deletePath(request, signal)

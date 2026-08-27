@@ -22,6 +22,7 @@ async function bench() {
     gitCommit: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitPush: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitLog: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
+    gitCommitDiff: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
   }
   ctx.provide('workspaces', workspaces)
   slots.register({
@@ -78,6 +79,18 @@ describe('ui-git apply', () => {
     await expect(face.gitCommit('ws' as WorkspaceId, 'msg')).resolves.toEqual({
       availability: 'not-a-repository',
     })
+    await expect(face.gitCommit('ws' as WorkspaceId, 'msg', true)).resolves.toEqual({
+      availability: 'not-a-repository',
+    })
+    await expect(face.gitPush('ws' as WorkspaceId)).resolves.toEqual({
+      availability: 'not-a-repository',
+    })
+    await expect(face.gitLog('ws' as WorkspaceId, { limit: 50 })).resolves.toEqual({
+      availability: 'not-a-repository',
+    })
+    await expect(face.gitCommitDiff('ws' as WorkspaceId, 'abc1234')).resolves.toEqual({
+      availability: 'not-a-repository',
+    })
     expect(b.workspaces.gitWorkingTree).toHaveBeenCalledWith('ws', undefined)
     expect(b.workspaces.gitInit).toHaveBeenCalledWith('ws', undefined)
     expect(b.workspaces.gitDiffPreview).toHaveBeenCalledWith('ws', '/w/a.ts', 'unstaged', undefined)
@@ -85,6 +98,10 @@ describe('ui-git apply', () => {
     expect(b.workspaces.gitUnstage).toHaveBeenCalledWith('ws', '/w/a.ts', undefined)
     expect(b.workspaces.gitDiscard).toHaveBeenCalledWith('ws', '/w/a.ts', '@@ -2,1 +2,1 @@')
     expect(b.workspaces.gitCommit).toHaveBeenCalledWith('ws', 'msg', undefined)
+    expect(b.workspaces.gitCommit).toHaveBeenCalledWith('ws', 'msg', true)
+    expect(b.workspaces.gitPush).toHaveBeenCalledWith('ws', undefined)
+    expect(b.workspaces.gitLog).toHaveBeenCalledWith('ws', { limit: 50 }, undefined)
+    expect(b.workspaces.gitCommitDiff).toHaveBeenCalledWith('ws', 'abc1234', undefined)
   })
 
   it('unregisters the Git occupant when the plugin fiber disposes', async () => {
