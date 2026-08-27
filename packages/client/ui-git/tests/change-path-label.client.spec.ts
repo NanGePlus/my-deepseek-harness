@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { changeKindLetter, splitChangePath } from '../src/client/change-path-label.ts'
+import { changeKindLetter, commitDiffStatusLetter, splitChangePath } from '../src/client/change-path-label.ts'
 
 describe('splitChangePath', () => {
   it('keeps root-level files on the file name only', () => {
@@ -19,5 +19,14 @@ describe('changeKindLetter', () => {
     expect(changeKindLetter('modified')).toBe('M')
     expect(changeKindLetter('untracked')).toBe('U')
     expect(changeKindLetter('deleted')).toBe('D')
+  })
+})
+
+describe('commitDiffStatusLetter', () => {
+  it('maps first-parent file statuses to Git letters', () => {
+    expect(commitDiffStatusLetter('added')).toBe('A')
+    expect(commitDiffStatusLetter('modified')).toBe('M')
+    expect(commitDiffStatusLetter('deleted')).toBe('D')
+    expect(commitDiffStatusLetter('renamed')).toBe('R')
   })
 })

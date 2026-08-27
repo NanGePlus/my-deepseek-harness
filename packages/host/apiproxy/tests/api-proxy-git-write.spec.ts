@@ -544,6 +544,51 @@ describe('host.gitCommit', () => {
     expect(remoteHead).toBe(localHead)
   })
 
+  it('refuses push when the repository has no remotes', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    commitFile(workspacePath, 'tracked.txt', 'v1\n', 'init')
+    const head = execSync('git rev-parse HEAD', { cwd: workspacePath, encoding: 'utf8' }).trim()
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const response = await api.host.gitPush(
+      request({ workspaceId: workspace.workspaceId }),
+      new AbortController().signal,
+    )
+
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'git-failed', message: 'no remote configured' },
+    })
+    expect(execSync('git rev-parse HEAD', { cwd: workspacePath, encoding: 'utf8' }).trim()).toBe(head)
+  })
+
+  it('refuses commit-and-push when the repository has no remotes and does not create the commit', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    commitFile(workspacePath, 'tracked.txt', 'v1\n', 'init')
+    const parent = execSync('git rev-parse HEAD', { cwd: workspacePath, encoding: 'utf8' }).trim()
+    writeFileSync(join(workspacePath, 'tracked.txt'), 'v2\n')
+    execSync('git add tracked.txt', { cwd: workspacePath, stdio: 'ignore' })
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const response = await api.host.gitCommit(
+      request({ workspaceId: workspace.workspaceId, message: 'should not land', push: true }),
+      new AbortController().signal,
+    )
+
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'git-failed', message: 'no remote configured' },
+    })
+    expect(execSync('git rev-parse HEAD', { cwd: workspacePath, encoding: 'utf8' }).trim()).toBe(parent)
+    expect(execSync('git diff --cached --name-only', { cwd: workspacePath, encoding: 'utf8' }).trim()).toBe('tracked.txt')
+  })
+
   it('rejects commit when the staged area is empty', async () => {
     const { api, root } = await harness()
     const workspacePath = join(root, 'repo')

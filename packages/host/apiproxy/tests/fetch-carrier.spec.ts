@@ -186,6 +186,12 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async gitPush(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { availability: 'not-a-repository' as const } } }
       },
+      async gitLog(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { availability: 'not-a-repository' as const } } }
+      },
+      async gitCommitDiff(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { availability: 'not-a-repository' as const } } }
+      },
       async readFile(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { kind: 'text', path: request.payload.path, text: '' } } }
       },

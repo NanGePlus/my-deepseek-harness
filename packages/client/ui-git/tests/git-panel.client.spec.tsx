@@ -5,11 +5,13 @@ import { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
-  GitDiffPreview, GitWorkingTreeChange, GitWorkingTreeResult, SessionId, SessionListState,
+  GitDiffPreview, GitLogEntry, GitWorkingTreeChange, GitWorkingTreeResult, SessionId, SessionListState,
   WorkspaceId, WorkspaceListState, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore, DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { GitPanel, type GitPanelProps } from '../src/client/GitPanel.tsx'
+import { CONFIRM_POPOVER_GAP } from '../src/client/git-confirm-popover.ts'
+import { GIT_GRAPH_LANE_WIDTH } from '../src/client/git-graph-layout.ts'
 import { createGitPanelStore } from '../src/client/stores.ts'
 import { zh } from '../src/client/locales.ts'
 
@@ -20,6 +22,18 @@ const SID2 = 's2' as SessionId
 const WID = 'ws1' as WorkspaceId
 const WID2 = 'ws2' as WorkspaceId
 const ROOT = '/w/alpha'
+const LOG_DATE = '2026-08-27T02:06:00.000Z'
+
+function logEntry(over: Partial<GitLogEntry> & Pick<GitLogEntry, 'hash' | 'shortHash' | 'subject'>): GitLogEntry {
+  return {
+    parents: [],
+    authorName: 'Ada',
+    authorDate: LOG_DATE,
+    body: '',
+    refs: [],
+    ...over,
+  }
+}
 
 function confirmCommit(): void {
   fireEvent.click(screen.getByRole('button', { name: '确认提交' }))
@@ -31,6 +45,13 @@ function confirmCommitPush(): void {
 
 function confirmPush(): void {
   fireEvent.click(screen.getByRole('button', { name: '确认推送' }))
+}
+
+function mockAnchorRect(el: HTMLElement, right: number, bottom: number): void {
+  el.getBoundingClientRect = () => ({
+    x: right - 120, y: bottom - 28, left: right - 120, top: bottom - 28,
+    right, bottom, width: 120, height: 28, toJSON() { return {} },
+  })
 }
 
 function workspace(over: Partial<WorkspaceView> = {}): WorkspaceView {
@@ -193,6 +214,8 @@ function mount(over: {
   gitDiscard?: GitPanelProps['gitDiscard']
   gitCommit?: GitPanelProps['gitCommit']
   gitPush?: GitPanelProps['gitPush']
+  gitLog?: GitPanelProps['gitLog']
+  gitCommitDiff?: GitPanelProps['gitCommitDiff']
   notifyDiskPathsChanged?: GitPanelProps['notifyDiskPathsChanged']
 } = {}) {
   const gitWorkingTree = vi.fn(over.gitWorkingTree ?? (async () => {
@@ -206,6 +229,18 @@ function mount(over: {
   const gitDiscard = vi.fn(over.gitDiscard ?? (async () => CLEAN_REPO))
   const gitCommit = vi.fn(over.gitCommit ?? (async () => CLEAN_REPO))
   const gitPush = vi.fn(over.gitPush ?? (async () => CLEAN_REPO))
+  const gitLog = vi.fn(over.gitLog ?? (async () => ({
+    availability: 'repository' as const,
+    repoRoot: ROOT,
+    commits: [],
+    hasMore: false,
+  })))
+  const gitCommitDiff = vi.fn(over.gitCommitDiff ?? (async () => ({
+    availability: 'repository' as const,
+    hash: 'a'.repeat(40),
+    files: [],
+    truncated: false,
+  })))
   const notifyDiskPathsChanged = vi.fn(over.notifyDiskPathsChanged)
   const items = over.items ?? [workspace()]
   const workspacesStore = createSnapshotStore(workspacesState(items))
@@ -230,11 +265,14 @@ function mount(over: {
     gitDiscard,
     gitCommit,
     gitPush,
+    gitLog,
+    gitCommitDiff,
   } as GitPanelProps
   const view = render(<GitPanel {...props} />)
   return {
     view, props, sessionsStore, workspacesStore, panelStore,
-    gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit,
+    gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit, gitLog,
+    gitCommitDiff,
     notifyDiskPathsChanged,
   }
 }
@@ -296,11 +334,541 @@ describe('GitPanel', () => {
     await waitFor(() => { expect(screen.getByText('提交到分支 main')).toBeTruthy() })
     expect(screen.getByPlaceholderText('请填写提交备注信息')).toBeTruthy()
     expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(true)
-    expect(screen.getByText('选择一个文件以查看差异')).toBeTruthy()
+    expect(screen.getByText('选择一个文件或 Graph 中的提交以查看差异')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '初始化仓库' })).toBeNull()
     expect(screen.queryByRole('button', { name: '推送' })).toBeNull()
     expect(screen.queryByText('有 2 个提交尚未推送')).toBeNull()
     expect(screen.queryByText('尚未推送到远程')).toBeNull()
+  })
+
+  it('graph: merge history draws a side-lane curve under Graph', async () => {
+    const commits: GitLogEntry[] = [
+      logEntry({
+        hash: 'm'.repeat(40), shortHash: 'merge01', parents: ['a'.repeat(40), 'b'.repeat(40)],
+        subject: 'Merge feature', refs: ['main', 'origin/main'],
+      }),
+      logEntry({
+        hash: 'a'.repeat(40), shortHash: 'main001', parents: ['r'.repeat(40)],
+        subject: 'main tip',
+      }),
+      logEntry({
+        hash: 'b'.repeat(40), shortHash: 'feat001', parents: ['r'.repeat(40)],
+        subject: 'feat: side',
+      }),
+      logEntry({
+        hash: 'r'.repeat(40), shortHash: 'root001',
+        subject: 'root',
+      }),
+    ]
+    mount({
+      tree: CLEAN_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits,
+        hasMore: false,
+      })),
+    })
+    await waitFor(() => { expect(screen.getByText('Merge feature')).toBeTruthy() })
+    expect(screen.getByText('feat: side')).toBeTruthy()
+    expect(document.querySelector('[data-git-graph-merge="true"]')).toBeTruthy()
+    expect(document.querySelector('[data-git-graph-merge="true"]')?.getAttribute('data-git-graph-lane')).toBe('0')
+    const paths = [...document.querySelectorAll('#git-section-graph-list path')]
+    expect(paths.some(path => (path.getAttribute('d') ?? '').includes('C'))).toBe(true)
+    expect(screen.getByText('origin/main')).toBeTruthy()
+    expect(screen.getByText('已显示全部提交')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '提交 Merge feature' }))
+    expect(document.querySelector('[data-git-graph-merge="true"]')?.getAttribute('data-selected')).toBe('true')
+    fireEvent.click(screen.getByLabelText('4'))
+    expect(screen.getByText('Merge feature')).toBeTruthy()
+    const graphHead = screen.getByRole('button', { name: '收起Graph' })
+    fireEvent.keyDown(graphHead, { key: 'Escape' })
+    expect(screen.getByText('Merge feature')).toBeTruthy()
+    fireEvent.keyDown(graphHead, { key: 'Enter' })
+    expect(screen.queryByText('Merge feature')).toBeNull()
+    fireEvent.keyDown(screen.getByRole('button', { name: '展开Graph' }), { key: ' ' })
+    expect(screen.getByText('Merge feature')).toBeTruthy()
+  })
+
+  it('graph: clicking a commit loads its files in the preview without hunk actions', async () => {
+    const hash = 'm'.repeat(40)
+    const gitCommitDiff = vi.fn(async () => ({
+      availability: 'repository' as const,
+      hash,
+      truncated: true,
+      files: [
+        {
+          path: 'src/app.ts',
+          status: 'modified' as const,
+          preview: TEXT_PREVIEW,
+        },
+        {
+          path: 'pkg/extra.py',
+          status: 'added' as const,
+          preview: { kind: 'untracked-text' as const, text: 'brand new\n' },
+        },
+        {
+          path: 'gone.bin',
+          status: 'deleted' as const,
+          preview: { kind: 'deleted-binary' as const },
+        },
+      ],
+    }))
+    mount({
+      tree: DIRTY_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [
+          logEntry({
+            hash, shortHash: 'merge01', parents: ['a'.repeat(40), 'b'.repeat(40)],
+            subject: 'Merge feature',
+          }),
+        ],
+        hasMore: false,
+      })),
+      gitCommitDiff,
+    })
+    await waitFor(() => { expect(screen.getByText('Merge feature')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '提交 Merge feature' }))
+    await waitFor(() => { expect(gitCommitDiff).toHaveBeenCalledWith(WID, hash, expect.any(AbortSignal)) })
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    const commitGlyph = document.querySelector('[data-commit-file="src/app.ts"] img')
+    expect(commitGlyph).toBeTruthy()
+    fireEvent.error(commitGlyph!)
+    fireEvent.error(commitGlyph!)
+    expect(screen.getByText('extra.py')).toBeTruthy()
+    expect(screen.getByText('gone.bin')).toBeTruthy()
+    expect(screen.getByText('brand new')).toBeTruthy()
+    expect(screen.getByText('二进制文件有差异')).toBeTruthy()
+    expect(screen.getByText('仅显示前 3 个文件')).toBeTruthy()
+    const preview = screen.getByRole('region', { name: '差异预览' })
+    expect(within(preview).queryByRole('button', { name: '选入提交' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '收起 src/app.ts' }))
+    expect(screen.getByRole('button', { name: '展开 src/app.ts' })).toBeTruthy()
+    expect(screen.getByText('brand new')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '展开 src/app.ts' }))
+    expect(screen.getByRole('button', { name: '收起 src/app.ts' })).toBeTruthy()
+    fireEvent.click(screen.getByText('README.md'))
+    await waitFor(() => {
+      expect(screen.queryByText('选择一个文件或 Graph 中的提交以查看差异')).toBeNull()
+      expect(within(screen.getByRole('region', { name: '差异预览' })).queryByRole('button', { name: '选入提交' })).not.toBeNull()
+    })
+  })
+
+  it('graph: an empty commit shows the empty-commit copy', async () => {
+    mount({
+      tree: CLEAN_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [logEntry({ hash: 'e'.repeat(40), shortHash: 'empty01', subject: 'empty' })],
+        hasMore: false,
+      })),
+      gitCommitDiff: vi.fn(async () => ({
+        availability: 'repository' as const,
+        hash: 'e'.repeat(40),
+        files: [],
+        truncated: false,
+      })),
+    })
+    await waitFor(() => { expect(screen.getByText('empty')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '提交 empty' }))
+    await waitFor(() => { expect(screen.getByText('该提交没有文件变更')).toBeTruthy() })
+  })
+
+  it('graph: commit diff errors and availability failures surface in the preview', async () => {
+    const gitCommitDiff = vi.fn()
+      .mockRejectedValueOnce(new DirectoryBrowseError({
+        code: 'git-failed', message: 'bad object', details: {},
+      }))
+      .mockResolvedValueOnce({ availability: 'git-unavailable' as const })
+      .mockResolvedValueOnce({ availability: 'not-a-repository' as const })
+    mount({
+      tree: CLEAN_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [
+          logEntry({ hash: 'a'.repeat(40), shortHash: 'aaa', subject: 'one' }),
+          logEntry({ hash: 'b'.repeat(40), shortHash: 'bbb', subject: 'two' }),
+          logEntry({ hash: 'c'.repeat(40), shortHash: 'ccc', subject: 'three' }),
+        ],
+        hasMore: false,
+      })),
+      gitCommitDiff,
+    })
+    await waitFor(() => { expect(screen.getByText('one')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '提交 one' }))
+    await waitFor(() => { expect(screen.getByText('bad object')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '提交 two' }))
+    await waitFor(() => { expect(screen.getByText('Git 不可用')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '提交 three' }))
+    await waitFor(() => { expect(screen.getByText('不是 Git 仓库')).toBeTruthy() })
+  })
+
+  it('graph: each row hugs its own node or stroke instead of the page-wide max lane', async () => {
+    const narrow = GIT_GRAPH_LANE_WIDTH
+    const wide = 2 * GIT_GRAPH_LANE_WIDTH
+    mount({
+      tree: CLEAN_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [
+          logEntry({
+            hash: 't'.repeat(40), shortHash: 'tip0001', parents: ['m'.repeat(40)],
+            subject: 'tip above merge',
+          }),
+          logEntry({
+            hash: 'm'.repeat(40), shortHash: 'merge01', parents: ['a'.repeat(40), 'b'.repeat(40)],
+            subject: 'Merge feature',
+          }),
+          logEntry({
+            hash: 'a'.repeat(40), shortHash: 'main001', parents: ['r'.repeat(40)],
+            subject: 'main tip',
+          }),
+          logEntry({
+            hash: 'b'.repeat(40), shortHash: 'feat001', parents: ['r'.repeat(40)],
+            subject: 'feat: side',
+          }),
+          logEntry({
+            hash: 'r'.repeat(40), shortHash: 'root001',
+            subject: 'root',
+          }),
+        ],
+        hasMore: false,
+      })),
+    })
+    await waitFor(() => { expect(screen.getByText('tip above merge')).toBeTruthy() })
+    const gutters = [...document.querySelectorAll('[data-git-graph-gutter]')] as HTMLElement[]
+    expect(gutters.map(el => el.style.width)).toEqual([
+      `${String(narrow)}px`,
+      `${String(wide)}px`,
+      `${String(wide)}px`,
+      `${String(wide)}px`,
+      `${String(wide)}px`,
+    ])
+  })
+
+  it('graph: hovering a truncated ref pill opens a commit detail card', async () => {
+    const refName = 'origin/issue/54-host-git-rpc-workspace'
+    mount({
+      tree: CLEAN_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [logEntry({
+          hash: 'm'.repeat(40),
+          shortHash: 'merge01',
+          subject: 'Merge feature',
+          authorName: 'NanGePlus',
+          body: '- feat: graph pills\n- hover card',
+          refs: [refName],
+        })],
+        hasMore: false,
+      })),
+    })
+    await waitFor(() => { expect(screen.getByText('Merge feature')).toBeTruthy() })
+    const pill = document.querySelector(`[data-git-graph-ref="${refName}"]`)
+    expect(pill).toBeTruthy()
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    fireEvent.mouseEnter(pill!)
+    const card = await waitFor(() => {
+      const el = document.querySelector('[data-git-graph-card]')
+      expect(el).toBeTruthy()
+      return el as HTMLElement
+    })
+    expect(card.textContent).toContain(refName)
+    expect(card.textContent).toContain('NanGePlus')
+    expect(card.textContent).toContain('Merge feature')
+    expect(card.textContent).toContain('feat: graph pills')
+    expect(card.textContent).toContain('merge01')
+    expect(card.querySelector('time')?.getAttribute('dateTime')).toBe(LOG_DATE)
+  })
+
+  it('graph: ref pills sit on a second line, right of the subject, not beside the author', async () => {
+    mount({
+      tree: CLEAN_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [
+          logEntry({
+            hash: 'm'.repeat(40), shortHash: 'merge01', subject: 'Merge feature',
+            refs: ['origin/issue/54-host-git-rpc-workspace', 'issue/54-host-git-rpc-workspace'],
+          }),
+          logEntry({
+            hash: 'a'.repeat(40), shortHash: 'main001', subject: 'plain tip',
+          }),
+        ],
+        hasMore: false,
+      })),
+    })
+    await waitFor(() => { expect(screen.getByText('Merge feature')).toBeTruthy() })
+    const tagged = screen.getByRole('button', { name: '提交 Merge feature' })
+    const refs = tagged.querySelector('[data-git-graph-refs]')
+    const subject = tagged.querySelector('[class*="graphSubject"]')
+    const author = tagged.querySelector('[class*="graphAuthor"]')
+    expect(refs).toBeTruthy()
+    expect(subject).toBeTruthy()
+    expect(author).toBeTruthy()
+    expect(tagged.getAttribute('data-git-graph-has-refs')).toBe('true')
+    expect(refs!.querySelector('[data-git-graph-ref="origin/issue/54-host-git-rpc-workspace"]')).toBeTruthy()
+    expect(refs!.querySelector('[data-git-graph-ref="issue/54-host-git-rpc-workspace"]')).toBeTruthy()
+    expect(subject!.compareDocumentPosition(refs!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(author!.compareDocumentPosition(refs!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(subject!.closest('[class*="graphPrimary"]')?.contains(refs)).toBe(false)
+    const plain = screen.getByRole('button', { name: '提交 plain tip' })
+    expect(plain.querySelector('[data-git-graph-refs]')).toBeNull()
+    expect(plain.getAttribute('data-git-graph-has-refs')).toBeNull()
+  })
+
+  it('graph: a local ref pill hover card omits empty body and date', async () => {
+    mount({
+      tree: CLEAN_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [logEntry({
+          hash: 'l'.repeat(40),
+          shortHash: 'local01',
+          subject: 'local tip',
+          authorDate: '',
+          body: '   ',
+          refs: ['main'],
+        })],
+        hasMore: false,
+      })),
+    })
+    await waitFor(() => { expect(screen.getByText('local tip')).toBeTruthy() })
+    fireEvent.mouseEnter(document.querySelector('[data-git-graph-ref="main"]')!)
+    const card = await waitFor(() => {
+      const el = document.querySelector('[data-git-graph-card]')
+      expect(el).toBeTruthy()
+      return el as HTMLElement
+    })
+    expect(card.querySelector('time')).toBeNull()
+    expect(card.querySelector('pre')).toBeNull()
+    expect(card.textContent).toContain('local01')
+  })
+
+  it('graph: leaving a ref pill hides the card after the hover delay', async () => {
+    mount({
+      tree: CLEAN_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [logEntry({
+          hash: 'm'.repeat(40), shortHash: 'merge01', subject: 'Merge feature',
+          refs: ['origin/main'],
+        })],
+        hasMore: false,
+      })),
+    })
+    await waitFor(() => { expect(screen.getByText('Merge feature')).toBeTruthy() })
+    vi.useFakeTimers()
+    try {
+      const pill = document.querySelector('[data-git-graph-ref="origin/main"]')!
+      fireEvent.mouseEnter(pill)
+      expect(document.querySelector('[data-git-graph-card]')).toBeTruthy()
+      fireEvent.mouseLeave(pill)
+      act(() => { vi.advanceTimersByTime(119) })
+      expect(document.querySelector('[data-git-graph-card]')).toBeTruthy()
+      act(() => { vi.advanceTimersByTime(1) })
+      expect(document.querySelector('[data-git-graph-card]')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('graph: moving onto the card keeps it open, and collapsing Graph closes it', async () => {
+    mount({
+      tree: CLEAN_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [logEntry({
+          hash: 'm'.repeat(40), shortHash: 'merge01', subject: 'Merge feature',
+          refs: ['origin/main'],
+        })],
+        hasMore: false,
+      })),
+    })
+    await waitFor(() => { expect(screen.getByText('Merge feature')).toBeTruthy() })
+    vi.useFakeTimers()
+    try {
+      const pill = document.querySelector('[data-git-graph-ref="origin/main"]')!
+      fireEvent.mouseEnter(pill)
+      const card = document.querySelector('[data-git-graph-card]')!
+      fireEvent.mouseLeave(pill)
+      fireEvent.mouseEnter(card)
+      act(() => { vi.advanceTimersByTime(200) })
+      expect(document.querySelector('[data-git-graph-card]')).toBeTruthy()
+      fireEvent.mouseLeave(card)
+      fireEvent.click(screen.getByRole('button', { name: '收起Graph' }))
+      expect(document.querySelector('[data-git-graph-card]')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('graph: appends the next page when the sentinel intersects', async () => {
+    const page = (hash: string, subject: string): GitLogEntry => (
+      logEntry({ hash: hash.repeat(40), shortHash: hash, subject })
+    )
+    const observed: IntersectionObserverCallback[] = []
+    class FakeIntersectionObserver {
+      constructor(callback: IntersectionObserverCallback) {
+        observed.push(callback)
+      }
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    }
+    vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver)
+    try {
+      const gitLog = vi.fn(async (_workspaceId: WorkspaceId, query?: { limit?: number; skip?: number }) => {
+        if ((query?.skip ?? 0) === 0) {
+          return {
+            availability: 'repository' as const,
+            repoRoot: ROOT,
+            commits: [page('a', 'newest'), page('b', 'middle')],
+            hasMore: true,
+          }
+        }
+        return {
+          availability: 'repository' as const,
+          repoRoot: ROOT,
+          commits: [page('c', 'oldest')],
+          hasMore: false,
+        }
+      })
+      mount({ tree: CLEAN_REPO, gitLog })
+      await waitFor(() => { expect(screen.getByText('newest')).toBeTruthy() })
+      expect(screen.getByText('middle')).toBeTruthy()
+      expect(screen.queryByText('oldest')).toBeNull()
+      expect(gitLog).toHaveBeenCalledWith(WID, { limit: 50 }, expect.any(AbortSignal))
+      expect(screen.getByRole('button', { name: '加载更多' })).toBeTruthy()
+      await waitFor(() => { expect(observed.length).toBeGreaterThan(0) })
+      act(() => {
+        observed[0]?.([{ isIntersecting: false } as IntersectionObserverEntry], {} as IntersectionObserver)
+      })
+      expect(screen.queryByText('oldest')).toBeNull()
+      act(() => {
+        observed[0]?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)
+      })
+      await waitFor(() => { expect(screen.getByText('oldest')).toBeTruthy() })
+      expect(gitLog).toHaveBeenCalledWith(WID, { limit: 50, skip: 2 }, expect.any(AbortSignal))
+      expect(screen.queryByRole('button', { name: '加载更多' })).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('graph: load-more button appends the next page', async () => {
+    const page = (hash: string, subject: string): GitLogEntry => (
+      logEntry({ hash: hash.repeat(40), shortHash: hash, subject })
+    )
+    const gitLog = vi.fn(async (_workspaceId: WorkspaceId, query?: { limit?: number; skip?: number }) => {
+      if ((query?.skip ?? 0) === 0) {
+        return {
+          availability: 'repository' as const,
+          repoRoot: ROOT,
+          commits: [page('d', 'tip')],
+          hasMore: true,
+        }
+      }
+      return {
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [page('e', 'older')],
+        hasMore: false,
+      }
+    })
+    mount({ tree: CLEAN_REPO, gitLog })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '加载更多' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '加载更多' }))
+    await waitFor(() => { expect(screen.getByText('older')).toBeTruthy() })
+    expect(gitLog).toHaveBeenCalledTimes(2)
+    expect(gitLog).toHaveBeenCalledWith(WID, { limit: 50, skip: 1 }, expect.any(AbortSignal))
+  })
+
+  it('graph: a failed extra page keeps the load-more control', async () => {
+    const page = (hash: string, subject: string): GitLogEntry => (
+      logEntry({ hash: hash.repeat(40), shortHash: hash, subject })
+    )
+    const gitLog = vi.fn(async (_workspaceId: WorkspaceId, query?: { limit?: number; skip?: number }) => {
+      if ((query?.skip ?? 0) === 0) {
+        return {
+          availability: 'repository' as const,
+          repoRoot: ROOT,
+          commits: [page('f', 'only')],
+          hasMore: true,
+        }
+      }
+      throw new Error('log failed')
+    })
+    mount({ tree: CLEAN_REPO, gitLog })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '加载更多' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '加载更多' }))
+    await waitFor(() => { expect(gitLog).toHaveBeenCalledTimes(2) })
+    expect(screen.getByText('only')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '加载更多' })).toBeTruthy()
+  })
+
+  it('graph: a non-repository extra page stops paging', async () => {
+    const page = (hash: string, subject: string): GitLogEntry => (
+      logEntry({ hash: hash.repeat(40), shortHash: hash, subject })
+    )
+    const gitLog = vi.fn(async (_workspaceId: WorkspaceId, query?: { limit?: number; skip?: number }) => {
+      if ((query?.skip ?? 0) === 0) {
+        return {
+          availability: 'repository' as const,
+          repoRoot: ROOT,
+          commits: [page('g', 'tip')],
+          hasMore: true,
+        }
+      }
+      return { availability: 'not-a-repository' as const }
+    })
+    mount({ tree: CLEAN_REPO, gitLog })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '加载更多' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '加载更多' }))
+    await waitFor(() => { expect(screen.queryByRole('button', { name: '加载更多' })).toBeNull() })
+    expect(screen.getByText('tip')).toBeTruthy()
+  })
+
+  it('graph: overlapping extra-page hashes stop paging', async () => {
+    const tip: GitLogEntry = logEntry({
+      hash: 'h'.repeat(40), shortHash: 'h', subject: 'same',
+    })
+    const gitLog = vi.fn(async () => ({
+      availability: 'repository' as const,
+      repoRoot: ROOT,
+      commits: [tip],
+      hasMore: true,
+    }))
+    mount({ tree: CLEAN_REPO, gitLog })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '加载更多' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '加载更多' }))
+    await waitFor(() => { expect(screen.queryByRole('button', { name: '加载更多' })).toBeNull() })
+    expect(screen.getByText('same')).toBeTruthy()
+  })
+
+  it('graph: collapsing the section while more pages exist hides the sentinel', async () => {
+    const gitLog = vi.fn(async () => ({
+      availability: 'repository' as const,
+      repoRoot: ROOT,
+      commits: [logEntry({
+        hash: 'i'.repeat(40), shortHash: 'i', subject: 'open',
+      })],
+      hasMore: true,
+    }))
+    mount({ tree: CLEAN_REPO, gitLog })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '加载更多' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '收起Graph' }))
+    expect(screen.queryByRole('button', { name: '加载更多' })).toBeNull()
   })
 
   it('default: binds the Session Workspace, lists both sides, and shows a detached HEAD', async () => {
@@ -308,6 +876,8 @@ describe('GitPanel', () => {
     await waitFor(() => { expect(screen.getAllByText('a.ts').length).toBe(2) })
     expect(b.gitWorkingTree).toHaveBeenCalledWith(WID, expect.any(AbortSignal))
     expect(screen.getByText('提交到分支 HEAD detached at abc1234')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '收起Changes' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '收起Graph' })).toBeTruthy()
     expect(screen.getByText('已更改，暂未选入提交')).toBeTruthy()
     expect(screen.getByText('待提交')).toBeTruthy()
     expect(screen.getAllByText('a.ts')).toHaveLength(2)
@@ -315,7 +885,7 @@ describe('GitPanel', () => {
     expect(screen.getByText('note.md')).toBeTruthy()
     expect(screen.getByText('docs')).toBeTruthy()
     expect(screen.queryByText('node_modules/pkg.js')).toBeNull()
-    expect(screen.getByText('选择一个文件以查看差异')).toBeTruthy()
+    expect(screen.getByText('选择一个文件或 Graph 中的提交以查看差异')).toBeTruthy()
     expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(false)
     expect(screen.queryByRole('button', { name: '初始化仓库' })).toBeNull()
   })
@@ -333,6 +903,58 @@ describe('GitPanel', () => {
     expect(screen.getByRole('button', { name: '展开已更改，暂未选入提交' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '展开已更改，暂未选入提交' }))
     expect(screen.getByText('README.md')).toBeTruthy()
+  })
+
+  it('collapses Changes without hiding Graph, and restores the working-tree chrome', async () => {
+    mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    const changesHead = screen.getByRole('button', { name: '收起Changes' })
+    fireEvent.keyDown(changesHead, { key: 'Escape' })
+    expect(screen.getByText('提交到分支 HEAD detached at abc1234')).toBeTruthy()
+    fireEvent.keyDown(changesHead, { key: 'Enter' })
+    expect(screen.queryByText('提交到分支 HEAD detached at abc1234')).toBeNull()
+    expect(screen.queryByPlaceholderText('请填写提交备注信息')).toBeNull()
+    expect(screen.queryByText('已更改，暂未选入提交')).toBeNull()
+    expect(screen.queryByText('待提交')).toBeNull()
+    expect(screen.getByRole('button', { name: '收起Graph' })).toBeTruthy()
+    fireEvent.keyDown(screen.getByRole('button', { name: '展开Changes' }), { key: ' ' })
+    expect(screen.getByText('提交到分支 HEAD detached at abc1234')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '收起Changes' }))
+    expect(screen.queryByText('README.md')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '展开Changes' }))
+    expect(screen.getByText('README.md')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '提交' })).toBeTruthy()
+  })
+
+  it('renders folder chrome: uppercase titles, indented lists, Graph pinned while Changes is open', async () => {
+    mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    expect(document.getElementById('git-section-changes-title')).toBeTruthy()
+    expect(document.getElementById('git-section-graph-title')).toBeTruthy()
+    expect(document.querySelector('[data-git-lists]')).toBeTruthy()
+    expect(document.querySelector('[data-git-graph]')).toBeTruthy()
+    expect(document.querySelector('[data-git-changes-files]')).toBeTruthy()
+    expect(document.querySelector('[data-git-changes]')?.getAttribute('data-collapsed')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '收起Changes' }))
+    expect(document.querySelector('[data-git-changes]')?.getAttribute('data-collapsed')).toBe('true')
+    expect(screen.getByRole('button', { name: '收起Graph' })).toBeTruthy()
+  })
+
+  it('shows the unstaged plus staged row count on the CHANGES folder head', async () => {
+    mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    const count = document.querySelector('[data-git-changes-count]')
+    expect(count?.textContent).toBe(String(DIRTY_REPO.unstaged.length + DIRTY_REPO.staged.length))
+    expect(count?.getAttribute('aria-label')).toBe(String(DIRTY_REPO.unstaged.length + DIRTY_REPO.staged.length))
+    fireEvent.click(screen.getByRole('button', { name: '收起Changes' }))
+    expect(document.querySelector('[data-git-changes-count]')?.textContent)
+      .toBe(String(DIRTY_REPO.unstaged.length + DIRTY_REPO.staged.length))
+  })
+
+  it('shows zero on the CHANGES folder head when the working tree is clean', async () => {
+    mount({ tree: CLEAN_REPO })
+    await waitFor(() => { expect(document.getElementById('git-section-changes-title')).toBeTruthy() })
+    expect(document.querySelector('[data-git-changes-count]')?.textContent).toBe('0')
   })
 
   it('does not toggle section collapse when clicking the bulk stage control', async () => {
@@ -825,6 +1447,32 @@ describe('GitPanel', () => {
     expect(screen.queryByRole('dialog', { name: '确认提交' })).toBeNull()
   })
 
+  it('commit-confirm: popover sits at the submit button bottom-right', async () => {
+    mount({ tree: DIRTY_REPO })
+    await waitFor(() => { expect(screen.getByPlaceholderText('请填写提交备注信息')).toBeTruthy() })
+    fireEvent.change(screen.getByPlaceholderText('请填写提交备注信息'), { target: { value: 'ship it' } })
+    const submit = screen.getByRole('button', { name: '提交' })
+    mockAnchorRect(submit, 160, 108)
+    fireEvent.click(submit)
+    const dialog = await screen.findByRole('dialog', { name: '确认提交' })
+    expect(dialog.style.left).toBe(`${160 + CONFIRM_POPOVER_GAP}px`)
+    expect(dialog.style.top).toBe(`${108 + CONFIRM_POPOVER_GAP}px`)
+    fireEvent(window, new Event('resize'))
+    fireEvent(window, new Event('scroll'))
+    expect(dialog.style.left).toBe(`${160 + CONFIRM_POPOVER_GAP}px`)
+  })
+
+  it('push-confirm: popover sits at the push button bottom-right', async () => {
+    mount({ tree: AHEAD_REPO })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '推送' })).toBeTruthy() })
+    const push = screen.getByRole('button', { name: '推送' })
+    mockAnchorRect(push, 90, 40)
+    fireEvent.click(push)
+    const dialog = await screen.findByRole('dialog', { name: '确认推送' })
+    expect(dialog.style.left).toBe(`${90 + CONFIRM_POPOVER_GAP}px`)
+    expect(dialog.style.top).toBe(`${40 + CONFIRM_POPOVER_GAP}px`)
+  })
+
   it('push-confirm: cancel does not call Host', async () => {
     const gitPush = vi.fn(async () => CLEAN_REPO)
     mount({ tree: AHEAD_REPO, gitPush })
@@ -976,6 +1624,8 @@ describe('GitPanel', () => {
     const pushRow = screen.getByText('尚未推送到远程').closest('[data-git-push-row]')
     expect(pushRow).toBeTruthy()
     expect(within(pushRow as HTMLElement).getByRole('button', { name: '推送' })).toBeTruthy()
+    fireEvent.click(within(pushRow as HTMLElement).getByRole('button', { name: '推送' }))
+    expect(await screen.findByText('将把本地 commit 推送到远程分支 main。')).toBeTruthy()
   })
 
   it('pushes unpublished commits without staging new changes', async () => {
@@ -1027,6 +1677,37 @@ describe('GitPanel', () => {
     await waitFor(() => {
       expect((screen.getByPlaceholderText('请填写提交备注信息') as HTMLTextAreaElement).value).toBe('')
     })
+  })
+
+  it('maps a missing-remote commit-and-push failure to 没有配置远程仓库地址', async () => {
+    const gitCommit = vi.fn().mockRejectedValue(new DirectoryBrowseError({
+      code: 'git-failed',
+      message: 'fatal: No configured push destination.\nEither specify the URL from the command-line or configure a remote repository using\n\n    git remote add origin <URL>\n',
+      details: {},
+    }))
+    mount({ tree: DIRTY_REPO, gitCommit })
+    await waitFor(() => { expect(screen.getByPlaceholderText('请填写提交备注信息')).toBeTruthy() })
+    fireEvent.change(screen.getByPlaceholderText('请填写提交备注信息'), { target: { value: 'ship' } })
+    fireEvent.click(screen.getByRole('button', { name: '更多提交选项' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: '提交并推送' }))
+    confirmCommitPush()
+    await waitFor(() => { expect(screen.getByText('没有配置远程仓库地址')).toBeTruthy() })
+    expect(screen.queryByText(/fatal: No config/)).toBeNull()
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
+  })
+
+  it('maps a missing-remote standalone push failure to 没有配置远程仓库地址', async () => {
+    const gitPush = vi.fn().mockRejectedValue(new DirectoryBrowseError({
+      code: 'git-failed',
+      message: 'no remote configured',
+      details: {},
+    }))
+    mount({ tree: AHEAD_REPO, gitPush })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '推送' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '推送' }))
+    confirmPush()
+    await waitFor(() => { expect(screen.getByText('没有配置远程仓库地址')).toBeTruthy() })
+    expect(screen.queryByText('no remote configured')).toBeNull()
   })
 
   it('keeps the commit draft when hiding the Git tab', async () => {
@@ -1118,7 +1799,7 @@ describe('GitPanel', () => {
     expect(within(preview).getByText('README.md')).toBeTruthy()
     expect(within(preview).getAllByRole('button', { name: '选入提交' }).length).toBeGreaterThanOrEqual(1)
     expect(within(preview).getByRole('button', { name: '撤销更改' })).toBeTruthy()
-    expect(screen.queryByText('选择一个文件以查看差异')).toBeNull()
+    expect(screen.queryByText('选择一个文件或 Graph 中的提交以查看差异')).toBeNull()
     expect(screen.queryByRole('button', { name: '在编辑器中打开' })).toBeNull()
     expect(screen.getAllByText('README.md').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('note.md')).toBeTruthy()
@@ -1514,7 +2195,7 @@ describe('GitPanel', () => {
     await waitFor(() => { expect(within(previewPane()).getByText('keep')).toBeTruthy() })
     b.view.rerender(<GitPanel {...b.props} visible={false} />)
     b.view.rerender(<GitPanel {...b.props} visible={true} />)
-    await waitFor(() => { expect(screen.getByText('选择一个文件以查看差异')).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByText('选择一个文件或 Graph 中的提交以查看差异')).toBeTruthy() })
     expect(screen.queryByText('README.md')).toBeNull()
   })
 
@@ -1532,7 +2213,7 @@ describe('GitPanel', () => {
     await waitFor(() => { expect(within(previewPane()).getByRole('button', { name: '移出此块' })).toBeTruthy() })
     b.view.rerender(<GitPanel {...b.props} visible={false} />)
     b.view.rerender(<GitPanel {...b.props} visible={true} />)
-    await waitFor(() => { expect(screen.getByText('选择一个文件以查看差异')).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByText('选择一个文件或 Graph 中的提交以查看差异')).toBeTruthy() })
     expect(screen.queryByText('note.md')).toBeNull()
   })
 

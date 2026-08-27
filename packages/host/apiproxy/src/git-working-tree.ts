@@ -523,6 +523,21 @@ function isMissingUpstreamPushError(error: unknown): boolean {
 }
 
 /**
+ * Fail before `git push` when the repository has no remotes.
+ * @param run - command runner.
+ * @param repoRoot - absolute Git repository root.
+ * @param signal - caller lifetime.
+ */
+async function requireConfiguredRemote(
+  run: NativeCommandRunner,
+  repoRoot: string,
+  signal: AbortSignal,
+): Promise<void> {
+  const remotes = (await git(run, repoRoot, ['remote'], signal)).trim()
+  if (remotes === '') throw new GitCommandFailedError('no remote configured')
+}
+
+/**
  * Push the current branch. When upstream is unset, falls back to
  * `git push -u origin HEAD`.
  * @param run - command runner.
@@ -534,6 +549,7 @@ async function pushCurrentBranch(
   repoRoot: string,
   signal: AbortSignal,
 ): Promise<void> {
+  await requireConfiguredRemote(run, repoRoot, signal)
   try {
     await git(run, repoRoot, ['push'], signal)
   } catch (error: unknown) {
@@ -587,6 +603,7 @@ export async function commitGitIndex(
     const porcelain = await git(run, repoRoot, GIT_PORCELAIN_UNTRACKED_FILES, signal)
     const { staged } = parseWorkingTreePorcelain(porcelain, repoRoot)
     if (staged.length === 0) throw new GitCommandFailedError('nothing to commit')
+    if (push) await requireConfiguredRemote(run, repoRoot, signal)
     const commitArgs = trimmed === ''
       ? ['commit', '--allow-empty-message', '-m', '']
       : ['commit', '-m', trimmed]

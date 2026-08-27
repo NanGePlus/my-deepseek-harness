@@ -119,6 +119,8 @@ import {
 } from './list-workspace-entries.ts'
 import { readGitStatus } from './git-status.ts'
 import { inspectGitWorkingTree, initGitRepository, readGitDiffPreview, stageGitPath, unstageGitPath, discardGitPath, commitGitIndex, pushGitBranch, GitUnavailableError, AlreadyAGitRepositoryError, GitCommandFailedError, GitPathNotFoundError } from './git-working-tree.ts'
+import { GIT_LOG_DEFAULT_LIMIT, readGitLog } from './git-log.ts'
+import { readGitCommitDiff } from './git-commit-diff.ts'
 import { watchWorkspacePath } from './watch-path.ts'
 import type { WatchPathFrame } from './api/host.ts'
 import {
@@ -3279,6 +3281,54 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           return ok(request, await pushGitBranch(workspace.path, signal))
         } catch (error: unknown) {
           return gitWriteFailure(request, error, signal, 'git push was aborted')
+        }
+      },
+
+      async gitLog(request, signal) {
+        const { workspaceId, limit, skip } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await readGitLog(
+            workspace.path,
+            signal,
+            limit ?? GIT_LOG_DEFAULT_LIMIT,
+            skip ?? 0,
+          ))
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'git log was aborted', details: {} })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async gitCommitDiff(request, signal) {
+        const { workspaceId, hash } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await readGitCommitDiff(workspace.path, hash, signal))
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'git commit diff was aborted', details: {} })
+          }
+          if (error instanceof GitCommandFailedError) {
+            return err(request, { code: 'git-failed', message: error.message, details: {} })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
         }
       },
 

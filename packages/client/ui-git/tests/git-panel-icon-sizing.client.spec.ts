@@ -38,13 +38,64 @@ describe('GitPanel icon sizing and discard glyph', () => {
     const listsRule = /\.lists\s*\{([^{}]*)\}/.exec(declarationText)
     expect(listsRule).not.toBeNull()
     const listsDecls = (listsRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
-    expect(listsDecls).toContain('overflow: auto')
+    expect(listsDecls).toContain('overflow: hidden')
+
+    const bodyRule = /\.changesBody\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(bodyRule).not.toBeNull()
+    const bodyDecls = (bodyRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(bodyDecls).toContain('overflow: auto')
+    expect(bodyDecls).toContain('padding-left: 14px')
 
     const sectionRule = /\.section\s*\{([^{}]*)\}/.exec(declarationText)
     expect(sectionRule).not.toBeNull()
     const sectionDecls = (sectionRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
-    expect(sectionDecls).toContain('flex: none')
     expect(sectionDecls.some(part => part.startsWith('min-height:'))).toBe(false)
+
+    const innerSectionRule = /\.changesFiles \.section\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(innerSectionRule).not.toBeNull()
+    const innerDecls = (innerSectionRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(innerDecls).toContain('flex: none')
+  })
+
+  it('styles CHANGES/GRAPH as folder chrome and pins Graph while Changes is open', () => {
+    const titleRule = /\.folderTitle\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(titleRule).not.toBeNull()
+    const titleDecls = (titleRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(titleDecls).toContain('font-size: 13px')
+    expect(titleDecls).toContain('font-weight: 700')
+    expect(titleDecls).toContain('text-transform: uppercase')
+
+    const graphRule = /\.graphFolder\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(graphRule).not.toBeNull()
+    const graphDecls = (graphRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(graphDecls).toContain('max-height: 48%')
+    expect(graphDecls).toContain('margin-top: auto')
+
+    const graphListRule = /\.graphList\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(graphListRule).not.toBeNull()
+    const graphListDecls = (graphListRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(graphListDecls).toContain('padding-left: 14px')
+
+    const graphRowRule = /\.graphRow\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(graphRowRule).not.toBeNull()
+    const graphRowDecls = (graphRowRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(graphRowDecls).toContain('flex-direction: column')
+    expect(graphRowDecls).toContain('flex: none')
+
+    const refsRule = /\.graphRefs\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(refsRule).not.toBeNull()
+    const refsDecls = (refsRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(refsDecls).toContain('justify-content: flex-end')
+
+    const canvasRule = /\.graphCanvas\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(canvasRule).not.toBeNull()
+    const canvasDecls = (canvasRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(canvasDecls).toContain('left: 14px')
+
+    const opsRule = /\.ops\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(opsRule).not.toBeNull()
+    const opsDecls = (opsRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(opsDecls).toContain('padding: 4px 8px 8px')
   })
 
   it('sizes row and gutter icon buttons smaller than section actions', () => {
