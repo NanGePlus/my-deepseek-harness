@@ -76,6 +76,17 @@ describe('GitPanel icon sizing and discard glyph', () => {
     const graphListDecls = (graphListRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
     expect(graphListDecls).toContain('padding-left: 14px')
 
+    const graphRowRule = /\.graphRow\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(graphRowRule).not.toBeNull()
+    const graphRowDecls = (graphRowRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(graphRowDecls).toContain('flex-direction: column')
+    expect(graphRowDecls).toContain('flex: none')
+
+    const refsRule = /\.graphRefs\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(refsRule).not.toBeNull()
+    const refsDecls = (refsRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(refsDecls).toContain('justify-content: flex-end')
+
     const canvasRule = /\.graphCanvas\s*\{([^{}]*)\}/.exec(declarationText)
     expect(canvasRule).not.toBeNull()
     const canvasDecls = (canvasRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)

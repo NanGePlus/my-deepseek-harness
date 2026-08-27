@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-27-git-graph-compact-ref-pills.md
-2026-08-27-git-graph-compact-ref-pills.md: 87256e45305dab49eec8d905bd77bcc9d0174471
-2026-08-27-git-graph-compact-ref-pills.zh.md: b3095f57a7a6b6fc5de50d4104e3efd6937c9d0d
+2026-08-27-git-graph-compact-ref-pills.md: c3b36ea868a00fc36b5833db12e8e660c323b743
+2026-08-27-git-graph-compact-ref-pills.zh.md: 4b580d87878a284efc9c55b8105b6f19a629bb76

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  gitGraphEdgePath, gitGraphRowGutterWidth, gitGraphSvgWidth, GIT_GRAPH_ARC_PAD, GIT_GRAPH_LANE_WIDTH,
+  gitGraphColumnHeight, gitGraphEdgePath, gitGraphNodeY, gitGraphRowGutterWidth, gitGraphRowHeight,
+  gitGraphRowTops, gitGraphSvgWidth, GIT_GRAPH_ARC_PAD, GIT_GRAPH_LANE_WIDTH, GIT_GRAPH_REF_LINE_HEIGHT,
   GIT_GRAPH_ROW_HEIGHT, laneCenterX, layoutGitGraph,
 } from '../src/client/git-graph-layout.ts'
 import type { GitLogEntry } from '@deepseek-ai/dsh-client-runtime/client'
@@ -111,6 +112,22 @@ describe('gitGraphEdgePath', () => {
     expect(d).toContain(`C ${String(outerX)}`)
     expect(d).not.toContain(' L ')
     expect(d).not.toContain(String(outerX + GIT_GRAPH_LANE_WIDTH * 0.75))
+  })
+
+  it('keeps node Y on the subject line when a later row grows for pills', () => {
+    const tops = gitGraphRowTops([2, 0])
+    expect(tops).toEqual([0, GIT_GRAPH_ROW_HEIGHT + GIT_GRAPH_REF_LINE_HEIGHT])
+    expect(gitGraphRowHeight(0)).toBe(GIT_GRAPH_ROW_HEIGHT)
+    expect(gitGraphRowHeight(1)).toBe(GIT_GRAPH_ROW_HEIGHT + GIT_GRAPH_REF_LINE_HEIGHT)
+    expect(gitGraphColumnHeight([2, 0])).toBe(GIT_GRAPH_ROW_HEIGHT * 2 + GIT_GRAPH_REF_LINE_HEIGHT)
+    const d = gitGraphEdgePath(
+      { fromRow: 0, fromLane: 0, toRow: 1, toLane: 0, colorIndex: 0 },
+      tops,
+    )
+    expect(d).toContain(` ${String(gitGraphNodeY(0, tops))} `)
+    expect(d).toContain(` ${String(gitGraphNodeY(1, tops))}`)
+    expect(gitGraphNodeY(0, tops)).toBe(GIT_GRAPH_ROW_HEIGHT / 2)
+    expect(gitGraphNodeY(1, tops)).toBe(GIT_GRAPH_ROW_HEIGHT + GIT_GRAPH_REF_LINE_HEIGHT + GIT_GRAPH_ROW_HEIGHT / 2)
   })
 
   it('pads SVG width so the outward bulge is not clipped', () => {

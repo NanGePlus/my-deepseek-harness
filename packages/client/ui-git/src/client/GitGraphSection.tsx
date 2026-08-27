@@ -6,8 +6,8 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GitLogEntry } from '@deepseek-ai/dsh-client-runtime/client'
 import {
-  GIT_GRAPH_LANE_COLORS, gitGraphEdgePath, gitGraphRowGutterWidth, gitGraphSvgWidth, laneCenterX, layoutGitGraph,
-  GIT_GRAPH_ROW_HEIGHT,
+  GIT_GRAPH_LANE_COLORS, gitGraphColumnHeight, gitGraphEdgePath, gitGraphNodeY, gitGraphRowGutterWidth,
+  gitGraphSvgWidth, gitGraphRowTops, laneCenterX, layoutGitGraph,
 } from './git-graph-layout.ts'
 import {
   formatAbsoluteCommitDate, formatRelativeCommitAge, GIT_GRAPH_CARD_HIDE_MS, gitGraphCardPosition,
@@ -133,7 +133,9 @@ export function GitGraphSection({
   const { rows, edges } = layout
   const columnLanes = Math.max(1, ...rows.map(row => row.laneCount))
   const svgWidth = gitGraphSvgWidth(columnLanes)
-  const svgHeight = rows.length * GIT_GRAPH_ROW_HEIGHT
+  const refCounts = rows.map(row => row.entry.refs.length)
+  const rowTops = gitGraphRowTops(refCounts)
+  const svgHeight = gitGraphColumnHeight(refCounts)
 
   return (
     <section className={`${css.section} ${css.folder} ${css.graphFolder}`} data-git-graph="">
@@ -187,7 +189,7 @@ export function GitGraphSection({
                 <path
                   key={index}
                   className={css.graphStroke}
-                  d={gitGraphEdgePath(edge)}
+                  d={gitGraphEdgePath(edge, rowTops)}
                   stroke={GIT_GRAPH_LANE_COLORS[edge.colorIndex % GIT_GRAPH_LANE_COLORS.length]}
                   data-git-graph-color={edge.colorIndex}
                 />
@@ -199,7 +201,7 @@ export function GitGraphSection({
                     <circle
                       className={row.isMerge ? css.graphNodeMerge : css.graphNodeSolid}
                       cx={laneCenterX(row.nodeLane)}
-                      cy={index * GIT_GRAPH_ROW_HEIGHT + GIT_GRAPH_ROW_HEIGHT / 2}
+                      cy={gitGraphNodeY(index, rowTops)}
                       r={row.isMerge ? 5 : 3.5}
                       stroke={nodeColor}
                       fill={row.isMerge ? undefined : nodeColor}
@@ -208,7 +210,7 @@ export function GitGraphSection({
                       <circle
                         className={css.graphNodeMergeDot}
                         cx={laneCenterX(row.nodeLane)}
-                        cy={index * GIT_GRAPH_ROW_HEIGHT + GIT_GRAPH_ROW_HEIGHT / 2}
+                        cy={gitGraphNodeY(index, rowTops)}
                         r={1.75}
                         fill={nodeColor}
                       />
@@ -230,32 +232,39 @@ export function GitGraphSection({
                 data-selected={selected ? true : undefined}
                 data-git-graph-merge={isMerge ? true : undefined}
                 data-git-graph-lane={String(row.nodeLane)}
+                data-git-graph-has-refs={entry.refs.length > 0 ? true : undefined}
                 aria-label={t('git.graph.commit', { subject: entry.subject })}
                 aria-pressed={selected}
                 onClick={() => { onSelect(entry.hash) }}
               >
-                <span
-                  className={css.graphGutter}
-                  data-git-graph-gutter=""
-                  style={{ width: gutterWidth }}
-                />
-                <span className={css.graphBody}>
-                  <span className={css.graphSubject}>{entry.subject}</span>
-                  {entry.refs.map(ref => (
-                    <span
-                      key={ref}
-                      className={css.graphRefHit}
-                      data-git-graph-ref={ref}
-                      onMouseEnter={(event) => { openCard(event.currentTarget, entry, ref) }}
-                      onMouseLeave={scheduleHide}
-                    >
-                      <GitGraphRefChip refName={ref} compact />
-                    </span>
-                  ))}
+                <span className={css.graphPrimary}>
+                  <span
+                    className={css.graphGutter}
+                    data-git-graph-gutter=""
+                    style={{ width: gutterWidth }}
+                  />
+                  <span className={css.graphBody}>
+                    <span className={css.graphSubject}>{entry.subject}</span>
+                  </span>
+                  <span className={css.graphAuthor} aria-label={t('git.graph.author', { author: entry.authorName })}>
+                    {entry.authorName}
+                  </span>
                 </span>
-                <span className={css.graphAuthor} aria-label={t('git.graph.author', { author: entry.authorName })}>
-                  {entry.authorName}
-                </span>
+                {entry.refs.length > 0 && (
+                  <span className={css.graphRefs} data-git-graph-refs="">
+                    {entry.refs.map(ref => (
+                      <span
+                        key={ref}
+                        className={css.graphRefHit}
+                        data-git-graph-ref={ref}
+                        onMouseEnter={(event) => { openCard(event.currentTarget, entry, ref) }}
+                        onMouseLeave={scheduleHide}
+                      >
+                        <GitGraphRefChip refName={ref} compact />
+                      </span>
+                    ))}
+                  </span>
+                )}
               </button>
             )
           })}

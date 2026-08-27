@@ -11,8 +11,11 @@ export const GIT_GRAPH_LANE_WIDTH = 18
 /** Extra SVG width so lane strokes are not clipped. */
 export const GIT_GRAPH_ARC_PAD = 8
 
-/** Commit row height, in CSS pixels. */
+/** Commit subject/author line height, in CSS pixels. */
 export const GIT_GRAPH_ROW_HEIGHT = 24
+
+/** Extra row height when the commit has ref pills on a second line. */
+export const GIT_GRAPH_REF_LINE_HEIGHT = 16
 
 /** Lane stroke colors aligned with VS Code Git Graph accents. */
 export const GIT_GRAPH_LANE_COLORS = [
@@ -98,16 +101,63 @@ export function gitGraphRowGutterWidth(
  * SVG path from one commit node to a parent node.
  * Same-lane edges are vertical; cross-lane edges bend right using control
  * points on the outer lane so the side-branch node sits on the arc.
+ * Node Y stays on the subject line even when the row grows for ref pills.
  * @param edge - row/lane endpoints.
+ * @param rowTops - CSS pixel Y of each row's top; omit for uniform 24px rows.
+ * @returns SVG path `d` from child node to parent node.
  */
-export function gitGraphEdgePath(edge: GitGraphEdge): string {
+export function gitGraphEdgePath(edge: GitGraphEdge, rowTops?: readonly number[]): string {
   const x1 = laneCenterX(edge.fromLane)
   const x2 = laneCenterX(edge.toLane)
-  const y1 = edge.fromRow * GIT_GRAPH_ROW_HEIGHT + GIT_GRAPH_ROW_HEIGHT / 2
-  const y2 = edge.toRow * GIT_GRAPH_ROW_HEIGHT + GIT_GRAPH_ROW_HEIGHT / 2
+  const y1 = gitGraphNodeY(edge.fromRow, rowTops)
+  const y2 = gitGraphNodeY(edge.toRow, rowTops)
   if (edge.fromLane === edge.toLane) return `M ${String(x1)} ${String(y1)} L ${String(x2)} ${String(y2)}`
   const outerX = Math.max(x1, x2)
   return `M ${String(x1)} ${String(y1)} C ${String(outerX)} ${String(y1)}, ${String(outerX)} ${String(y2)}, ${String(x2)} ${String(y2)}`
+}
+
+/**
+ * Pixel height of one commit row, including a second line when it has refs.
+ * @param refCount - number of branch/tag pills on this commit.
+ * @returns CSS pixel height of that row.
+ */
+export function gitGraphRowHeight(refCount: number): number {
+  return GIT_GRAPH_ROW_HEIGHT + (refCount > 0 ? GIT_GRAPH_REF_LINE_HEIGHT : 0)
+}
+
+/**
+ * Top Y of each row when some rows grow for right-aligned ref pills.
+ * @param refCounts - pill count per row, in list order.
+ * @returns top Y of each row in CSS pixels.
+ */
+export function gitGraphRowTops(refCounts: readonly number[]): number[] {
+  const tops: number[] = []
+  let y = 0
+  for (const count of refCounts) {
+    tops.push(y)
+    y += gitGraphRowHeight(count)
+  }
+  return tops
+}
+
+/**
+ * Y of a commit node: vertical center of that row's subject line.
+ * @param rowIndex - index in {@link GitGraphLayout.rows}.
+ * @param rowTops - CSS pixel Y of each row's top; omit for uniform 24px rows.
+ * @returns CSS pixel Y of the node center.
+ */
+export function gitGraphNodeY(rowIndex: number, rowTops?: readonly number[]): number {
+  const top = rowTops?.[rowIndex] ?? rowIndex * GIT_GRAPH_ROW_HEIGHT
+  return top + GIT_GRAPH_ROW_HEIGHT / 2
+}
+
+/**
+ * SVG height covering every row, including extra pill lines.
+ * @param refCounts - pill count per row, in list order.
+ * @returns total CSS pixel height of the column.
+ */
+export function gitGraphColumnHeight(refCounts: readonly number[]): number {
+  return refCounts.reduce((sum, count) => sum + gitGraphRowHeight(count), 0)
 }
 
 function takeLane(occupied: (string | null)[]): number {

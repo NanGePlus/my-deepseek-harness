@@ -1137,13 +1137,13 @@
 
 .graphRow {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
   width: 100%;
   box-sizing: border-box;
-  height: 24px;
   min-height: 24px;
-  max-height: 24px;
   overflow: hidden;
   padding: 0 4px 0 0;
   border: none;
@@ -1153,7 +1153,29 @@
   cursor: pointer;
   position: relative;
   z-index: 1;
-  line-height: 24px;
+}
+
+.graphPrimary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+}
+
+.graphRefs {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 16px;
+  min-height: 16px;
+  padding: 0 0 2px;
+  min-width: 0;
 }
 
 .graphRow:hover {

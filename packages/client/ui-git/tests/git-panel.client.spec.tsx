@@ -453,6 +453,43 @@ describe('GitPanel', () => {
     expect(card.querySelector('time')?.getAttribute('dateTime')).toBe(LOG_DATE)
   })
 
+  it('graph: ref pills sit on a second line, right of the subject, not beside the author', async () => {
+    mount({
+      tree: CLEAN_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [
+          logEntry({
+            hash: 'm'.repeat(40), shortHash: 'merge01', subject: 'Merge feature',
+            refs: ['origin/issue/54-host-git-rpc-workspace', 'issue/54-host-git-rpc-workspace'],
+          }),
+          logEntry({
+            hash: 'a'.repeat(40), shortHash: 'main001', subject: 'plain tip',
+          }),
+        ],
+        hasMore: false,
+      })),
+    })
+    await waitFor(() => { expect(screen.getByText('Merge feature')).toBeTruthy() })
+    const tagged = screen.getByRole('button', { name: '提交 Merge feature' })
+    const refs = tagged.querySelector('[data-git-graph-refs]')
+    const subject = tagged.querySelector('[class*="graphSubject"]')
+    const author = tagged.querySelector('[class*="graphAuthor"]')
+    expect(refs).toBeTruthy()
+    expect(subject).toBeTruthy()
+    expect(author).toBeTruthy()
+    expect(tagged.getAttribute('data-git-graph-has-refs')).toBe('true')
+    expect(refs!.querySelector('[data-git-graph-ref="origin/issue/54-host-git-rpc-workspace"]')).toBeTruthy()
+    expect(refs!.querySelector('[data-git-graph-ref="issue/54-host-git-rpc-workspace"]')).toBeTruthy()
+    expect(subject!.compareDocumentPosition(refs!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(author!.compareDocumentPosition(refs!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(subject!.closest('[class*="graphPrimary"]')?.contains(refs)).toBe(false)
+    const plain = screen.getByRole('button', { name: '提交 plain tip' })
+    expect(plain.querySelector('[data-git-graph-refs]')).toBeNull()
+    expect(plain.getAttribute('data-git-graph-has-refs')).toBeNull()
+  })
+
   it('graph: a local ref pill hover card omits empty body and date', async () => {
     mount({
       tree: CLEAN_REPO,
