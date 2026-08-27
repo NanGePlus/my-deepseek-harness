@@ -17,4 +17,12 @@ describe('GitPanel icon button tooltips', () => {
     expect(gitPanelSource).toContain("t('git.push.hintAhead'")
     expect(gitPanelSource).toContain("t('git.push.hintUnpublished'")
   })
+
+  it('keeps the push Tooltip outside pushButtonShell so the bubble can paint over the commit field', () => {
+    const start = gitPanelSource.indexOf('data-git-push-row')
+    expect(start).toBeGreaterThan(-1)
+    const chunk = gitPanelSource.slice(start, start + 1800)
+    expect(chunk.indexOf('<Tooltip')).toBeGreaterThan(-1)
+    expect(chunk.indexOf('<Tooltip')).toBeLessThan(chunk.indexOf('css.pushButtonShell'))
+  })
 })

@@ -762,8 +762,9 @@ function renderRepository(
   } = body
   const stagedEmpty = tree.staged.length === 0
   const stagedDirty = tree.staged.some(row => body.dirtyPaths.includes(row.absolutePath))
-  const commitDisabled = stagedEmpty || commitPending !== false || body.pathWriting || stagedDirty
-  const pushDisabled = !tree.pushAvailable || pushPending || commitPending !== false || body.pathWriting
+  const commitDisabled = stagedEmpty || commitPending !== false || stagedDirty
+  const pushDisabled = !tree.pushAvailable || pushPending || commitPending !== false
+  const pushFeedbackVisible = toolbarFeedback !== null && toolbarFeedback.action === 'push' && !pushPending
   const opsClass = body.opsWidthPx !== null ? `${css.ops} ${css.opsResized}` : css.ops
   return (
     <div
@@ -783,13 +784,46 @@ function renderRepository(
         <div className={css.branchRow}>
           <div className={css.branch}>
             {t('git.branch', { name: tree.branch })}
-            {tree.ahead !== undefined && tree.ahead > 0 && (
-              <span className={css.branchAhead}>{t('git.branch.ahead', { count: tree.ahead })}</span>
-            )}
-            {tree.pushAvailable && tree.ahead === undefined && (
-              <span className={css.branchAhead}>{t('git.branch.unpublished')}</span>
-            )}
           </div>
+          {(tree.pushAvailable || pushFeedbackVisible) && (
+            <div className={css.pushRow} data-git-push-row="true">
+              {tree.pushAvailable && (
+                <>
+                  <span className={css.branchAhead}>
+                    {tree.ahead !== undefined && tree.ahead > 0
+                      ? t('git.branch.ahead', { count: tree.ahead })
+                      : t('git.branch.unpublished')}
+                  </span>
+                  <Tooltip
+                    label={
+                      tree.ahead !== undefined && tree.ahead > 0
+                        ? t('git.push.hintAhead', { count: tree.ahead, branch: tree.branch })
+                        : t('git.push.hintUnpublished', { branch: tree.branch })
+                    }
+                    side="bottom"
+                    delayMs={ICON_TOOLTIP_DELAY_MS}
+                    disabled={pushPending || commitPending !== false}
+                  >
+                    <div className={css.pushButtonShell} data-pending={pushPending ? true : undefined}>
+                      <button
+                        type="button"
+                        className={css.pushButton}
+                        disabled={pushDisabled}
+                        aria-busy={pushPending || undefined}
+                        aria-label={t('git.push')}
+                        onClick={body.onAskPush}
+                      >
+                        {t('git.push')}
+                      </button>
+                    </div>
+                  </Tooltip>
+                </>
+              )}
+              {pushFeedbackVisible && toolbarFeedback !== null && (
+                <ToolbarFeedbackView feedback={toolbarFeedback} t={t} />
+              )}
+            </div>
+          )}
         </div>
         <CommitMessageInput
           className={css.commitInput ?? ''}
@@ -815,34 +849,6 @@ function renderRepository(
               t={t}
               onRetryCommit={toolbarFeedback.kind === 'error' ? body.onRetryCommit : undefined}
             />
-          )}
-          {tree.pushAvailable && (
-            <div className={css.pushButtonShell} data-pending={pushPending ? true : undefined}>
-              <Tooltip
-                label={
-                  tree.ahead !== undefined && tree.ahead > 0
-                    ? t('git.push.hintAhead', { count: tree.ahead, branch: tree.branch })
-                    : t('git.push.hintUnpublished', { branch: tree.branch })
-                }
-                side="bottom"
-                delayMs={ICON_TOOLTIP_DELAY_MS}
-                disabled={pushPending || commitPending !== false || body.pathWriting}
-              >
-                <button
-                  type="button"
-                  className={css.pushButton}
-                  disabled={pushDisabled}
-                  aria-busy={pushPending || undefined}
-                  aria-label={t('git.push')}
-                  onClick={body.onAskPush}
-                >
-                  {t('git.push')}
-                </button>
-              </Tooltip>
-            </div>
-          )}
-          {toolbarFeedback !== null && toolbarFeedback.action === 'push' && !pushPending && (
-            <ToolbarFeedbackView feedback={toolbarFeedback} t={t} />
           )}
         </div>
         {writeError !== null && (

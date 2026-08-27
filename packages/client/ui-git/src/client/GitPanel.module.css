@@ -150,20 +150,31 @@
 }
 
 .branchRow {
+  display: flex;
   flex: none;
+  flex-direction: column;
+  gap: 4px;
   min-width: 0;
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .branch {
   flex: none;
-  font-family: var(--dsw-font-family);
-  font-size: 12px;
-  line-height: 16px;
   color: var(--dsw-alias-label-caption);
 }
 
+.pushRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .branchAhead {
-  margin-left: 4px;
+  flex: 1;
+  min-width: 0;
   color: var(--dsw-alias-state-business-primary);
 }
 
@@ -232,6 +243,9 @@
   display: inline-flex;
   flex: none;
   border-radius: 14px;
+  /* isolation contains the pending-border z-index. Tooltip must wrap this
+     node, not sit inside it: otherwise the bubble cannot paint over
+     .commitInputShell. */
 }
 
 .commitInputShell[data-pending]::before,

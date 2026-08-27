@@ -98,6 +98,11 @@ const AHEAD_REPO: GitWorkingTreeResult = {
   pushAvailable: true,
 }
 
+const UNPUBLISHED_REPO: GitWorkingTreeResult = {
+  ...CLEAN_REPO,
+  pushAvailable: true,
+}
+
 const DIRTY_REPO: GitWorkingTreeResult = {
   availability: 'repository',
   repoRoot: '/repos/app',
@@ -293,6 +298,9 @@ describe('GitPanel', () => {
     expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(true)
     expect(screen.getByText('选择一个文件以查看差异')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '初始化仓库' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '推送' })).toBeNull()
+    expect(screen.queryByText('有 2 个提交尚未推送')).toBeNull()
+    expect(screen.queryByText('尚未推送到远程')).toBeNull()
   })
 
   it('default: binds the Session Workspace, lists both sides, and shows a detached HEAD', async () => {
@@ -684,6 +692,48 @@ describe('GitPanel', () => {
     await act(async () => { settle(DIRTY_REPO) })
   })
 
+  it('path-write-in-progress: keeps 提交 enabled while staging so the primary button does not flash', async () => {
+    let settle!: (tree: GitWorkingTreeResult) => void
+    const gitStage = vi.fn(() => new Promise<GitWorkingTreeResult>((resolve) => { settle = resolve }))
+    mount({ tree: DIRTY_REPO, gitStage })
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(false)
+    })
+    fireEvent.click(within(rowOf('README.md')).getByRole('button', { name: '选入提交' }))
+    await waitFor(() => {
+      expect(within(rowOf('README.md')).getByRole('status', { name: '正在选入…' })).toBeTruthy()
+    })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(false)
+    await act(async () => { settle(DIRTY_REPO) })
+  })
+
+  it('path-write-in-progress: keeps 提交 enabled while unstaging', async () => {
+    let settle!: (tree: GitWorkingTreeResult) => void
+    const gitUnstage = vi.fn(() => new Promise<GitWorkingTreeResult>((resolve) => { settle = resolve }))
+    mount({ tree: DIRTY_REPO, gitUnstage })
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(false)
+    })
+    fireEvent.click(within(rowOf('docs/note.md')).getByRole('button', { name: '移出提交' }))
+    await waitFor(() => { expect(gitUnstage).toHaveBeenCalled() })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(false)
+    await act(async () => { settle(DIRTY_REPO) })
+  })
+
+  it('path-write-in-progress: keeps 提交 enabled while discarding', async () => {
+    let settle!: (tree: GitWorkingTreeResult) => void
+    const gitDiscard = vi.fn(() => new Promise<GitWorkingTreeResult>((resolve) => { settle = resolve }))
+    mount({ tree: DIRTY_REPO, gitDiscard })
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(false)
+    })
+    fireEvent.click(within(rowOf('README.md')).getByRole('button', { name: '撤销更改' }))
+    fireEvent.click(screen.getByRole('button', { name: '确认撤销' }))
+    await waitFor(() => { expect(gitDiscard).toHaveBeenCalled() })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '提交' }).disabled).toBe(false)
+    await act(async () => { settle(DIRTY_REPO) })
+  })
+
   it('discard-confirm: tracked modification copy, cancel does not call Host', async () => {
     const gitDiscard = vi.fn(async () => CLEAN_REPO)
     mount({ tree: DISCARD_REPO, gitDiscard })
@@ -911,10 +961,21 @@ describe('GitPanel', () => {
     await waitFor(() => { expect(screen.getByText('提交并推送成功')).toBeTruthy() })
   })
 
-  it('shows ahead count and a push button for unpublished commits', async () => {
+  it('shows unpushed copy and a push button on a row below the branch', async () => {
     mount({ tree: AHEAD_REPO })
-    await waitFor(() => { expect(screen.getByText('· 领先 2')).toBeTruthy() })
-    expect(screen.getByRole('button', { name: '推送' })).toBeTruthy()
+    await waitFor(() => { expect(screen.getByText('提交到分支 main')).toBeTruthy() })
+    const pushRow = screen.getByText('有 2 个提交尚未推送').closest('[data-git-push-row]')
+    expect(pushRow).toBeTruthy()
+    expect(within(pushRow as HTMLElement).getByRole('button', { name: '推送' })).toBeTruthy()
+    expect(screen.getByText('提交到分支 main').closest('[data-git-push-row]')).toBeNull()
+  })
+
+  it('shows unpublished copy and a push button when the branch has never been pushed', async () => {
+    mount({ tree: UNPUBLISHED_REPO })
+    await waitFor(() => { expect(screen.getByText('尚未推送到远程')).toBeTruthy() })
+    const pushRow = screen.getByText('尚未推送到远程').closest('[data-git-push-row]')
+    expect(pushRow).toBeTruthy()
+    expect(within(pushRow as HTMLElement).getByRole('button', { name: '推送' })).toBeTruthy()
   })
 
   it('pushes unpublished commits without staging new changes', async () => {

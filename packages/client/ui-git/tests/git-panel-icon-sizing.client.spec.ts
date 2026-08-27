@@ -21,6 +21,19 @@ describe('GitPanel icon sizing and discard glyph', () => {
     expect(gitPanelSource).toContain('<IconDiscardOutline16 size={ROW_ACTION_ICON_SIZE} />')
   })
 
+  it('stacks the unpushed copy and push button under the branch line', () => {
+    const branchRowRule = /\.branchRow\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(branchRowRule).not.toBeNull()
+    const branchRowDecls = (branchRowRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(branchRowDecls).toContain('flex-direction: column')
+
+    const pushRowRule = /\.pushRow\s*\{([^{}]*)\}/.exec(declarationText)
+    expect(pushRowRule).not.toBeNull()
+    const pushRowDecls = (pushRowRule![1] ?? '').split(';').map(part => part.trim()).filter(Boolean)
+    expect(pushRowDecls).toContain('display: flex')
+    expect(pushRowDecls).toContain('align-items: center')
+  })
+
   it('keeps each change section at content height so a long unstaged list pushes 待提交 down', () => {
     const listsRule = /\.lists\s*\{([^{}]*)\}/.exec(declarationText)
     expect(listsRule).not.toBeNull()
