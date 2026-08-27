@@ -21,6 +21,7 @@ async function bench() {
     gitDiscard: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitCommit: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitPush: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
+    gitLog: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
   }
   ctx.provide('workspaces', workspaces)
   slots.register({

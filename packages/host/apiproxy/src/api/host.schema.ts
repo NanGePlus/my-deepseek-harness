@@ -4,7 +4,7 @@
 
 import { z } from 'zod'
 import type {
-  DirectoryEntry, GitStatusEntry, GitWorkingTreeChange, GitDiffLine, GitDiffHunk, WorkspaceEntry, FileTextRead, FileBytesRead,
+  DirectoryEntry, GitStatusEntry, GitWorkingTreeChange, GitLogEntry, GitDiffLine, GitDiffHunk, WorkspaceEntry, FileTextRead, FileBytesRead,
 } from './host.ts'
 import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
@@ -217,6 +217,37 @@ export const hostGitPushRequestSchema = z.object({
 
 /** host.gitPush response value (refreshed working tree). */
 export const hostGitPushValueSchema = hostGitWorkingTreeValueSchema satisfies z.ZodType<Wire<ResponseValue<'host.gitPush'>>>
+
+/** One commit row of host.gitLog. */
+export const gitLogEntrySchema = z.object({
+  hash: z.string(),
+  shortHash: z.string(),
+  parents: z.array(z.string()),
+  subject: z.string(),
+  authorName: z.string(),
+  authorDate: z.string(),
+  body: z.string(),
+  refs: z.array(z.string()),
+}) satisfies z.ZodType<Wire<GitLogEntry>>
+
+/** host.gitLog request payload. */
+export const hostGitLogRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  limit: z.number().int().positive().max(200).optional(),
+  skip: z.number().int().nonnegative().optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.gitLog'>>>
+
+/** host.gitLog response value. */
+export const hostGitLogValueSchema = z.discriminatedUnion('availability', [
+  z.object({ availability: z.literal('git-unavailable') }),
+  z.object({ availability: z.literal('not-a-repository') }),
+  z.object({
+    availability: z.literal('repository'),
+    repoRoot: z.string(),
+    commits: z.array(gitLogEntrySchema),
+    hasMore: z.boolean(),
+  }),
+]) satisfies z.ZodType<Wire<ResponseValue<'host.gitLog'>>>
 
 /** host.readFile request payload. */
 export const hostReadFileRequestSchema = z.object({

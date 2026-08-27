@@ -9,7 +9,7 @@
 import type {
   DirectoryListing, GitStatusListing, SessionId, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
-  GitWorkingTreeResult, GitInitResult, GitDiffSide, GitDiffPreview,
+  GitWorkingTreeResult, GitInitResult, GitLogResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceListState } from '../workspaces/service.ts'
@@ -166,6 +166,18 @@ export interface IWorkspaces {
     workspaceId: WorkspaceId,
     signal?: AbortSignal,
   ): Promise<GitWorkingTreeResult>
+  /**
+   * Read one page of commit history for the Git repository discovered from a registered Workspace.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param query - optional page size and skip from the newest end of history.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns commit rows or availability discriminants.
+   */
+  gitLog(
+    workspaceId: WorkspaceId,
+    query?: { limit?: number; skip?: number },
+    signal?: AbortSignal,
+  ): Promise<GitLogResult>
   /**
    * Read one file inside a registered Workspace.
    * @param workspaceId - Workspace whose root bounds the path.

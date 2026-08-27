@@ -12,7 +12,7 @@ import {
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
-  GitDiffLine, GitDiffPreview, GitDiffSide, GitInitResult, GitWorkingTreeChange,
+  GitDiffLine, GitDiffPreview, GitDiffSide, GitInitResult, GitLogEntry, GitLogResult, GitWorkingTreeChange,
   GitWorkingTreeResult, WorkspaceId,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
@@ -26,6 +26,7 @@ import { useDiffSyntaxHighlights } from './diff-syntax-highlight.ts'
 import { mergeLineHighlight } from './merge-line-highlight.ts'
 import { clampOpsWidth, OPS_WIDTH_DEFAULT } from './git-panel-layout.ts'
 import { GitSplitHandle } from './GitSplitHandle.tsx'
+import { GitGraphSection } from './GitGraphSection.tsx'
 import type { createGitPanelStore } from './stores.ts'
 import css from './GitPanel.module.css'
 
@@ -33,6 +34,8 @@ const ICON_TOOLTIP_DELAY_MS = 500
 const ROW_ACTION_ICON_SIZE = 12
 const ACTION_ICON_SIZE = 12
 const TOOLBAR_FEEDBACK_DISMISS_MS = 4000
+/** Commits fetched per Graph page; matches Host `GIT_LOG_DEFAULT_LIMIT`. */
+export const GIT_GRAPH_PAGE_SIZE = 50
 
 type ToolbarAction = 'commit' | 'commitPush' | 'push'
 
@@ -125,6 +128,18 @@ export interface GitPanelInjected {
    * @returns the refreshed working tree.
    */
   gitPush: (workspaceId: WorkspaceId, signal?: AbortSignal) => Promise<GitWorkingTreeResult>
+  /**
+   * Read one page of commit history for the discovered repository.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param query - optional page size and skip from the newest end of history.
+   * @param signal - aborts a superseded read.
+   * @returns commit rows or availability discriminants.
+   */
+  gitLog: (
+    workspaceId: WorkspaceId,
+    query?: { limit?: number; skip?: number },
+    signal?: AbortSignal,
+  ) => Promise<GitLogResult>
 }
 
 /** Full Git-panel props: runtime share, locale, store, visibility, and Host Git callbacks. */
@@ -152,6 +167,12 @@ type PreviewState =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'ready'; preview: GitDiffPreview }
+  | { kind: 'error'; message: string }
+
+type LogViewState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'ready'; commits: readonly GitLogEntry[]; hasMore: boolean; loadingMore: boolean }
   | { kind: 'error'; message: string }
 
 interface DiscardTarget {
@@ -299,13 +320,13 @@ function CommitSplitButton({ t, disabled, onAskCommit }: {
 }
 
 /**
- * Git panel body: branch, commit message, two change lists, and in-panel diff preview.
+ * Git panel body: collapsible Changes (branch, commit, two lists) and Graph, plus in-panel diff preview.
  * @param props - root runtime share, locale, draft store, visibility, and Host Git callbacks.
  * @returns the Git panel surface.
  */
 export function GitPanel({
   t, visible, dirtyPaths, notifyDiskPathsChanged, useSessions, useWorkspaces, useStore, actions,
-  gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit, gitPush,
+  gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit, gitPush, gitLog,
 }: GitPanelProps) {
   const currentSessionId = useSessions(state => state.current)
   const workspace = useWorkspaces(state =>
@@ -334,9 +355,14 @@ export function GitPanel({
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [preview, setPreview] = useState<PreviewState>({ kind: 'idle' })
+  const [logView, setLogView] = useState<LogViewState>({ kind: 'idle' })
+  const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null)
   const [opsWidthPx, setOpsWidthPx] = useState<number | null>(null)
   const [opsDragging, setOpsDragging] = useState(false)
   const splitRef = useRef<HTMLDivElement>(null)
+  const logViewRef = useRef(logView)
+  logViewRef.current = logView
+  const loadingMoreLockRef = useRef(false)
   const opsDragBase = useRef(0)
 
   const beginOpsResize = useCallback(() => {
@@ -407,6 +433,86 @@ export function GitPanel({
     })
     return () => { ac.abort() }
   }, [visible, workspaceId, gitWorkingTree, reloadEpoch])
+
+  useEffect(() => {
+    if (!visible || workspaceId === undefined) return
+    const tree = view.kind === 'ready' || view.kind === 'refreshing' ? view.tree : null
+    if (tree?.availability !== 'repository') {
+      setLogView({ kind: 'idle' })
+      setSelectedCommitHash(null)
+      return
+    }
+    const ac = new AbortController()
+    loadingMoreLockRef.current = false
+    setLogView({ kind: 'loading' })
+    void gitLog(workspaceId, { limit: GIT_GRAPH_PAGE_SIZE }, ac.signal).then((log) => {
+      if (ac.signal.aborted) return
+      if (log.availability !== 'repository') {
+        setLogView({ kind: 'idle' })
+        return
+      }
+      setLogView({
+        kind: 'ready',
+        commits: log.commits,
+        hasMore: log.hasMore,
+        loadingMore: false,
+      })
+      setSelectedCommitHash((current) => {
+        if (current !== null && log.commits.some(entry => entry.hash === current)) return current
+        return log.commits[0]?.hash ?? null
+      })
+    }).catch((error: unknown) => {
+      if (isAbortError(error) || ac.signal.aborted) return
+      setLogView({ kind: 'error', message: hostErrorMessage(error) })
+    })
+    return () => { ac.abort() }
+  }, [visible, workspaceId, gitLog, reloadEpoch, view])
+
+  const onLoadMore = useCallback(() => {
+    if (loadingMoreLockRef.current) return
+    const current = logViewRef.current
+    if (current.kind !== 'ready' || !current.hasMore || current.loadingMore) return
+    loadingMoreLockRef.current = true
+    setLogView({ ...current, loadingMore: true })
+  }, [])
+
+  useEffect(() => {
+    if (logView.kind !== 'ready' || !logView.loadingMore) return
+    if (!visible || workspaceId === undefined) {
+      loadingMoreLockRef.current = false
+      return
+    }
+    const ac = new AbortController()
+    const skip = logView.commits.length
+    const prior = logView.commits
+    void gitLog(workspaceId, { limit: GIT_GRAPH_PAGE_SIZE, skip }, ac.signal).then((log) => {
+      if (ac.signal.aborted) return
+      loadingMoreLockRef.current = false
+      if (log.availability !== 'repository') {
+        setLogView({ kind: 'ready', commits: prior, hasMore: false, loadingMore: false })
+        return
+      }
+      const seen = new Set(prior.map(entry => entry.hash))
+      const commits = [...prior]
+      for (const entry of log.commits) {
+        if (!seen.has(entry.hash)) commits.push(entry)
+      }
+      setLogView({
+        kind: 'ready',
+        commits,
+        hasMore: log.hasMore && commits.length > prior.length,
+        loadingMore: false,
+      })
+    }).catch((error: unknown) => {
+      if (isAbortError(error) || ac.signal.aborted) return
+      loadingMoreLockRef.current = false
+      setLogView({ kind: 'ready', commits: prior, hasMore: true, loadingMore: false })
+    })
+    return () => {
+      ac.abort()
+      loadingMoreLockRef.current = false
+    }
+  }, [logView, visible, workspaceId, gitLog])
 
   useEffect(() => {
     if (selection === null) {
@@ -569,7 +675,8 @@ export function GitPanel({
   return (
     <div className={css.root} data-surface="git-panel">
       {renderBody({
-        view, t, onInit, initError, initPending, writeError, commitMessageHint, toolbarFeedback, message, busyPath, busyKind,
+        view, logView, selectedCommitHash, t, onInit, initError, initPending, writeError,
+        commitMessageHint, toolbarFeedback, message, busyPath, busyKind,
         commitPending, pushPending, discardTarget, guardTarget, confirmAction, pathWriting, dirtyPaths, selection, preview,
         splitRef, opsWidthPx, opsDragging, beginOpsResize, dragOpsResize, endOpsResize,
         onMessage: (value) => {
@@ -640,7 +747,9 @@ export function GitPanel({
         },
         onCancelGuard: () => { setGuardTarget(null) },
         onAskCommit, onAskPush, onCancelConfirm, onConfirmAction,
-        onCommit, onPush, onRetryCommit: () => { onCommit(lastCommitPushRef.current) },
+        onCommit, onPush,         onRetryCommit: () => { onCommit(lastCommitPushRef.current) },
+        onSelectCommit: setSelectedCommitHash,
+        onLoadMore,
       })}
     </div>
   )
@@ -648,6 +757,8 @@ export function GitPanel({
 
 interface RepoBody {
   view: ViewState
+  logView: LogViewState
+  selectedCommitHash: string | null
   t: GitPanelProps['t']
   onInit: () => void
   initError: string | null
@@ -690,6 +801,8 @@ interface RepoBody {
   onCommit: (push?: boolean) => void
   onPush: () => void
   onRetryCommit: () => void
+  onSelectCommit: (hash: string) => void
+  onLoadMore: () => void
 }
 
 function renderBody(body: RepoBody): ReactNode {
@@ -781,93 +894,107 @@ function renderRepository(
         {refreshing
           ? <div className={css.refreshBar} role="progressbar" aria-label={t('git.refresh')} />
           : <div className={css.refreshSlot} />}
-        <div className={css.branchRow}>
-          <div className={css.branch}>
-            {t('git.branch', { name: tree.branch })}
-          </div>
-          {(tree.pushAvailable || pushFeedbackVisible) && (
-            <div className={css.pushRow} data-git-push-row="true">
-              {tree.pushAvailable && (
-                <>
-                  <span className={css.branchAhead}>
-                    {tree.ahead !== undefined && tree.ahead > 0
-                      ? t('git.branch.ahead', { count: tree.ahead })
-                      : t('git.branch.unpublished')}
-                  </span>
-                  <Tooltip
-                    label={
-                      tree.ahead !== undefined && tree.ahead > 0
-                        ? t('git.push.hintAhead', { count: tree.ahead, branch: tree.branch })
-                        : t('git.push.hintUnpublished', { branch: tree.branch })
-                    }
-                    side="bottom"
-                    delayMs={ICON_TOOLTIP_DELAY_MS}
-                    disabled={pushPending || commitPending !== false}
-                  >
-                    <div className={css.pushButtonShell} data-pending={pushPending ? true : undefined}>
-                      <button
-                        type="button"
-                        className={css.pushButton}
-                        disabled={pushDisabled}
-                        aria-busy={pushPending || undefined}
-                        aria-label={t('git.push')}
-                        onClick={body.onAskPush}
+        <div className={css.lists} data-git-lists="">
+          <ChangesSection t={t}>
+            <div className={css.branchRow}>
+              <div className={css.branch}>
+                {t('git.branch', { name: tree.branch })}
+              </div>
+              {(tree.pushAvailable || pushFeedbackVisible) && (
+                <div className={css.pushRow} data-git-push-row="true">
+                  {tree.pushAvailable && (
+                    <>
+                      <span className={css.branchAhead}>
+                        {tree.ahead !== undefined && tree.ahead > 0
+                          ? t('git.branch.ahead', { count: tree.ahead })
+                          : t('git.branch.unpublished')}
+                      </span>
+                      <Tooltip
+                        label={
+                          tree.ahead !== undefined && tree.ahead > 0
+                            ? t('git.push.hintAhead', { count: tree.ahead, branch: tree.branch })
+                            : t('git.push.hintUnpublished', { branch: tree.branch })
+                        }
+                        side="bottom"
+                        delayMs={ICON_TOOLTIP_DELAY_MS}
+                        disabled={pushPending || commitPending !== false}
                       >
-                        {t('git.push')}
-                      </button>
-                    </div>
-                  </Tooltip>
-                </>
-              )}
-              {pushFeedbackVisible && toolbarFeedback !== null && (
-                <ToolbarFeedbackView feedback={toolbarFeedback} t={t} />
+                        <div className={css.pushButtonShell} data-pending={pushPending ? true : undefined}>
+                          <button
+                            type="button"
+                            className={css.pushButton}
+                            disabled={pushDisabled}
+                            aria-busy={pushPending || undefined}
+                            aria-label={t('git.push')}
+                            onClick={body.onAskPush}
+                          >
+                            {t('git.push')}
+                          </button>
+                        </div>
+                      </Tooltip>
+                    </>
+                  )}
+                  {pushFeedbackVisible && toolbarFeedback !== null && (
+                    <ToolbarFeedbackView feedback={toolbarFeedback} t={t} />
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
-        <CommitMessageInput
-          className={css.commitInput ?? ''}
-          placeholder={t('git.commit.placeholder')}
-          ariaLabel={t('git.commit.placeholder')}
-          value={message}
-          invalid={commitMessageHint}
-          hint={commitMessageHint ? t('git.commit.required') : undefined}
-          pending={commitPending !== false}
-          onChange={body.onMessage}
-        />
-        <div className={css.commitToolbar}>
-          <CommitSplitButton
-            t={t}
-            disabled={commitDisabled}
-            onAskCommit={body.onAskCommit}
-          />
-          {toolbarFeedback !== null
-            && (toolbarFeedback.action === 'commit' || toolbarFeedback.action === 'commitPush')
-            && commitPending === false && (
-            <ToolbarFeedbackView
-              feedback={toolbarFeedback}
-              t={t}
-              onRetryCommit={toolbarFeedback.kind === 'error' ? body.onRetryCommit : undefined}
+            <CommitMessageInput
+              className={css.commitInput ?? ''}
+              placeholder={t('git.commit.placeholder')}
+              ariaLabel={t('git.commit.placeholder')}
+              value={message}
+              invalid={commitMessageHint}
+              hint={commitMessageHint ? t('git.commit.required') : undefined}
+              pending={commitPending !== false}
+              onChange={body.onMessage}
             />
-          )}
-        </div>
-        {writeError !== null && (
-          <div className={css.listWriteError} role="alert">
-            {writeError}
-          </div>
-        )}
-        <div className={css.lists}>
-          <ChangeSection
-            id="unstaged"
-            title={t('git.section.unstaged')}
-            rows={tree.unstaged}
-            body={body}
-          />
-          <ChangeSection
-            id="staged"
-            title={t('git.section.staged')}
-            rows={tree.staged}
-            body={body}
+            <div className={css.commitToolbar}>
+              <CommitSplitButton
+                t={t}
+                disabled={commitDisabled}
+                onAskCommit={body.onAskCommit}
+              />
+              {toolbarFeedback !== null
+                && (toolbarFeedback.action === 'commit' || toolbarFeedback.action === 'commitPush')
+                && commitPending === false && (
+                <ToolbarFeedbackView
+                  feedback={toolbarFeedback}
+                  t={t}
+                  onRetryCommit={toolbarFeedback.kind === 'error' ? body.onRetryCommit : undefined}
+                />
+              )}
+            </div>
+            {writeError !== null && (
+              <div className={css.listWriteError} role="alert">
+                {writeError}
+              </div>
+            )}
+            <div className={css.changesFiles} data-git-changes-files="">
+              <ChangeSection
+                id="unstaged"
+                title={t('git.section.unstaged')}
+                rows={tree.unstaged}
+                body={body}
+              />
+              <ChangeSection
+                id="staged"
+                title={t('git.section.staged')}
+                rows={tree.staged}
+                body={body}
+              />
+            </div>
+          </ChangesSection>
+          <GitGraphSection
+            t={t}
+            loading={body.logView.kind === 'loading' || (body.logView.kind === 'ready' && body.logView.loadingMore)}
+            commits={body.logView.kind === 'ready' ? body.logView.commits : body.logView.kind === 'loading' ? null : []}
+            selectedHash={body.selectedCommitHash}
+            onSelect={body.onSelectCommit}
+            hasMore={body.logView.kind === 'ready' && body.logView.hasMore}
+            loadingMore={body.logView.kind === 'ready' && body.logView.loadingMore}
+            onLoadMore={body.onLoadMore}
           />
         </div>
       </div>
@@ -1186,6 +1313,54 @@ function charSpanClass(origin: GitDiffLine['origin'], kind: CharSpan['kind']): s
   return undefined
 }
 
+/** Toggle a folder section when the header receives Enter or Space. */
+function onFolderHeadKeyDown(event: KeyboardEvent<HTMLDivElement>, toggle: () => void): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  toggle()
+}
+
+/** Working-tree chrome folder: branch, commit, and the two change lists. */
+function ChangesSection({ t, children }: { t: GitPanelProps['t']; children: ReactNode }) {
+  const [expanded, setExpanded] = useState(true)
+  const title = t('git.section.changes')
+  const toggleLabel = expanded ? t('git.section.collapse', { title }) : t('git.section.expand', { title })
+  const toggleExpanded = useCallback(() => {
+    setExpanded(open => !open)
+  }, [])
+  const bodyId = 'git-section-changes-body'
+  return (
+    <section
+      className={`${css.section} ${css.folder} ${css.changesFolder}`}
+      data-git-changes=""
+      data-collapsed={expanded ? undefined : true}
+    >
+      <div
+        className={`${css.sectionHead} ${css.folderHead}`}
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        aria-controls={bodyId}
+        aria-label={toggleLabel}
+        onClick={toggleExpanded}
+        onKeyDown={(event) => { onFolderHeadKeyDown(event, toggleExpanded) }}
+      >
+        <span className={css.sectionChevron} aria-hidden="true">
+          {expanded
+            ? <IconChevronDownOutline14 size={14} />
+            : <IconChevronRightOutline14 size={14} />}
+        </span>
+        <h2 id="git-section-changes-title" className={`${css.sectionTitle} ${css.folderTitle}`}>{title}</h2>
+      </div>
+      {expanded && (
+        <div id={bodyId} className={css.changesBody} aria-labelledby="git-section-changes-title">
+          {children}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function ChangeSection({
   id, title, rows, body,
 }: {
@@ -1204,11 +1379,6 @@ function ChangeSection({
   const toggleExpanded = useCallback(() => {
     setExpanded(open => !open)
   }, [])
-  const onHeadKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key !== 'Enter' && event.key !== ' ') return
-    event.preventDefault()
-    toggleExpanded()
-  }
   const listId = `git-section-${id}-list`
   return (
     <section className={css.section}>
@@ -1220,7 +1390,7 @@ function ChangeSection({
         aria-controls={listId}
         aria-label={toggleLabel}
         onClick={toggleExpanded}
-        onKeyDown={onHeadKeyDown}
+        onKeyDown={(event) => { onFolderHeadKeyDown(event, toggleExpanded) }}
       >
         <span className={css.sectionChevron} aria-hidden="true">
           {expanded

@@ -86,6 +86,7 @@ function scriptedApi(overrides: {
       gitDiscard: r => ok(r, { availability: 'not-a-repository' as const }),
       gitCommit: r => ok(r, { availability: 'not-a-repository' as const }),
       gitPush: r => ok(r, { availability: 'not-a-repository' as const }),
+      gitLog: r => ok(r, { availability: 'not-a-repository' as const }),
       readFile: r => ok(r, { kind: 'text', path: r.payload.path, text: '' }),
       writeFile: r => ok(r, { path: r.payload.path }),
       deletePath: r => ok(r, { path: r.payload.path }),

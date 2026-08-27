@@ -495,6 +495,30 @@ describe('WorkspaceRuntime', () => {
     }))
     await expect(workspaces.gitPush(wid('alpha')))
       .rejects.toMatchObject({ rpcError: { code: 'git-failed' } })
+
+    api.onGitLog = () => Promise.resolve(ok({
+      availability: 'repository' as const,
+      repoRoot: '/w/alpha',
+      commits: [],
+      hasMore: true,
+    }))
+    await expect(workspaces.gitLog(wid('alpha'), { limit: 50, skip: 50 })).resolves.toEqual({
+      availability: 'repository',
+      repoRoot: '/w/alpha',
+      commits: [],
+      hasMore: true,
+    })
+    expect(api.callsOf('host.gitLog')).toEqual([{ workspaceId: 'alpha', limit: 50, skip: 50 }])
+    await expect(workspaces.gitLog(wid('alpha'))).resolves.toMatchObject({ hasMore: true })
+    expect(api.callsOf('host.gitLog')).toEqual([
+      { workspaceId: 'alpha', limit: 50, skip: 50 },
+      { workspaceId: 'alpha' },
+    ])
+    api.onGitLog = () => Promise.resolve(err({
+      code: 'workspace-not-found', message: 'gone', details: { workspaceId: 'missing' },
+    }))
+    await expect(workspaces.gitLog(wid('missing')))
+      .rejects.toMatchObject({ rpcError: { code: 'workspace-not-found' } })
   })
 
   it('passes workspace file reads and writes through the host wire', async () => {

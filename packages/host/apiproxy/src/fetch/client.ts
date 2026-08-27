@@ -24,6 +24,7 @@ import {
   hostGitDiscardValueSchema,
   hostGitCommitValueSchema,
   hostGitPushValueSchema,
+  hostGitLogValueSchema,
   hostListDirectoryValueSchema, hostListWorkspaceEntriesValueSchema,
   hostOpenPathValueSchema, hostPickDirectoryValueSchema,
   hostReadFileValueSchema,
@@ -139,6 +140,7 @@ export interface IApiClient {
     gitDiscard(payload: RequestPayload<'host.gitDiscard'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitDiscard'>>>
     gitCommit(payload: RequestPayload<'host.gitCommit'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitCommit'>>>
     gitPush(payload: RequestPayload<'host.gitPush'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitPush'>>>
+    gitLog(payload: RequestPayload<'host.gitLog'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.gitLog'>>>
     readFile(payload: RequestPayload<'host.readFile'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.readFile'>>>
     writeFile(payload: RequestPayload<'host.writeFile'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.writeFile'>>>
     deletePath(payload: RequestPayload<'host.deletePath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.deletePath'>>>
@@ -242,6 +244,7 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'host.gitDiscard': hostGitDiscardValueSchema,
   'host.gitCommit': hostGitCommitValueSchema,
   'host.gitPush': hostGitPushValueSchema,
+  'host.gitLog': hostGitLogValueSchema,
   'host.readFile': hostReadFileValueSchema,
   'host.writeFile': hostWriteFileValueSchema,
   'host.deletePath': hostDeletePathValueSchema,
@@ -530,6 +533,7 @@ export abstract class AbstractApiClient implements IApiClient {
       signal,
       'caller-signal-only',
     ),
+    gitLog: (payload, signal) => this.callUnary('host.gitLog', payload, signal),
     readFile: (payload, signal) => this.callUnary('host.readFile', payload, signal),
     writeFile: (payload, signal) => this.callUnary('host.writeFile', payload, signal),
     deletePath: (payload, signal) => this.callUnary('host.deletePath', payload, signal),

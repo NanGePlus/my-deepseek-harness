@@ -103,6 +103,43 @@ export interface GitInitResult {
   repoRoot: string
 }
 
+/** One commit row of host.gitLog. */
+export interface GitLogEntry {
+  /** Full commit hash. */
+  hash: string
+  /** Abbreviated commit hash. */
+  shortHash: string
+  /** Parent commit hashes in Git order (empty for root commits). */
+  parents: string[]
+  /** First line of the commit message. */
+  subject: string
+  /** Author display name from Git metadata. */
+  authorName: string
+  /** Author timestamp as ISO-8601 from `%aI`. */
+  authorDate: string
+  /** Commit message body after the subject (`%b`); empty when absent. */
+  body: string
+  /** Branch and tag labels attached to this commit (HEAD resolved). */
+  refs: string[]
+}
+
+/**
+ * host.gitLog success value. Git unavailable and not-a-repository are product
+ * states, not RPC errors, so the Git panel can hide the graph section.
+ */
+export type GitLogResult =
+  | { availability: 'git-unavailable' }
+  | { availability: 'not-a-repository' }
+  | {
+    availability: 'repository'
+    /** Absolute Git repository root discovered upward from the bound Workspace. */
+    repoRoot: string
+    /** One page of commits in reverse chronological order (newest first). */
+    commits: GitLogEntry[]
+    /** True when a further `skip` page exists beyond this result. */
+    hasMore: boolean
+  }
+
 /** Which change list a gitDiffPreview request reads. */
 export type GitDiffSide = 'unstaged' | 'staged'
 
@@ -404,6 +441,16 @@ export interface HostApi {
     request: RpcRequest<{ workspaceId: WorkspaceId }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<GitWorkingTreeResult>>
+
+  /**
+   * Read one page of commit history for the Git repository discovered from a
+   * registered Workspace. Distinguishes Git unavailable from not-a-repository.
+   * Does not expose an arbitrary git argv.
+   */
+  gitLog(
+    request: RpcRequest<{ workspaceId: WorkspaceId; limit?: number; skip?: number }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<GitLogResult>>
 
   /**
    * Read one regular file inside a registered Workspace; the path must lie

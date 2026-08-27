@@ -108,9 +108,9 @@
   width: var(--git-ops-default-width, 260px);
   min-width: min(260px, 100%);
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
   min-height: 0;
-  padding: 8px;
+  padding: 4px 8px 8px;
   background: var(--dsw-specific-sidebar-fill);
   border-right: 1px solid var(--dsw-alias-border-l1);
 }
@@ -670,14 +670,69 @@
   flex: 1;
   min-height: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
+  overflow: hidden;
+}
+
+.folder {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.changesFolder {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.changesFolder[data-collapsed] {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.graphFolder {
+  flex: 0 0 auto;
+  max-height: 48%;
+  margin-top: auto;
+  overflow: hidden;
+}
+
+.lists:has(.changesFolder[data-collapsed]) .graphFolder {
+  flex: 1 1 auto;
+  max-height: none;
+  margin-top: 0;
+}
+
+.folderHead {
+  min-height: 24px;
+}
+
+.changesBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
+  padding-left: 14px;
+}
+
+.changesFiles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 .section {
   display: flex;
-  flex: none;
   flex-direction: column;
+}
+
+.changesFiles .section {
+  flex: none;
 }
 
 .sectionTitle {
@@ -693,6 +748,15 @@
   line-height: 16px;
   font-weight: 400;
   color: var(--dsw-alias-label-secondary);
+}
+
+.folderTitle {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-label-primary);
 }
 
 .rowList {
@@ -1013,4 +1077,287 @@
   align-items: center;
   justify-content: center;
   padding: 16px;
+}
+
+.graphHeadSpinner {
+  display: grid;
+  color: var(--dsw-alias-label-caption);
+  animation: spin 0.8s linear infinite;
+}
+
+.graphList {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding-left: 14px;
+}
+
+.graphCanvas {
+  position: absolute;
+  top: 0;
+  left: 14px;
+  z-index: 2;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.graphFeedback {
+  padding: 8px 4px 8px 20px;
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.graphSentinel {
+  display: flex;
+  justify-content: center;
+  min-height: 8px;
+}
+
+.graphLoadMore {
+  margin: 4px 0;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.graphLoadMore:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.graphRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  overflow: hidden;
+  padding: 0 4px 0 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  line-height: 24px;
+}
+
+.graphRow:hover {
+  background: var(--editor-hover-tint);
+}
+
+.graphRow[data-selected] {
+  background: var(--editor-selected-tint);
+}
+
+.graphRow:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+
+.graphSvg {
+  flex: none;
+  display: block;
+  overflow: visible;
+}
+
+.graphGutter {
+  flex: none;
+}
+
+.graphStroke {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.graphNodeSolid {
+  stroke-width: 2;
+}
+
+.graphNodeMerge {
+  fill: var(--dsw-alias-bg-base);
+  stroke-width: 2;
+}
+
+.graphNodeMergeDot {
+  stroke: none;
+}
+
+.graphBody {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.graphSubject {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.graphRefHit {
+  display: inline-flex;
+  flex: none;
+  min-width: 0;
+  max-width: 80px;
+}
+
+.graphRef {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  max-width: 80px;
+  min-width: 0;
+  height: 14px;
+  overflow: hidden;
+  padding: 0 4px;
+  border-radius: 7px;
+  background: var(--dsw-alias-state-business-primary);
+  font-family: var(--dsw-font-family);
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--dsw-static-neutral-bluish-0);
+}
+
+.graphRefRemote {
+  max-width: 88px;
+  background: var(--git-graph-lane-2, #f2994a);
+}
+
+.graphRefHit:has(.graphRefRemote) {
+  max-width: 88px;
+}
+
+.graphRefFull {
+  max-width: 100%;
+  height: auto;
+  min-height: 14px;
+  line-height: 16px;
+  overflow: visible;
+}
+
+.graphRefLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graphRefFull .graphRefLabel {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.graphRefCloud {
+  flex: none;
+}
+
+.graphCommitCard {
+  position: fixed;
+  z-index: 100;
+  box-sizing: border-box;
+  width: 360px;
+  max-width: calc(100vw - 24px);
+  overflow: auto;
+  padding: 10px 12px 8px;
+  border-radius: 8px;
+  background: var(--dsw-alias-tooltip-bg);
+  color: var(--dsw-static-neutral-bluish-00);
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+  pointer-events: auto;
+}
+
+.graphCommitCardRef {
+  margin-bottom: 8px;
+}
+
+.graphCommitCardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  line-height: 16px;
+  opacity: 0.86;
+}
+
+.graphCommitCardAuthor {
+  font-weight: 600;
+  opacity: 1;
+  color: var(--dsw-static-neutral-bluish-00);
+}
+
+.graphCommitCardSubject {
+  margin-bottom: 6px;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.graphCommitCardBody {
+  margin: 0 0 8px;
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  opacity: 0.82;
+}
+
+.graphCommitCardHash {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  opacity: 0.78;
+}
+
+.graphAuthor {
+  flex: none;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--dsw-font-family);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-caption);
+}
+
+@media (max-width: 320px) {
+  .graphAuthor {
+    display: none;
+  }
 }

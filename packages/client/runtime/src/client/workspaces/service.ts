@@ -5,7 +5,7 @@ import type {
   DirectoryListing, GitStatusListing, IApiClient, RpcError,
   SessionId, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
-  GitWorkingTreeResult, GitInitResult, GitDiffSide, GitDiffPreview,
+  GitWorkingTreeResult, GitInitResult, GitLogResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '../contract/store.ts'
@@ -399,6 +399,26 @@ export class WorkspaceRuntime implements IWorkspaces {
    */
   async gitPush(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<GitWorkingTreeResult> {
     const response = await this.api.host.gitPush({ workspaceId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Read one page of commit history for the Git repository discovered from a registered Workspace.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param query - optional page size and skip from the newest end of history.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns commit rows or availability discriminants.
+   */
+  async gitLog(
+    workspaceId: WorkspaceId,
+    query?: { limit?: number; skip?: number },
+    signal?: AbortSignal,
+  ): Promise<GitLogResult> {
+    const payload: { workspaceId: WorkspaceId; limit?: number; skip?: number } = { workspaceId }
+    if (query?.limit !== undefined) payload.limit = query.limit
+    if (query?.skip !== undefined && query.skip > 0) payload.skip = query.skip
+    const response = await this.api.host.gitLog(payload, signal)
     if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
     return response.result.value
   }

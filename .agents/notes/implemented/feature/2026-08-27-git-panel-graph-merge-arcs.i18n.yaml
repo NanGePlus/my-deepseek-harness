@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-27-git-panel-graph-merge-arcs.md
+2026-08-27-git-panel-graph-merge-arcs.md: bbed53fa364fc15c8c213b2a865f0152ec5be5fb
+2026-08-27-git-panel-graph-merge-arcs.zh.md: 40edd976a940e25ed963bd00e1cad98b437e89d4
