@@ -10,9 +10,9 @@ Status: implemented
 
 ## Decision
 
-浏览器真实载体为两类下行流各开一条独立 WebSocket：`/api/events.mux` 只发送 `MuxFrame`，`/api/events.host` 只发送 `HostFrame`。每条文本消息是一份完整的 `ServerRequest` JSON；客户端继续先校验信封，再按路径校验具体 frame union，并把窄形 `RpcRequest<Frame>` 交给既有 `ConnectionController`。两条流保持独立生命周期和无跨流顺序保证，任一条结束仍使整个 connection generation 失败并按既有退避策略重建。
+浏览器真实载体为各类下行流各开独立 WebSocket：`/api/events.mux` 只发送 `MuxFrame`，`/api/events.host` 只发送 `HostFrame`，`/api/host.watchPath` 只发送 `WatchPathFrame`（每个订阅一条 socket；结束它不会使 connection generation 失败）。每条文本消息是一份完整的 `ServerRequest` JSON；客户端继续先校验信封，再按路径校验具体 frame union，并把窄形 `RpcRequest<Frame>` 交给既有 `ConnectionController`。mux 与 host 保持独立生命周期和无跨流顺序保证，这两条中任一条结束仍使整个 connection generation 失败并按既有退避策略重建。
 
-WebSocket 只承担 host→browser 下行。所有 client→host unary 调用和对 server request 的 `respond` 继续使用既有 `POST /api/*`；不在 WebSocket 上接收任何客户端业务消息。`WebApiClient` 因而同时持有 HTTP `fetch` 上行与 WebSocket 下行，而 fixture（测试前置数据）和 `InProcessApiClient(toFetchHandler(api))` 继续实现同一 `IApiClient` 双流抽象。进程内 fetch 载体保留 SSE 编解码来检验通道无关的协议同构，但网络上对 `/api/events.*` 的 GET 请求只返回 upgrade required，不作为浏览器兼容回退。
+WebSocket 只承担 host→browser 下行。所有 client→host unary 调用和对 server request 的 `respond` 继续使用既有 `POST /api/*`；不在 WebSocket 上接收任何客户端业务消息。`WebApiClient` 因而同时持有 HTTP `fetch` 上行与 WebSocket 下行，而 fixture（测试前置数据）和 `InProcessApiClient(toFetchHandler(api))` 继续实现同一 `IApiClient` 双流抽象。进程内 fetch 载体保留 SSE 编解码来检验通道无关的协议同构，但网络上对 `/api/events.*` 与 `/api/host.watchPath` 的 GET 请求只返回 upgrade required，不作为浏览器兼容回退。
 
 ## Upgrade 与生命周期边界
 
@@ -36,4 +36,4 @@ webserver 约定测试钉住 upgrade pathname 分发、重复注册拒绝、资�
 
 ## Consequences
 
-每个 Web 页面仍有两条长期下行连接，但它们不再消耗浏览器的 HTTP/1.1 六连接配额；运行时继续消费原有双流并保留所有重连、流修复和跨流无序语义。代价是 webserver 多一个 upgrade 注册面，connection 包的 host 半侧新增一项 WebSocket 实现依赖，并需分别维护浏览器 WebSocket 与进程内 SSE 两种物理编解码；它们共享同一 `ServerRequest`／frame schema 和 `IApiClient` 语义，避免形成第二套业务协议。
+每个 Web 页面仍有两条 generation 长期下行，外加每个已打开文本 Tab 与 Workspace 根各一条 `host.watchPath` WebSocket，但它们不再消耗浏览器的 HTTP/1.1 六连接配额；运行时继续消费原有双流并保留所有重连、流修复和跨流无序语义。代价是 webserver 多一个 upgrade 注册面，connection 包的 host 半侧新增一项 WebSocket 实现依赖，并需分别维护浏览器 WebSocket 与进程内 SSE 两种物理编解码；它们共享同一 `ServerRequest`／frame schema 和 `IApiClient` 语义，避免形成第二套业务协议。

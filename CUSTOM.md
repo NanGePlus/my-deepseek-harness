@@ -21,8 +21,9 @@
 ### 工具箱与壳层（details 栏，PR #28–29 及后续）
 - 产品文案：**详情栏 / 详情面板** 统一表述为 **工具箱**（`packages/client/ui-conversation` locales；Tab 内「工具详情」仍指 Tool 输出内容）
 - 会话头入口：**图标 +「工具箱」** capsule 按钮（与 Session log 同高 32px）；tooltip / `aria-label` 仍为「打开 / 收起工具箱」
-- 工具箱 segmented Tab：**资源管理器 | Git | 工具详情**；Tab 条样式与对话区 **对话 / 轨迹** 一致（左对齐、13px、`state-business-primary` 选中下划线）；Git 段槽位 `conversation.details.git` 供 `ui-git` 注入，切走只隐藏不卸载；资源管理器段传入 `visible`，切回后重读文件树 Git 状态标记；`ui-conversation` 持有 dirty 路径只读集合（Explorer `setDirtyPaths` 写入，Git `dirtyPaths` 读取，不进 runtime 对象层）
-- **Git 操作守卫**：目标路径存在 dirty 编辑器 Tab 时禁止丢弃、整文件/按块暂存、包含该路径的提交；取消暂存不受限；对话框标题「文件有未保存的编辑」，无自动保存、无保存按钮
+- 工具箱 segmented Tab：**资源管理器 | Git面板 | 工具详情**；Tab 条样式与对话区 **对话 / 轨迹** 一致（左对齐、13px、`state-business-primary` 选中下划线）；Git 段槽位 `conversation.details.git` 供 `ui-git` 注入，切走只隐藏不卸载；资源管理器段传入 `visible`，切回后重读文件树 Git 状态标记；`ui-conversation` 持有 dirty 路径只读集合（Explorer `setDirtyPaths` 写入，Git `dirtyPaths` 读取，不进 runtime 对象层）
+- **Git 面板变更列表**：段标题可收起/展开（左侧 chevron）；右侧显示文件数量；段头「全部选入/全部移出」与单行操作不变；未暂存按内容高度撑开，「待提交」跟在其后，整列滚动
+- **Git 面板提交区**：备注输入单行起步、内容增多自动增高（最高约 120px、无内滚动条）；placeholder「请填写提交备注信息」；说明为空时在输入框下方 inline 提示、不发起 Host 提交；主按钮「提交」+ 右侧下拉「提交 / 提交并推送」；**提交、提交并推送、推送** 点击后先弹框确认；本地有未推送提交时，分支名下一行显示「有 N 个提交尚未推送」或「尚未推送到远程」及独立 **推送** 按钮（`host.gitPush`，无需新暂存）；没有未推送提交时该行隐藏；**推送** 按钮 hover 提示区分「尚未推送的提交」与「首次推送」；提交/推送 RPC 进行中时备注框外圈旋转高亮 loading（`--dsw-alias-state-business-primary`）、输入框禁用，按钮仅 disabled 不改文案；Host 返回后在**对应按钮旁**显示成功/失败（提交 / 提交并推送 / 推送 文案区分），成功 4s 自动消失；暂存/撤销/丢弃错误显示在变更列表上方；**撤销更改** 图标仍走既有确认弹框；不阻塞暂存/撤销等其它 Git 操作；选入/移出/撤销进行中不把提交、推送按钮置为 disabled（避免闪一下）；左侧操作区默认宽度 260px；`host.gitCommit` 可选 `push: true`（无 upstream 时 Host 自动 `-u origin HEAD`；带 push 的 RPC 不使用 30 秒一元超时）
 - 文件编辑器 Tab 注入 `@deepseek-ai/dsh-client-ui-file-editor`（`cordis.patch.yml` 注册）
 - 工具箱可拖宽；Tool 行点击可跳转工具详情并保持面板存活（PR #38 前后续修复）
 
@@ -30,22 +31,22 @@
 | RPC | 作用 |
 |-----|------|
 | `host.listWorkspaceEntries` | Workspace 内单层目录 listing（上限 1000 条/层，`truncated` 标记） |
-| `host.gitStatus` | `git status --porcelain` 只读徽章（非仓库返回空） |
+| `host.gitStatus` | `git status --porcelain --untracked-files=all` 只读徽章（列出未跟踪目录内的文件；非仓库返回空） |
 | `host.gitWorkingTree` | 向上发现仓库根与当前分支；返回未暂存 / 已暂存两段磁盘变更（忽略路径不出现；路径相对仓库根，可在绑定 Workspace 外） |
 | `host.gitInit` | 仅当无祖先仓库时在绑定 Workspace 根 `git init` |
-| `host.gitDiffPreview` | 只认磁盘的差异预览（`text` / `untracked-text` / `binary` / `deleted-text` / `deleted-binary`） |
+| `host.gitDiffPreview` | 只认磁盘的差异预览（`text` 含 hunks + `fileText` 全文件正文；`untracked-text` / `binary` / `deleted-text` / `deleted-binary`） |
 | `host.gitStage` | 整文件或按块暂存一条未暂存变更；返回刷新后的工作树 |
 | `host.gitUnstage` | 整文件或按块取消暂存；不改写磁盘 |
 | `host.gitDiscard` | 整文件或按块丢弃未暂存变更（已跟踪还原 / 未跟踪删除）；不碰已暂存 |
-| `host.gitCommit` | 用非空说明 + 非空暂存区新建 HEAD 提交；作者只取 Git 配置；不 amend、不 push |
+| `host.gitCommit` | 用暂存区新建 HEAD 提交；说明可为空（`--allow-empty-message`）；可选 `push: true` 在提交后执行 `git push`；作者只取 Git 配置；不 amend |
 | `host.readFile` / `host.writeFile` | 文本 UTF-8 读写；图片 `bytes` + base64 预览 |
 | `host.deletePath` / `host.renamePath` / `host.createWorkspaceDirectory` | 文件树工具栏增删改 |
-| `host.watchPath` | SSE 监听已打开路径的外部磁盘变更 |
+| `host.watchPath` | 浏览器走 WebSocket、进程内仍 SSE；监听已打开路径的外部磁盘变更；文件目标监视父目录以覆盖 Agent 原子 write |
 | LSP（`lspSyncDocument` / `lspHoverDocument` / `lspCloseDocument`） | 编辑器内诊断与 hover（经 `lsp-editor` + `lsp-stdio`） |
 
 ### 文件编辑器 Client（`packages/client/ui-file-editor`）
 - 绑定当前 Session 的 Workspace；文件树**懒加载** + **虚拟滚动** + 文件名过滤
-- Material Icon Theme 文件类型图标；Git 行尾徽章（M/U/D 等）
+- Material Icon Theme 文件类型图标；Git 行尾徽章（M/U/D 等）；未跟踪目录内的文件显示 U，祖先文件夹上卷同一徽章
 - 打开三档：**可编辑文本**（Monaco / textarea fallback）、**图片只读预览**、**已知二进制不可打开**
 - 多 Tab、dirty 标记、**显式保存**（⌘S / Ctrl+S）；Markdown **预览 / 源码**切换（**默认源码**）
 - Markdown **预览态可编辑**（TipTap + `@tiptap/markdown` 双向序列化）：段落 + 行内 **B/I/U/S/Code/Link**；选区浮动工具栏；**链接**为同一 BubbleMenu 内切换的胶囊输入框（点「链接」即显）；预览内 **链接可点击**（新标签页打开）；**代码块 / Mermaid 只读**（`readOnlyFencedBlock` atom + `MarkdownText` 渲染）；**中文 IME** 组合输入期间不回写 buffer；**单击仅定位光标**（误选区自动折叠，双击/拖拽选区不受影响）
@@ -54,12 +55,12 @@
 - **Tab 栏批量关闭**（关闭当前 / 其它 / 全部 / 左侧 / 右侧，VS Code 风格）
 - **文件夹重命名**时同步更新已打开子文件 Tab 路径；**删除文件夹**时关闭子树 Tab 并清理树缓存
 - 同名冲突：文件↔文件、文件夹↔文件夹分别提示；Host 层拦截路径类型冲突
-- 外部变更对话框：**重新加载** / **保留本地编辑**（`watchPath`）
-- **文件树自动刷新**：编辑器保存、外部磁盘变更（`watchPath`）及 Workspace 根目录监听后，自动重载对应目录 listing，无需手动点刷新
+- 外部变更：`watchPath` 检测到 Agent 等外部改盘时**无确认框、自动重新加载**已打开 Tab（含未保存编辑；磁盘内容优先）；Git 面板撤销仍直接 reload
+- **文件树自动刷新**：新建/重命名/删除及 Workspace 根目录外部监听后重载 listing；**显式保存仅静默刷新 Git 徽章**，不重载目录 listing
 - Session 切换 / 关闭 dirty Tab **守卫**（保存 / 丢弃 / 取消）
 - Session 内文件路径链接可在 details 编辑器中打开
-- Monaco / 主题跟随 Harness light/dark
-- 多 Tab 横向滚动、树切换时保持可用；滚动条按需显示
+- Monaco / 主题跟随 Harness light/dark；编辑画布（含非 Markdown）使用与 Markdown 相同的 `bg-base`
+- 多 Tab 横向滚动、树切换时保持可用；**编辑区 scroll-reveal 滚动条**（Monaco / Markdown 预览 / textarea fallback：默认隐藏、滚动时显示，圆角 pill 与会话区一致）
 - 未打开文件**空状态**：设计系统图标 + 与文件树一致的轻量排版
 
 ### Markdown / 预览增强（PR #37–38，`ui-primitives` 等）
@@ -71,7 +72,7 @@
 - **`host.readFile` 5 MB 上限**：超出返回 `file-too-large`，编辑器提示「文件过大」
 - **大文件 / minified 单行**：Monaco `largeFileOptimizations`、超长行关闭 word wrap、跳过 LSP 全量同步，避免页面卡死
 - **目录 listing 优化**：symlink 分类 32 并发；dirent 扫描上限 10 000；Client 每目录 **30 s 超时**、独立 AbortController
-- 目录加载失败行尾 **!** 标记（可折叠后再展开重试）；超大目录 **…** 表示 listing 截断
+- 目录加载失败行尾 **!** 标记（可折叠后再展开重试，含 30 s 超时）；超大目录 **…** 表示 listing 截断
 
 ## 我的插件与组合包
 | 名称 | 形态 | 作用 | 日期 |
@@ -83,10 +84,12 @@
 ## 我改过的官方文件（尽量为空）
 | 文件/目录 | 改了什么 | 日期 |
 |-----------|----------|------|
-| `packages/host/apiproxy/` | 文件编辑器 Host RPC、listing 性能、`readFile` 大小上限；**2026-08-25** Git 面板只读 RPC（`gitWorkingTree` / `gitInit` / `gitDiffPreview`）；**2026-08-25** Git 面板写 RPC（`gitStage` / `gitUnstage` / `gitDiscard` / `gitCommit`）；**2026-08-25** `GitWorkingTreeChange.kind`（modified / untracked / deleted） | 2026-08 |
-| `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat；**2026-08-23** 保存/外部变更后文件树自动刷新；**2026-08-25** 资源管理器 `visible` 切回后重读 Git 徽章；**2026-08-25** 经 `setDirtyPaths` 发布 dirty Tab 路径供 Git 操作守卫 | 2026-08 |
-| `packages/client/ui-conversation/` | 工具箱 segmented Tab、Tool 详情与编辑器 Tab 协调；**2026-08-22** 工具箱文案、capsule 入口、Tab 样式对齐对话区；**2026-08-23** 已发送用户消息 file-context pill 展示投影；**2026-08-25** 工具箱三段 Tab（资源管理器 \| Git \| 工具详情）与 `conversation.details.git` 槽位；**2026-08-25** Git 槽传入 `visible` 供面板按切 Tab 重读；**2026-08-25** Explorer 槽传入 `visible` 供切回后重读 Git 徽章；**2026-08-25** dirty 路径集合：Explorer 写入、Git 只读 | 2026-08 |
-| `packages/client/ui-git/` | **新包**：工具箱 Git 面板 occupant（绑定 Workspace、两段变更列表、四种空态、初始化）；**2026-08-25** 整文件暂存 / 取消暂存 / 丢弃确认 / 提交与按 Session 草稿；**2026-08-25** 单击行差异预览与按块暂存 / 取消暂存 / 丢弃；**2026-08-25** Git 操作守卫（dirty 路径禁暂存/丢弃/提交，取消暂存不受限） | 2026-08 |
+| `packages/host/apiproxy/` | 文件编辑器 Host RPC、listing 性能、`readFile` 大小上限；**2026-08-26** `watchPath` 文件目标监视父目录（Agent 原子 write）；**2026-08-26** Git porcelain `--untracked-files=all`（未跟踪目录列出内部文件）；**2026-08-25** Git 面板只读 RPC（`gitWorkingTree` / `gitInit` / `gitDiffPreview`）；**2026-08-25** Git 面板写 RPC（`gitStage` / `gitUnstage` / `gitDiscard` / `gitCommit`）；**2026-08-25** `GitWorkingTreeChange.kind`（modified / untracked / deleted）；**2026-08-25** porcelain 引号路径 UTF-8 八进制解码；Git UI 过滤 `.DS_Store`；**2026-08-25** `gitDiffPreview` 的 `text` 形态附带 `fileText`（工作区/暂存区全文）；**2026-08-26** `gitCommit` 允许空说明与可选 `push` | 2026-08 |
+| `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat；**2026-08-23** 保存/外部变更后文件树自动刷新；**2026-08-25** 资源管理器 `visible` 切回后重读 Git 徽章；**2026-08-25** 经 `setDirtyPaths` 发布 dirty Tab 路径供 Git 操作守卫；**2026-08-26** 编辑区 scroll-reveal 滚动条对齐会话区；**2026-08-26** Git 徽章上卷到未跟踪目录的祖先文件夹；**2026-08-26** 非 Markdown 编辑画布与 Markdown 同用 `bg-base`；**2026-08-26** listing 超时显示 **!** 而非卡住 spinner | 2026-08 |
+| `packages/client/connection/` | **2026-08-26** `host.watchPath` 浏览器下行改 WebSocket，避免 HTTP/1.1 六连接占满后文件树 listing 排队超时 | 2026-08 |
+| `packages/client/ui-git/` | **新包**：工具箱 Git 面板 occupant（绑定 Workspace、两段变更列表、四种空态、初始化）；**2026-08-25** 整文件暂存 / 取消暂存 / 丢弃确认 / 提交与按 Session 草稿；**2026-08-25** 单击行差异预览与按块暂存 / 取消暂存 / 丢弃；**2026-08-25** Git 操作守卫；**2026-08-25** 左侧操作区与差异预览分栏；**2026-08-25** 差异预览 VS Code 化；**2026-08-26** 提交区 UX（单行自动增高、可空说明、split 提交按钮）；**2026-08-26** 图标 tooltip / discard 尺寸；**2026-08-27** 未暂存长列表不再与「待提交」叠层；**2026-08-27** 未推送文案与 **推送** 放在分支名下一行，无未推送时隐藏；**2026-08-27** 选入/移出/撤销不再闪提交按钮 | 2026-08 |
+| `packages/client/ui-primitives/` | **2026-08-25** 导出 `highlightLines` / `subscribeGrammarLoaded` / `HighlightSpan` 供 Git 差异预览复用 shiki 高亮；**2026-08-26** 新增 `IconDiscardOutline16`（撤销工作区更改，非 refresh） | 2026-08 |
+| `packages/client/web/` | **2026-08-25** seed 显式 pin `highlightLines` / `grammarLoadCount` / `subscribeGrammarLoaded`，供 Git 差异预览等平台插件消费 | 2026-08 |
 | `packages/client/runtime/` | `WorkspaceRuntime` 转发新 Host RPC；**2026-08-25** 转发 Git 面板只读 RPC；**2026-08-25** 转发 Git 面板写 RPC | 2026-08 |
 | `packages/client/ui-primitives/` | Mermaid 块、ZoomPanLightbox、Markdown 图片 | 2026-08 |
 | `packages/client/ui-tool/` | Tool 行 selection → details 跳转 | 2026-08 |
@@ -137,6 +140,8 @@
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-08-26 | Agent 二次 write 编辑器不刷新 | Host `watchPath` 改为监视文件父目录（原子 rename 后 inode 失效）；关闭再开能看到是因为重新订阅 |
+| 2026-08-26 | 文件编辑器保存不再闪目录树 | 显式保存仅静默刷新 Git 徽章；内容变更不 invalidate listing |
 | 2026-08-22 | 从最新 `origin/custom/main` 创建分支 `fix/file-editor-v1-qa-validation` | 用于 V1 验证测试与 BUG 修复；开工前 stash 了未提交 WIP |
 | 2026-08-22 | 用户可见文案：详情栏 / 详情面板 → **工具箱** | `ui-conversation` locales；e2e `details-segmented-tab` 快照英文 `Toolbox` |
 | 2026-08-22 | 会话头工具箱入口改为 **图标 +「工具箱」** capsule | `DetailsPanelToggle`；改 client 插件后需 `pnpm --filter @deepseek-ai/dsh-client-ui-conversation run bundle` 并硬刷新 `pnpm dsh web` |
@@ -185,3 +190,42 @@
 | 2026-08-25 | 从最新 `origin/custom/main` 创建分支 `issue/59-git-panel-action-guard` | Issue [#59](https://github.com/NanGePlus/my-deepseek-harness/issues/59) Git 操作守卫；dirty 路径由工具箱壳层持有，不进 runtime 对象层 |
 | 2026-08-25 | 实现 Issue #59 Git 面板 4/4 切片 | dirty 路径禁止暂存 / 丢弃 / 包含该路径的提交；取消暂存不受限；守卫对话框无自动保存 |
 | 2026-08-25 | PR [#68](https://github.com/NanGePlus/my-deepseek-harness/pull/68) 合并入 `custom/main` | 关闭 Issue [#59](https://github.com/NanGePlus/my-deepseek-harness/issues/59)；保留分支 `issue/59-git-panel-action-guard` |
+| 2026-08-25 | Git 面板 Tab 与左侧操作区 UX 微调 | Tab 文案 **Git面板**；左侧操作区背景对齐资源管理器文件树、默认 180px、可拖拽调整宽度；分支 `fix/git-panel-v2-qa-validation` |
+| 2026-08-25 | Git 面板变更列表路径修复 | Host 正确解码 porcelain 引号路径中的 UTF-8 八进制转义；变更列表与 Git 徽章过滤 `.DS_Store` |
+| 2026-08-25 | Git 面板变更列表 VS Code 布局 | 行内显示 **文件名 + 灰色父目录 + M/U/D 状态字母**，预览栏仍显示完整路径 |
+| 2026-08-25 | Git 面板段标题文案 | **更改 / 暂存的更改** → **未选入提交 / 已选入提交** |
+| 2026-08-25 | Git 面板差异预览 VS Code 布局 | 行号 + ± 前缀 + 行背景色；块操作改为 gutter 图标（aria 仍用暂存块/丢弃块） |
+| 2026-08-25 | Git 面板差异预览增强 | 展示 `@@` hunk 头、用 `fileText` 补齐 hunk 间未改行、相邻 -/+ 行字符级高亮、右侧 minimap 与滚动同步；大文件预览限 2000 行并压缩 minimap，避免布局撑爆白屏 |
+| 2026-08-25 | Git 面板差异预览修复 | `fileText` 按文件行号从第 1 行起补齐 hunk 前/后未改行；minimap 按文件行号分桶（不再按渲染行 index），色块位置与改动行对齐；Host 未返回 `fileText` 时用 `readFile` 回退补齐 |
+| 2026-08-25 | Git 面板差异预览换行 | 预览行 `pre-wrap` 按宽度自动折行，不再单行截断 |
+| 2026-08-25 | Git 面板 minimap 对齐 | 每处改动一对标记：红块左上（8×3px）、绿块在其右下错开；单独增删同色块 |
+| 2026-08-25 | Git 面板分支文案 | **分支** → **提交到分支** |
+| 2026-08-25 | Git 面板差异预览 polish | minimap 红绿标记放大（12×5px）；预览区 scroll-reveal 滚动条对齐资源管理器；编程语言文件 shiki 语法高亮（与 read 卡片同链路），字符级 diff 高亮叠加其上 |
+| 2026-08-25 | Git 面板差异预览白屏修复 | web seed 显式 pin `highlightLines` 等平台导出，避免 tree-shake 后插件 `require` 得到 `undefined`；`ui-primitives` 需 tsc+tsdown；预览高亮缺导出时降级为纯文本 |
+| 2026-08-25 | Git 面板变更列表光标 | 文件行悬浮/点击用手势指针，对齐资源管理器文件树 |
+| 2026-08-25 | Git 面板差异预览去掉 hunk 头 | 不再展示 `@@` 行；按块暂存/丢弃仍用 hunk 头调用 Host |
+| 2026-08-25 | Git 面板图标按钮 tooltip | 列表行/预览 gutter/区块头图标 hover 显示与资源管理器一致的底部文字提示（500ms 延迟） |
+| 2026-08-26 | Git 面板提交说明校验 | 空说明不再在按钮下展示 Git 报错；输入框下方 inline 提示「请填写提交备注信息后再提交」
+| 2026-08-26 | Git 面板提交区 UX | 备注框单行起步自动增高、无内滚动条、placeholder「请填写提交备注信息」；主按钮「提交」+ 下拉「提交 / 提交并推送」；左侧操作区默认 260px；Host `gitCommit` 支持 `push` |
+| 2026-08-26 | Git 面板变更列表段头 | 「未选入提交 / 已选入提交」可收起展开（chevron）；最右侧显示文件数量
+| 2026-08-26 | Git 面板段标题文案 | **未选入提交 / 已选入提交** → **已更改，暂未选入提交 / 待提交**
+| 2026-08-26 | Git 面板文件行布局 | 状态标记（M/U/D）移至行尾；暂存/撤销/移出按钮默认隐藏，悬浮或选中行时显示
+| 2026-08-26 | Git 提交 AbortSignal 修复 | 提交时不传 `push: false`，避免旧 runtime 把布尔值误当作 AbortSignal；需 rebuild runtime client bundle
+| 2026-08-26 | Git 推送端到端 | Host `gitCommit` push 集成测试；无 upstream 时 `-u origin HEAD`；提交/推送成功 inline 提示；带 push 的 RPC 取消 30s 超时
+| 2026-08-26 | Git 提交按钮 loading | 提交/推送等待时按钮组水波纹动画；等待期间不阻塞暂存/撤销等其它 Git 操作
+| 2026-08-26 | Git 提交下拉修复 | 提交菜单改 portal 渲染，避免 loading 样式 `overflow:hidden` 裁切「提交并推送」选项
+| 2026-08-26 | Git 提交 loading 输入框边框 | 等待反馈移至备注框外圈旋转高亮（tab 选中色）；按钮保持「提交」仅 disabled；Host 返回后才显示成功
+| 2026-08-26 | Git 面板独立推送 | `host.gitPush` + 工作树 `ahead`/`pushAvailable`；暂存区空时可推送已提交 commit；分支行显示领先数
+| 2026-08-26 | Git push Host 构建修复 | `pnpm dsh web` 加载 Host `lib/index.js`；改 apiproxy 源码后须 `pnpm run build:lib:host` 否则 `gitCommit` 忽略 `push`、仅本地 commit
+| 2026-08-26 | Git 面板 minimap 点击跳转 | 点击红/绿标记或 minimap 轨道可定位到对应改动行；修正滚动比例与 marker 点击坐标
+| 2026-08-26 | Git 面板 hunk 图标 tooltip | 差异预览 gutter「+」提示由「选入此块」改为「选入提交」 |
+| 2026-08-26 | Git 提交区操作反馈 | 成功/失败提示贴对应按钮（提交 / 提交并推送 / 推送），成功 4s 自动消失；暂存/撤销/丢弃错误移至变更列表上方 |
+| 2026-08-26 | Git 面板干净空态 | 移除列表区中央「没有要提交的更改」文案；干净仓库仍保留提交区与空的两段列表 |
+| 2026-08-26 | Git 未跟踪目录展开为文件 | Host porcelain `--untracked-files=all`；资源管理器徽章上卷祖先文件夹；Git 面板列出目录内文件而非目录行 |
+| 2026-08-26 | 文件树 listing 卡住后失败 | `watchPath` 仍走 HTTP SSE，多 Tab 占满六连接；浏览器改 WebSocket；listing 超时显示 **!** |
+| 2026-08-26 | 编辑器外部改盘 | Agent/`watchPath` 改盘无确认框，已打开 Tab 一律自动 reload（含 dirty）；Git 撤销仍自动 reload |
+| 2026-08-26 | Git 推送按钮 loading | 推送等待时沿用提交区边框高亮旋转动画，不再显示按钮内 spinner |
+| 2026-08-27 | Git 面板「待提交」叠层 | 未暂存段不再被 flex 压矮；长列表把「待提交」顶到后面，整列滚动 |
+| 2026-08-27 | Git 面板未推送行 | 「领先 N」改为「有 N 个提交尚未推送」；与 **推送** 同列放在分支名下方；无未推送时整行隐藏 |
+| 2026-08-27 | Git 推送 tooltip 被备注框遮住 | Tooltip 改包在 `pushButtonShell` 外，避免 `isolation` 把气泡压在提交备注框下面 |
+| 2026-08-27 | Git 选入时提交按钮闪一下 | 选入/移出/撤销进行中不再 disabled 提交与推送；行内仍显示 spinner 并互斥其它行操作 |

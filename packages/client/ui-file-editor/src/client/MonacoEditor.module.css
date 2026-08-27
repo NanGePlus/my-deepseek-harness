@@ -4,7 +4,32 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
-  background: var(--dsw-specific-sidebar-fill);
+  background: var(--dsw-alias-bg-base);
+  /* Scroll-reveal: hidden until MonacoEditor marks this region active while
+     the user scrolls. Native scrollers (textarea fallback) read the
+     --dsh-scrollbar-* pair; Monaco sliders read --dsh-monaco-scrollbar-*. */
+  --dsh-scrollbar-thumb: transparent;
+  --dsh-scrollbar-thumb-hover: transparent;
+  --dsh-monaco-scrollbar-thumb: transparent;
+  --dsh-monaco-scrollbar-thumb-hover: transparent;
+}
+
+.scrollActive {
+  /* Composed on .wrap while the user scrolls. */
+}
+
+.wrap.scrollActive[data-surface='document'] {
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l1);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l1);
+  --dsh-monaco-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l1);
+  --dsh-monaco-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l1);
+}
+
+.wrap.scrollActive[data-surface='sidebar'] {
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+  --dsh-monaco-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-monaco-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 .host {
@@ -19,7 +44,7 @@
 .host :global(.monaco-editor),
 .host :global(.monaco-editor .margin),
 .host :global(.monaco-editor .monaco-editor-background) {
-  background-color: var(--dsw-specific-sidebar-fill);
+  background-color: var(--dsw-alias-bg-base);
 }
 
 .document .host :global(.monaco-editor),
@@ -35,13 +60,32 @@
   min-height: 0;
   padding: 8px 12px;
   border: none;
-  background: var(--dsw-specific-sidebar-fill);
+  background: var(--dsw-alias-bg-base);
   font-family: var(--ds-font-family-code);
   font-size: 13px;
   line-height: 20px;
   color: var(--dsw-alias-label-primary);
   resize: none;
   outline: none;
+  overflow: auto;
+}
+
+/* Monaco renders its own scrollbars; skin them to match ui-theme's 8px pill. */
+.host :global(.monaco-scrollable-element > .scrollbar > .slider) {
+  border-radius: 4px;
+  background: var(--dsh-monaco-scrollbar-thumb) !important;
+}
+
+.host :global(.monaco-scrollable-element > .scrollbar:hover > .slider) {
+  background: var(--dsh-monaco-scrollbar-thumb-hover) !important;
+}
+
+.host :global(.monaco-scrollable-element > .scrollbar.vertical) {
+  width: 8px !important;
+}
+
+.host :global(.monaco-scrollable-element > .scrollbar.horizontal) {
+  height: 8px !important;
 }
 
 .document {

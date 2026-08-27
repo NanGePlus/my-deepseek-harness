@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, renameSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -140,6 +140,33 @@ describe('host.watchPath', () => {
     })
 
     expect(frame).toEqual({ type: 'host/path-changed', path: filePath })
+    controller.abort()
+  }, 10_000)
+
+  it('emits host/path-changed for a second atomic replace of the same path', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    const filePath = join(workspacePath, 'notes.txt')
+    writeFileSync(filePath, 'v1\n')
+
+    const workspace = (await api.workspace.create(request({ path: workspacePath }))).result
+    if (!workspace.ok) throw new Error('unreachable')
+    const controller = new AbortController()
+    const stream = api.host.watchPath(
+      request({ workspaceId: workspace.value.workspace.workspaceId, path: filePath }),
+      controller.signal,
+    )
+
+    const atomicReplace = (text: string): void => {
+      const staging = `${filePath}.${process.pid}.tmp`
+      writeFileSync(staging, text)
+      renameSync(staging, filePath)
+    }
+
+    await nextPathChanged(stream, () => { atomicReplace('v2\n') })
+    const second = await nextPathChanged(stream, () => { atomicReplace('v3\n') })
+    expect(second).toEqual({ type: 'host/path-changed', path: filePath })
     controller.abort()
   }, 10_000)
 

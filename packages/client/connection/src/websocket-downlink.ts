@@ -1,15 +1,16 @@
-/** Host-side WebSocket carrier for the two server-to-browser event streams. */
+/** Host-side WebSocket carrier for server-to-browser event streams. */
 
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
 import type { Duplex } from 'node:stream'
 import WebSocket, { WebSocketServer } from 'ws'
 import type {
-  ApiProxy, HostFrame, MuxFrame, RpcRequest, ServerRequest,
+  ApiProxy, HostFrame, MuxFrame, RpcRequest, ServerRequest, WatchPathFrame,
 } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api'
+import { hostWatchPathQuerySchema } from '@deepseek-ai/dsh-host-apiproxy/api/host.schema'
 
-type Frame = MuxFrame | HostFrame
+type Frame = MuxFrame | HostFrame | WatchPathFrame
 
 function serverRequest(frame: RpcRequest<Frame>): ServerRequest {
   return {
@@ -45,7 +46,7 @@ function failureFrame(error: unknown): RpcRequest<Frame> {
 
 /**
  * Owns WebSocket negotiation and frame pumping for the connection plugin's
- * two downlinks. Client messages are a protocol violation: upstream traffic
+ * downlinks. Client messages are a protocol violation: upstream traffic
  * remains on HTTP.
  */
 export class WebSocketDownlinks {
@@ -78,6 +79,32 @@ export class WebSocketDownlinks {
     this.upgrade(req, socket, head, signal => this.api.events.host({
       rpcId: RpcId(randomUUID()),
       payload: {},
+    }, signal))
+  }
+
+  /**
+   * Upgrade one socket and pump a host.watchPath stream until either side closes.
+   * @param req - HTTP upgrade request; query carries workspaceId and path.
+   * @param socket - Raw socket transferred by the HTTP server.
+   * @param head - Bytes already read after the upgrade headers.
+   */
+  handleWatchPath(req: IncomingMessage, socket: Duplex, head: Buffer): void {
+    const url = new URL(req.url ?? '/', 'http://dsh.internal')
+    const parsed = hostWatchPathQuerySchema.safeParse(Object.fromEntries(url.searchParams))
+    if (!parsed.success) {
+      socket.end([
+        'HTTP/1.1 400 Bad Request',
+        'Connection: close',
+        'Content-Type: text/plain; charset=utf-8',
+        'Content-Length: 43',
+        '',
+        'missing or invalid workspaceId or path query',
+      ].join('\r\n'))
+      return
+    }
+    this.upgrade(req, socket, head, signal => this.api.host.watchPath({
+      rpcId: RpcId(randomUUID()),
+      payload: parsed.data,
     }, signal))
   }
 

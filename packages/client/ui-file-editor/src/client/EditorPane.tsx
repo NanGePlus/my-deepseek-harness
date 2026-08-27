@@ -302,6 +302,7 @@ export function EditorPane({
           <MonacoEditor
             path={active.path}
             value={active.buffer}
+            diskReloadTicket={active.diskReloadTicket ?? 0}
             language={active.language}
             diagnostics={diagnosticsByPath?.get(active.path)}
             {...(onHover === undefined

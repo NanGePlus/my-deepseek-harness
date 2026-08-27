@@ -49,6 +49,8 @@ export interface MonacoStandaloneEditor {
   getScrolledVisiblePosition: (
     position: { lineNumber: number; column: number },
   ) => { top: number; left: number; height: number } | null
+  /** Subscribe to scroll offset changes. */
+  onDidScrollChange: (listener: () => void) => { dispose: () => void }
   /** Root DOM node hosting the editor. */
   getDomNode: () => HTMLElement | null
   /** Release the editor. */

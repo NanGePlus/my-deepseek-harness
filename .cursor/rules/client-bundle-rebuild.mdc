@@ -1,0 +1,61 @@
+---
+description: 改 web/Host 相关代码后，结束前必须 rebuild 并在本机重启 pnpm dsh web
+alwaysApply: true
+---
+
+# Web 开发：重建 + 重启
+
+`pnpm dsh web` 加载的是**已构建产物**，不是 `src/` 源码。用户要求：**每次改完相关代码，Agent 必须代为 rebuild 并重启服务**，不要只提醒用户手动操作。
+
+## 何时必须 rebuild + 重启
+
+在同一轮对话中，只要改动了会影响 `dsh web` 行为的路径，**向用户宣称「完成 / 请验证」之前**必须：
+
+1. rebuild 受影响的包（见下表）
+2. **重启** `pnpm dsh web`（见「怎么重启」）
+
+| 改动路径 | rebuild 命令 |
+|---|---|
+| `packages/client/*/src/client/**`、CSS module、locale | `pnpm --filter <包名> run bundle` |
+| `packages/client/runtime/src/client/**` | `cd packages/client/runtime && pnpm exec tsdown` |
+| `packages/host/apiproxy/src/**`（Git RPC、Host API 等） | `pnpm run build:lib:host` **且** `cd packages/client/connection && pnpm exec tsdown`（RPC 响应 schema 在 connection bundle 里校验） |
+| `apps/web/` 组装层 | `pnpm run build:web` 或 `pnpm run build` |
+| 跨多包、不确定影响面 | `pnpm run build` |
+
+不必 rebuild：纯测试、纯 docs、与 web/Host 无关的后端包。
+
+## 怎么 rebuild（client 逐包，优先最快）
+
+```sh
+pnpm --filter @deepseek-ai/dsh-client-ui-git run bundle
+pnpm --filter @deepseek-ai/dsh-client-ui-conversation run bundle
+# 从路径推断包名：packages/client/ui-git/... → @deepseek-ai/dsh-client-ui-git
+```
+
+Host 单独改动时至少：
+
+```sh
+pnpm run build:lib:host
+cd packages/client/connection && pnpm exec tsdown
+```
+
+## 怎么重启 `dsh web`
+
+1. 若已有 `pnpm dsh web` 在跑，先结束旧进程（同端口占用或已知终端里的 web 进程）。
+2. 在仓库根目录后台启动：
+
+```sh
+pnpm dsh web
+```
+
+3. 等待输出 `dsh web: http://127.0.0.1:xxxx`，在回复中给出 URL。
+4. 提醒用户 **硬刷新**（`Cmd+Shift+R`）；仅 rebuild client 而不重启 Host 时，Host 改动仍须重启 web 进程。
+
+**长期并行开发**（可选）：另开终端 `pnpm run dev:web` watch client bundle；Host 改动仍须 `build:lib:host` + 重启 web。
+
+## 完成前自检
+
+- [ ] 已 rebuild 本轮改动的每个 client / runtime / host 面
+- [ ] 已重启 `pnpm dsh web`（或确认等价 watch 进程正在跑且 Host 已 rebuild）
+- [ ] 回复中列出实际执行的 rebuild 命令与 web URL
+- [ ] 已提醒硬刷新（若仅 client bundle 变更且 web 未重启 Host 时可省略重启说明中的 Host 部分，但 Host 改动必须重启）

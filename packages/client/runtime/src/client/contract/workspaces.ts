@@ -143,15 +143,27 @@ export interface IWorkspaces {
   ): Promise<GitWorkingTreeResult>
   /**
    * Create one new commit from the current index. Author identity is taken only
-   * from Git config. Does not amend and does not push.
+   * from Git config. Does not amend. When `push` is true, pushes after commit.
    * @param workspaceId - Workspace whose bound root is the discovery start.
-   * @param message - commit message; blank after trim is rejected by the Host.
+   * @param message - commit message; empty after trim is allowed.
+   * @param push - when true, run `git push` after commit.
    * @param signal - aborts the wire request when the caller supersedes it.
    * @returns the refreshed working tree.
    */
   gitCommit(
     workspaceId: WorkspaceId,
     message: string,
+    push?: boolean,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult>
+  /**
+   * Push the current branch without creating a new commit.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the refreshed working tree.
+   */
+  gitPush(
+    workspaceId: WorkspaceId,
     signal?: AbortSignal,
   ): Promise<GitWorkingTreeResult>
   /**

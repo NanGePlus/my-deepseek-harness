@@ -129,6 +129,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * true only while Explorer is the selected segment so Git badges re-read
      * disk after Git-panel writes. `setDirtyPaths` publishes dirty tab paths
      * for the Git action guard; it is not a runtime object-layer fact.
+     * `diskPathsChangedEpoch` / `diskPathsChanged` carry Git discard notifications
+     * so open tabs reload from disk even when `watchPath` misses an event.
      */
     'conversation.details.editor': { kind: 'single'; scope: 'root'; owner: DetailsEditorOwnerProps }
     /**
@@ -137,7 +139,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * tab is not selected and does not unmount it. `visible` is true only
      * while Git is the selected segment so the occupant can re-read disk
      * when the user returns to the tab. `dirtyPaths` is the read-only dirty
-     * editor-tab set written by the Explorer occupant.
+     * editor-tab set written by the Explorer occupant. `notifyDiskPathsChanged`
+     * tells the Explorer occupant to reload open buffers after Git discard.
      */
     'conversation.details.git': { kind: 'single'; scope: 'root'; owner: DetailsGitOwnerProps }
     /**
@@ -434,6 +437,14 @@ export interface DetailsGitOwnerProps {
    * Read-only; the Git occupant must not write this list.
    */
   dirtyPaths: readonly string[]
+  /**
+   * Notify the Explorer occupant that Git operations changed on-disk file
+   * contents at these Host-absolute paths (for example discard).
+   * @param paths - paths whose disk bytes may differ from open editor buffers.
+   * @param reload - when false, suppress the external-change dialog until a
+   * follow-up call with `reload: true`; default reloads open tabs from disk.
+   */
+  notifyDiskPathsChanged: (paths: readonly string[], reload?: boolean) => void
 }
 
 /** Owner share of the toolbox Explorer occupant: whether the Explorer segment is selected. */
@@ -445,6 +456,21 @@ export interface DetailsEditorOwnerProps {
    * @param paths - dirty text-tab paths; empty when none are dirty.
    */
   setDirtyPaths: (paths: readonly string[]) => void
+  /**
+   * Monotonic epoch bumped when {@link DetailsGitOwnerProps.notifyDiskPathsChanged}
+   * publishes paths whose disk contents may have changed.
+   */
+  diskPathsChangedEpoch: number
+  /**
+   * Host-absolute paths from the latest Git disk-content notification.
+   * Read-only; the Explorer occupant must not write this list.
+   */
+  diskPathsChanged: readonly string[]
+  /**
+   * When false, the latest notification only suppresses the external-change
+   * dialog (Git discard in flight); when true, open tabs reload from disk.
+   */
+  diskPathsChangedReload: boolean
 }
 
 /**

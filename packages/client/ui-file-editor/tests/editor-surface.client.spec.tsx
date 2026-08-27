@@ -13,6 +13,7 @@ import { EditorSurface, editorDirtyGuard, type EditorSurfaceProps } from '../src
 import { resetDirtyGuardForTest } from '../src/client/dirty-guard.ts'
 import { createFileEditorStore } from '../src/client/stores.ts'
 import { zh } from '../src/client/locales.ts'
+import { DIRECTORY_LISTING_TIMEOUT_MS } from '../src/client/host-io-timeout.ts'
 
 afterEach(cleanup)
 afterEach(() => { document.body.removeAttribute('data-ds-dark-theme') })
@@ -231,6 +232,9 @@ function mount(over: {
     lspHoverDocument,
     dirtyGuard: editorDirtyGuard,
     setDirtyPaths: over.setDirtyPaths ?? (() => {}),
+    diskPathsChangedEpoch: 0,
+    diskPathsChanged: [],
+    diskPathsChangedReload: true,
   } as EditorSurfaceProps
   const view = render(<EditorSurface {...props} />)
   return {
@@ -261,6 +265,41 @@ describe('EditorSurface file tree', () => {
     expect(screen.getByText('未打开文件')).toBeTruthy()
     expect(b.listWorkspaceEntries).toHaveBeenCalledWith(WID, ROOT, expect.any(AbortSignal))
     expect(b.listWorkspaceEntries.mock.calls.every(call => call[1] === ROOT)).toBe(true)
+  })
+
+  it('shows Git U on a nested untracked file and its ancestor folder', async () => {
+    const nestedDir = `${ROOT}/hahah`
+    const nestedFile = `${nestedDir}/test.md`
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === ROOT) {
+        return {
+          path,
+          entries: [...DEFAULT_ROOT, { name: 'hahah', path: nestedDir, isDirectory: true, hidden: false }],
+          truncated: false,
+        }
+      }
+      if (path === nestedDir) {
+        return {
+          path,
+          entries: [{ name: 'test.md', path: nestedFile, isDirectory: false, hidden: false }],
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    const gitStatus = vi.fn(async () => ({
+      entries: [{ path: nestedFile, letter: 'U' }],
+    }))
+    mount({ list: listWorkspaceEntries, git: gitStatus })
+    await waitFor(() => { expect(screen.getByText('hahah')).toBeTruthy() })
+    const folderRow = screen.getByText('hahah').closest('[role="treeitem"]')
+    expect(folderRow).toBeInstanceOf(HTMLElement)
+    expect(within(folderRow as HTMLElement).getByLabelText('Git U').textContent).toBe('U')
+    fireEvent.click(folderRow as HTMLElement)
+    await waitFor(() => { expect(screen.getByText('test.md')).toBeTruthy() })
+    const fileRow = screen.getByText('test.md').closest('[role="treeitem"]')
+    expect(fileRow).toBeInstanceOf(HTMLElement)
+    expect(within(fileRow as HTMLElement).getByLabelText('Git U').textContent).toBe('U')
   })
 
   it('collapses and expands the file tree from the hide and show controls', async () => {
@@ -543,6 +582,25 @@ describe('EditorSurface file tree', () => {
     expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === `${ROOT}/src`)).toHaveLength(2)
   })
 
+  it('list-timeout: marks the folder failed instead of leaving a spinner', async () => {
+    const listWorkspaceEntries = vi.fn((_id: WorkspaceId, path: string) => {
+      if (path === `${ROOT}/src`) return new Promise<WorkspaceEntriesListing>(() => {})
+      return Promise.resolve(listingFor(path))
+    })
+    mount({ list: listWorkspaceEntries })
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: '展开 src' }))
+      expect(screen.getByRole('status', { name: '加载中' })).toBeTruthy()
+      await act(async () => { await vi.advanceTimersByTimeAsync(DIRECTORY_LISTING_TIMEOUT_MS) })
+      expect(screen.getByLabelText('无法加载此文件夹')).toBeTruthy()
+      expect(screen.queryByRole('status', { name: '加载中' })).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('loading-git: shows a tree-top progress bar without hiding rows', async () => {
     let release!: (listing: { entries: { path: string; letter: string }[] }) => void
     const gitStatus = vi.fn(() => new Promise<{ entries: { path: string; letter: string }[] }>((resolve) => {
@@ -692,6 +750,7 @@ describe('EditorSurface file tree', () => {
         language: 'typescript',
         buffer: 'export {}\n',
         saved: 'export {}\n',
+        diskReloadTicket: 0,
       })
     })
     await waitFor(() => {
@@ -888,7 +947,7 @@ describe('EditorSurface open / save', () => {
     await waitFor(() => { expect(b.gitStatus.mock.calls.length).toBeGreaterThan(1) })
   })
 
-  it('save-refreshes-tree: saving re-fetches the parent directory listing', async () => {
+  it('save-skips-tree-refresh: saving updates Git badges without re-fetching the parent directory listing', async () => {
     const b = mount()
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
     const initialRootListings = b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length
@@ -896,10 +955,9 @@ describe('EditorSurface open / save', () => {
     const box = await markdownEditor()
     fireEvent.change(box, { target: { value: 'edited readme\n' } })
     saveShortcut()
-    await waitFor(() => {
-      expect(b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length)
-        .toBeGreaterThan(initialRootListings)
-    })
+    await waitFor(() => { expect(b.gitStatus.mock.calls.length).toBeGreaterThan(1) })
+    expect(b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length)
+      .toBe(initialRootListings)
   })
 
   it('save-disabled: a clean text tab, preview tab, and non-openable tab ignore save shortcuts', async () => {
@@ -928,9 +986,9 @@ describe('EditorSurface open / save', () => {
     expect(b.readFile).toHaveBeenCalledTimes(2)
     fireEvent.click(screen.getByRole('tab', { name: /README\.md/ }))
     await markdownEditor()
-    expect(b.readFile).toHaveBeenCalledTimes(3)
+    expect(b.readFile).toHaveBeenCalledTimes(2)
     await clickFile('README.md')
-    expect(b.readFile).toHaveBeenCalledTimes(3)
+    expect(b.readFile).toHaveBeenCalledTimes(2)
     fireEvent.click(screen.getByRole('button', { name: '关闭 README.md' }))
     await waitFor(() => { expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull() })
     expect(screen.getByRole('textbox', { name: /untracked\.ts.*TypeScript/ })).toBeTruthy()
@@ -1863,7 +1921,7 @@ describe('EditorSurface external change', () => {
     fireEvent.click(within(tree).getByText(name).closest('[role="treeitem"]')!)
   }
 
-  it('external-change: a fake watch event shows the external-change dialog', async () => {
+  it('watch-change-dirty: a fake watch event reloads from disk even with unsaved local edits', async () => {
     const watch = createWatchHarness()
     const readCounts = new Map<string, number>()
     const b = mount({
@@ -1882,20 +1940,20 @@ describe('EditorSurface external change', () => {
     await waitFor(() => { expect(b.listWorkspaceEntries).toHaveBeenCalledWith(WID, ROOT, expect.any(AbortSignal)) })
     const initialRootListings = b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length
     await clickFile('README.md')
-    await markdownEditor()
+    const box = await markdownEditor()
+    fireEvent.change(box, { target: { value: 'local edits\n' } })
+    expect(screen.getByLabelText('未保存')).toBeTruthy()
+    box.focus()
     expect(watch.watchPath).toHaveBeenCalledWith(WID, README, expect.any(Function), expect.any(AbortSignal))
     await act(async () => { watch.trigger(README) })
-    await waitFor(() => {
-      expect(b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length)
-        .toBeGreaterThan(initialRootListings)
-    })
-    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '文件已在磁盘上更改' }))
-    expect(within(dialog).getByText('README.md')).toBeTruthy()
-    expect(within(dialog).getByRole('button', { name: '重新加载' })).toBeTruthy()
-    expect(within(dialog).getByRole('button', { name: '保留本地编辑' })).toBeTruthy()
+    await waitFor(async () => { expect((await markdownEditor()).value).toBe('external\n') })
+    expect(screen.queryByRole('dialog', { name: '文件已在磁盘上更改' })).toBeNull()
+    expect(screen.queryByLabelText('未保存')).toBeNull()
+    expect(b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length)
+      .toBe(initialRootListings)
   })
 
-  it('reload-discard: choosing reload replaces the edit buffer with disk content', async () => {
+  it('watch-change-clean: a fake watch event reloads a saved open tab from disk without a dialog', async () => {
     const watch = createWatchHarness()
     const readCounts = new Map<string, number>()
     mount({
@@ -1912,21 +1970,67 @@ describe('EditorSurface external change', () => {
       },
     })
     await clickFile('README.md')
-    const box = await markdownEditor()
-    fireEvent.change(box, { target: { value: 'local edits\n' } })
+    await markdownEditor()
     await act(async () => { watch.trigger(README) })
-    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '文件已在磁盘上更改' }))
-    fireEvent.click(within(dialog).getByRole('button', { name: '重新加载' }))
-    await waitFor(() => { expect(screen.queryByRole('dialog', { name: '文件已在磁盘上更改' })).toBeNull() })
-    expect((await markdownEditor()).value).toBe('external\n')
+    await waitFor(async () => { expect((await markdownEditor()).value).toBe('external\n') })
+    expect(screen.queryByRole('dialog', { name: '文件已在磁盘上更改' })).toBeNull()
     expect(screen.queryByLabelText('未保存')).toBeNull()
   })
 
-  it('keep-local: choosing keep local leaves the edit buffer unchanged', async () => {
+  it('watch-stale-read-retry: retries when the first post-watch read still matches saved', async () => {
     const watch = createWatchHarness()
     const readCounts = new Map<string, number>()
     mount({
       watchPath: watch.watchPath,
+      read: async (_id, path, kind) => {
+        if (kind !== 'text') return defaultReadFile(_id, path, kind)
+        const count = (readCounts.get(path) ?? 0) + 1
+        readCounts.set(path, count)
+        if (count <= 2) return { kind: 'text' as const, path, text: 'initial\n' }
+        return { kind: 'text' as const, path, text: 'external\n' }
+      },
+    })
+    await clickFile('README.md')
+    const box = await markdownEditor()
+    fireEvent.change(box, { target: { value: 'local edits\n' } })
+    box.focus()
+    await act(async () => { watch.trigger(README) })
+    await waitFor(async () => { expect((await markdownEditor()).value).toBe('external\n') }, { timeout: 1000 })
+  })
+
+  it('watch-second-write: a later agent write reloads even when stale reads match the current buffer', async () => {
+    const watch = createWatchHarness()
+    const readCounts = new Map<string, number>()
+    const staleReadsRemaining = new Map<string, number>()
+    mount({
+      watchPath: watch.watchPath,
+      read: async (_id, path, kind) => {
+        if (kind !== 'text') return defaultReadFile(_id, path, kind)
+        const count = (readCounts.get(path) ?? 0) + 1
+        readCounts.set(path, count)
+        if (count === 1) return { kind: 'text' as const, path, text: 'initial\n' }
+        const staleLeft = staleReadsRemaining.get(path) ?? 0
+        if (staleLeft > 0) {
+          staleReadsRemaining.set(path, staleLeft - 1)
+          return { kind: 'text' as const, path, text: 'first\n' }
+        }
+        if (count <= 3) return { kind: 'text' as const, path, text: 'first\n' }
+        return { kind: 'text' as const, path, text: 'second\n' }
+      },
+    })
+    await clickFile('README.md')
+    await markdownEditor()
+    staleReadsRemaining.set(README, 1)
+    await act(async () => { watch.trigger(README) })
+    await waitFor(async () => { expect((await markdownEditor()).value).toBe('first\n') })
+    staleReadsRemaining.set(README, 2)
+    await act(async () => { watch.trigger(README) })
+    await waitFor(async () => { expect((await markdownEditor()).value).toBe('second\n') }, { timeout: 2000 })
+  })
+
+  it('git-disk-change: shell notification reloads open tabs from disk without a dialog', async () => {
+    const readCounts = new Map<string, number>()
+    const b = mount({
       read: async (_id, path, kind) => {
         if (kind !== 'text') return defaultReadFile(_id, path, kind)
         const count = (readCounts.get(path) ?? 0) + 1
@@ -1939,17 +2043,13 @@ describe('EditorSurface external change', () => {
       },
     })
     await clickFile('README.md')
-    const box = await markdownEditor()
-    fireEvent.change(box, { target: { value: 'local edits\n' } })
-    await act(async () => { watch.trigger(README) })
-    const dialog = await waitFor(() => screen.getByRole('dialog', { name: '文件已在磁盘上更改' }))
-    fireEvent.click(within(dialog).getByRole('button', { name: '保留本地编辑' }))
-    await waitFor(() => { expect(screen.queryByRole('dialog', { name: '文件已在磁盘上更改' })).toBeNull() })
-    expect((await markdownEditor()).value).toBe('local edits\n')
-    expect(screen.getByLabelText('未保存')).toBeTruthy()
+    await markdownEditor()
+    b.view.rerender(<EditorSurface {...b.props} diskPathsChangedEpoch={1} diskPathsChanged={[README]} />)
+    await waitFor(async () => { expect((await markdownEditor()).value).toBe('external\n') })
+    expect(screen.queryByRole('dialog', { name: '文件已在磁盘上更改' })).toBeNull()
   })
 
-  it('watch-active-only: only the focused text tab holds a watch subscription', async () => {
+  it('watch-all-open-tabs: every open text tab keeps a watch subscription', async () => {
     const watch = createWatchHarness()
     const gone = `${ROOT}/gone.ts`
     mount({ watchPath: watch.watchPath })
@@ -1957,15 +2057,45 @@ describe('EditorSurface external change', () => {
     await clickFile('README.md')
     await markdownEditor()
     expect(watch.isWatching(README)).toBe(true)
-    expect(watch.watchPath).toHaveBeenCalledTimes(2)
     await clickFile('gone.ts')
     await waitFor(() => { expect(screen.getByRole('tab', { name: /gone\.ts/ })).toBeTruthy() })
+    expect(watch.isWatching(README)).toBe(true)
+    expect(watch.isWatching(gone)).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: '关闭 README.md' }))
+    await waitFor(() => { expect(screen.queryByRole('tab', { name: /README\.md/ })).toBeNull() })
     expect(watch.isWatching(README)).toBe(false)
     expect(watch.isWatching(gone)).toBe(true)
-    expect(watch.watchPath).toHaveBeenCalledTimes(3)
+  })
+
+  it('watch-background-dirty: agent write reloads a dirty background tab while another tab stays focused', async () => {
+    const watch = createWatchHarness()
+    const readCounts = new Map<string, number>()
+    mount({
+      watchPath: watch.watchPath,
+      read: async (_id, path, kind) => {
+        if (kind !== 'text') return defaultReadFile(_id, path, kind)
+        const count = (readCounts.get(path) ?? 0) + 1
+        readCounts.set(path, count)
+        if (path === README) {
+          return {
+            kind: 'text' as const,
+            path,
+            text: count === 1 ? 'initial\n' : 'external\n',
+          }
+        }
+        return defaultReadFile(_id, path, kind)
+      },
+    })
+    await clickFile('README.md')
+    const readme = await markdownEditor()
+    fireEvent.change(readme, { target: { value: 'local edits\n' } })
+    await clickFile('gone.ts')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /gone\.ts/ })).toBeTruthy() })
+    expect(watch.isWatching(README)).toBe(true)
+    await act(async () => { watch.trigger(README) })
     fireEvent.click(screen.getByRole('tab', { name: /README\.md/ }))
-    await waitFor(() => { expect(watch.isWatching(README)).toBe(true) })
-    expect(watch.isWatching(gone)).toBe(false)
+    await waitFor(async () => { expect((await markdownEditor()).value).toBe('external\n') })
+    expect(screen.queryByLabelText('未保存')).toBeNull()
   })
 
   it('many-tabs: a sixth text tab opens and directory listing still works', async () => {
@@ -1992,6 +2122,7 @@ describe('EditorSurface external change', () => {
     fireEvent.click(within(tree).getByText('app.ts').closest('[role="treeitem"]')!)
     await waitFor(() => { expect(screen.getByRole('tab', { name: /app\.ts/ })).toBeTruthy() })
     expect(watch.isWatching(`${ROOT}/src/app.ts`)).toBe(true)
+    expect(watch.isWatching(`${ROOT}/README.md`)).toBe(true)
     fireEvent.click(within(tree).getByText('node_modules').closest('[role="treeitem"]')!)
     await waitFor(() => {
       expect(listWorkspaceEntries).toHaveBeenCalledWith(WID, `${ROOT}/node_modules`, expect.any(AbortSignal))

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-04-websocket-downlink-carrier.md
-2026-08-04-websocket-downlink-carrier.md: f757487c7b0880cfff25b93644341dc85b5e0e38
-2026-08-04-websocket-downlink-carrier.zh.md: 5fa603b9a8dc66146c777f54dfbdc25cb131debd
+2026-08-04-websocket-downlink-carrier.md: 1f51a9f18b90e9436aa8922fef6ecdc1255c5025
+2026-08-04-websocket-downlink-carrier.zh.md: 28575d69ab37a726a6cb35c8d38bbae9809e06dd

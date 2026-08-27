@@ -291,11 +291,32 @@ export class TestWorkspaces implements IWorkspaces {
   async gitCommit(
     workspaceId: WorkspaceId,
     message: string,
+    push?: boolean,
     signal?: AbortSignal,
   ): Promise<GitWorkingTreeResult> {
-    this.calls.push({ method: 'gitCommit', args: [workspaceId, message, signal] })
+    this.calls.push({ method: 'gitCommit', args: [workspaceId, message, push, signal] })
     const stub = this.stubs.get('gitCommit')
-    if (stub !== undefined) return await (stub(workspaceId, message, signal) as Promise<GitWorkingTreeResult>)
+    if (stub !== undefined) {
+      return await (stub(workspaceId, message, push, signal) as Promise<GitWorkingTreeResult>)
+    }
+    return { availability: 'not-a-repository' }
+  }
+
+  /**
+   * Push the current branch (recorded). The default is not-a-repository.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns the refreshed working tree.
+   */
+  async gitPush(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    this.calls.push({ method: 'gitPush', args: [workspaceId, signal] })
+    const stub = this.stubs.get('gitPush')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, signal) as Promise<GitWorkingTreeResult>)
+    }
     return { availability: 'not-a-repository' }
   }
 

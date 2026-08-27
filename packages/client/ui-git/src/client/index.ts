@@ -6,6 +6,7 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { GitPanel, type GitPanelInjected } from './GitPanel.tsx'
+import { gitDiffPreviewWithFullFile } from './diff-preview-enrich.ts'
 import { createGitPanelStore } from './stores.ts'
 import { en, zh, type GitPanelKey } from './locales.ts'
 
@@ -37,14 +38,16 @@ export function apply(ctx: ClientContext): void {
       gitWorkingTree: (workspaceId, signal) => ctx.workspaces.gitWorkingTree(workspaceId, signal),
       gitInit: (workspaceId, signal) => ctx.workspaces.gitInit(workspaceId, signal),
       gitDiffPreview: (workspaceId, path, side, signal) =>
-        ctx.workspaces.gitDiffPreview(workspaceId, path, side, signal),
+        gitDiffPreviewWithFullFile(ctx.workspaces, workspaceId, path, side, signal),
       gitStage: (workspaceId, path, hunkHeader) =>
         ctx.workspaces.gitStage(workspaceId, path, hunkHeader),
       gitUnstage: (workspaceId, path, hunkHeader) =>
         ctx.workspaces.gitUnstage(workspaceId, path, hunkHeader),
       gitDiscard: (workspaceId, path, hunkHeader) =>
         ctx.workspaces.gitDiscard(workspaceId, path, hunkHeader),
-      gitCommit: (workspaceId, message) => ctx.workspaces.gitCommit(workspaceId, message),
+      gitCommit: (workspaceId, message, push) =>
+        ctx.workspaces.gitCommit(workspaceId, message, push === true ? true : undefined),
+      gitPush: (workspaceId, signal) => ctx.workspaces.gitPush(workspaceId, signal),
     }),
   }, GitPanel))
 }

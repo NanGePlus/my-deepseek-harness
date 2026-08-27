@@ -88,6 +88,13 @@ export type GitWorkingTreeResult =
     unstaged: GitWorkingTreeChange[]
     /** Staged working-tree changes; ignored paths omitted. */
     staged: GitWorkingTreeChange[]
+    /**
+     * True when {@link HostApi.gitPush} can publish local commits on the current
+     * branch (ahead of upstream, or no upstream on a named branch).
+     */
+    pushAvailable: boolean
+    /** Commits on HEAD not on @{upstream}; omitted when upstream is unset. */
+    ahead?: number
   }
 
 /** host.gitInit response value: the newly created repository root. */
@@ -114,12 +121,13 @@ export interface GitDiffHunk {
 }
 
 /**
- * host.gitDiffPreview success value. Tracked text is line-level hunks;
+ * host.gitDiffPreview success value. Tracked text is line-level hunks plus the
+ * post-change file body used to fill unchanged regions between hunks;
  * untracked text is the whole file; binary only declares that a diff exists;
  * deletions include old text when the blob is text.
  */
 export type GitDiffPreview =
-  | { kind: 'text'; hunks: GitDiffHunk[] }
+  | { kind: 'text'; hunks: GitDiffHunk[]; fileText: string }
   | { kind: 'untracked-text'; text: string }
   | { kind: 'binary' }
   | { kind: 'deleted-text'; text: string }
@@ -291,7 +299,8 @@ export interface HostApi {
 
   /**
    * Read Git working-tree badge letters for a registered Workspace by running
-   * `git status --porcelain` at its root. Non-repositories and hosts without
+   * `git status --porcelain --untracked-files=all` at its root so files inside
+   * untracked directories appear as their own rows. Non-repositories and hosts without
    * `git` return an empty entry list without error.
    */
   gitStatus(
@@ -375,13 +384,24 @@ export interface HostApi {
   /**
    * Create one new commit from the current index on HEAD. Requires a non-empty
    * commit message and a non-empty staged area. Author identity is taken only
-   * from Git config. Does not amend and does not push. Returns the refreshed
-   * working tree. Empty message or empty staged area fail with `git-failed`;
-   * missing git with `git-unavailable`; other Git failures with `git-failed`
-   * carrying Git's own text.
+   * from Git config. Does not amend. Returns the refreshed working tree.
+   * An empty trimmed message is allowed via `--allow-empty-message`. When
+   * `push` is true, runs `git push` after a successful commit. Empty staged
+   * area fails with `git-failed`; missing git with `git-unavailable`; other
+   * Git failures with `git-failed` carrying Git's own text.
    */
   gitCommit(
-    request: RpcRequest<{ workspaceId: WorkspaceId; message: string }>,
+    request: RpcRequest<{ workspaceId: WorkspaceId; message: string; push?: boolean }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<GitWorkingTreeResult>>
+
+  /**
+   * Push the current branch without creating a new commit. Detached HEAD fails
+   * with `git-failed`. When upstream is unset, runs `git push -u origin HEAD`.
+   * Returns the refreshed working tree.
+   */
+  gitPush(
+    request: RpcRequest<{ workspaceId: WorkspaceId }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<GitWorkingTreeResult>>
 

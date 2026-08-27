@@ -14,6 +14,8 @@ import css from './EditableMarkdownPreview.module.css'
 export interface EditableMarkdownPreviewProps {
   /** Current markdown buffer shown in preview mode. */
   value: string
+  /** Bumps when the tab reloads from external disk; forces buffer sync while focused. */
+  diskReloadTicket?: number
   /** Accessible name for the editable preview surface. */
   ariaLabel: string
   /** Localized copy. */
@@ -50,8 +52,11 @@ export function shouldSyncPreviewBuffer(
   editor: { isDestroyed: boolean; isFocused: boolean; view: { composing: boolean } },
   value: string,
   lastEmitted: string,
+  options: { force?: boolean } = {},
 ): boolean {
-  if (editor.isDestroyed || editor.isFocused || editor.view.composing) return false
+  if (editor.isDestroyed) return false
+  if (editor.view.composing) return false
+  if (!options.force && editor.isFocused) return false
   return value !== lastEmitted
 }
 
@@ -60,9 +65,10 @@ export function shouldSyncPreviewBuffer(
  * @param props - Buffer value, labels, and change callback.
  */
 export function EditableMarkdownPreview({
-  value, ariaLabel, t, codeLabels, mermaidSecurityLevel, onChange,
+  value, diskReloadTicket = 0, ariaLabel, t, codeLabels, mermaidSecurityLevel, onChange,
 }: EditableMarkdownPreviewProps) {
   const lastEmitted = useRef(value)
+  const lastDiskReloadTicket = useRef(diskReloadTicket)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
   const copyLabel = codeLabels.copyLabel
@@ -96,10 +102,13 @@ export function EditableMarkdownPreview({
   }, [extensions, ariaLabel])
 
   useEffect(() => {
-    if (!editor || !shouldSyncPreviewBuffer(editor, value, lastEmitted.current)) return
+    if (!editor) return
+    const force = diskReloadTicket !== lastDiskReloadTicket.current
+    if (!shouldSyncPreviewBuffer(editor, value, lastEmitted.current, { force })) return
     editor.commands.setContent(value, { contentType: 'markdown', emitUpdate: false })
     lastEmitted.current = value
-  }, [editor, value])
+    if (force) lastDiskReloadTicket.current = diskReloadTicket
+  }, [editor, value, diskReloadTicket])
 
   useEffect(() => {
     if (!editor || editor.isDestroyed) return

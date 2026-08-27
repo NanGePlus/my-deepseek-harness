@@ -388,6 +388,7 @@ describe('WorkspaceRuntime', () => {
       branch: 'main',
       unstaged: [{ path: 'a.ts', absolutePath: '/w/alpha/a.ts', kind: 'modified' }],
       staged: [],
+      pushAvailable: false,
     }))
     await expect(workspaces.gitWorkingTree(wid('alpha'))).resolves.toEqual({
       availability: 'repository',
@@ -395,6 +396,7 @@ describe('WorkspaceRuntime', () => {
       branch: 'main',
       unstaged: [{ path: 'a.ts', absolutePath: '/w/alpha/a.ts', kind: 'modified' }],
       staged: [],
+      pushAvailable: false,
     })
     expect(api.callsOf('host.gitWorkingTree')).toEqual([{ workspaceId: 'alpha' }])
     api.onGitWorkingTree = () => Promise.resolve(err({
@@ -434,6 +436,7 @@ describe('WorkspaceRuntime', () => {
       branch: 'main',
       unstaged: [],
       staged: [{ path: 'a.ts', absolutePath: '/w/alpha/a.ts', kind: 'modified' as const }],
+      pushAvailable: false,
     }
     api.onGitStage = () => Promise.resolve(ok(treeOk))
     await expect(workspaces.gitStage(wid('alpha'), '/w/alpha/a.ts')).resolves.toEqual(treeOk)
@@ -467,10 +470,30 @@ describe('WorkspaceRuntime', () => {
     api.onGitCommit = () => Promise.resolve(ok({ ...treeOk, staged: [], unstaged: [] }))
     await expect(workspaces.gitCommit(wid('alpha'), 'msg')).resolves.toMatchObject({ staged: [] })
     expect(api.callsOf('host.gitCommit')).toEqual([{ workspaceId: 'alpha', message: 'msg' }])
+    await expect(workspaces.gitCommit(wid('alpha'), 'msg', false)).resolves.toMatchObject({ staged: [] })
+    expect(api.callsOf('host.gitCommit')).toEqual([
+      { workspaceId: 'alpha', message: 'msg' },
+      { workspaceId: 'alpha', message: 'msg' },
+    ])
+    await expect(workspaces.gitCommit(wid('alpha'), 'msg', true)).resolves.toMatchObject({ staged: [] })
+    expect(api.callsOf('host.gitCommit')).toEqual([
+      { workspaceId: 'alpha', message: 'msg' },
+      { workspaceId: 'alpha', message: 'msg' },
+      { workspaceId: 'alpha', message: 'msg', push: true },
+    ])
     api.onGitCommit = () => Promise.resolve(err({
       code: 'git-failed', message: 'nothing to commit', details: {},
     }))
     await expect(workspaces.gitCommit(wid('alpha'), 'msg'))
+      .rejects.toMatchObject({ rpcError: { code: 'git-failed' } })
+
+    api.onGitPush = () => Promise.resolve(ok({ ...treeOk, staged: [], pushAvailable: false }))
+    await expect(workspaces.gitPush(wid('alpha'))).resolves.toMatchObject({ pushAvailable: false })
+    expect(api.callsOf('host.gitPush')).toEqual([{ workspaceId: 'alpha' }])
+    api.onGitPush = () => Promise.resolve(err({
+      code: 'git-failed', message: 'rejected', details: {},
+    }))
+    await expect(workspaces.gitPush(wid('alpha')))
       .rejects.toMatchObject({ rpcError: { code: 'git-failed' } })
   })
 

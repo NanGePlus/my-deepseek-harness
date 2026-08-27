@@ -148,6 +148,7 @@ describe('shouldSyncPreviewBuffer', () => {
     }
     expect(shouldSyncPreviewBuffer(idle, 'Other\n', 'Hello\n')).toBe(true)
     expect(shouldSyncPreviewBuffer(idle, 'Hello\n', 'Hello\n')).toBe(false)
+    expect(shouldSyncPreviewBuffer(focused, 'Other\n', 'Hello\n', { force: true })).toBe(true)
   })
 })
 

@@ -5,7 +5,7 @@ import type {} from '@deepseek-ai/dsh-attachment'
 // Activates the webServer Context merge used below.
 import type { WebRoute, WebUpgradeRoute } from '@deepseek-ai/dsh-host-webserver'
 import { toFetchHandler } from '@deepseek-ai/dsh-host-apiproxy'
-import { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from './api-path.ts'
+import { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH, WATCH_PATH_PATH } from './api-path.ts'
 import { bridge, DEFAULT_MAX_REQUEST_BODY_BYTES } from './http-bridge.ts'
 import { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust.ts'
 import { HostConnectionService } from './rpc-host.ts'
@@ -21,7 +21,7 @@ export type {
 } from './rpc.ts'
 export { HostConnectionService } from './rpc-host.ts'
 
-export { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from './api-path.ts'
+export { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH, WATCH_PATH_PATH } from './api-path.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'client-connection'
@@ -147,7 +147,11 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
         && !isTrustedApiRequest(request, [])) {
         return new Response('forbidden', { status: 403 })
       }
-      if (request.method === 'GET' && (pathname === MUX_EVENTS_PATH || pathname === HOST_EVENTS_PATH)) {
+      if (request.method === 'GET' && (
+        pathname === MUX_EVENTS_PATH
+        || pathname === HOST_EVENTS_PATH
+        || pathname === WATCH_PATH_PATH
+      )) {
         return new Response('upgrade required', {
           status: 426,
           headers: { connection: 'Upgrade', upgrade: 'websocket' },
@@ -192,5 +196,6 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
     apiCtx.effect(() => () => downlinks.close(), 'client-connection: WebSocket downlinks')
     registerDownlink(MUX_EVENTS_PATH, (req, socket, head) => { downlinks.handleMux(req, socket, head) })
     registerDownlink(HOST_EVENTS_PATH, (req, socket, head) => { downlinks.handleHost(req, socket, head) })
+    registerDownlink(WATCH_PATH_PATH, (req, socket, head) => { downlinks.handleWatchPath(req, socket, head) })
   })
 }

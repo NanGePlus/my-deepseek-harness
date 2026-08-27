@@ -19,6 +19,8 @@ export interface TextEditorTab {
   buffer: string
   /** Last explicitly saved text. */
   saved: string
+  /** Incremented on external disk reload so focused editors still apply the new text. */
+  diskReloadTicket?: number
 }
 
 /** Read-only image preview tab. */
@@ -159,6 +161,7 @@ export function createFileEditorStore(): EngineStoreHandle<FileEditorRootState, 
         if (tab?.kind === 'text') {
           tab.buffer = text
           tab.saved = text
+          tab.diskReloadTicket = (tab.diskReloadTicket ?? 0) + 1
         }
       },
       renameTabPath: (draft, workspaceId, oldPath, newPath, newName) => {

@@ -2608,6 +2608,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       gitUnstage: request => ok(request, { availability: 'not-a-repository' as const }),
       gitDiscard: request => ok(request, { availability: 'not-a-repository' as const }),
       gitCommit: request => ok(request, { availability: 'not-a-repository' as const }),
+      gitPush: request => ok(request, { availability: 'not-a-repository' as const }),
       readFile: request => ok(request, { kind: 'text', path: request.payload.path, text: '' }),
       writeFile: request => ok(request, { path: request.payload.path }),
       deletePath: request => ok(request, { path: request.payload.path }),
@@ -3164,6 +3165,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'host.gitUnstage': return this.api.host.gitUnstage(request, signal)
       case 'host.gitDiscard': return this.api.host.gitDiscard(request, signal)
       case 'host.gitCommit': return this.api.host.gitCommit(request, signal)
+      case 'host.gitPush': return this.api.host.gitPush(request, signal)
       case 'host.readFile': return this.api.host.readFile(request, signal)
       case 'host.writeFile': return this.api.host.writeFile(request, signal)
       case 'host.deletePath': return this.api.host.deletePath(request, signal)

@@ -49,6 +49,12 @@ export type { MarkdownCodeLabels, MarkdownFileMentions, MermaidSecurityLevel } f
 export { MessageText } from './markdown/MessageText.tsx'
 export { extractMarkdownPlainText } from './markdown/plain-text.ts'
 export type { MarkdownPlainTextMode, MarkdownPlainTextOptions } from './markdown/plain-text.ts'
+export {
+  grammarLoadCount,
+  highlightLines,
+  subscribeGrammarLoaded,
+} from './markdown/highlight.ts'
+export type { HighlightSpan } from './markdown/highlight.ts'
 export { ZoomableImage } from './markdown/ZoomableImage.tsx'
 export type { ZoomableImageLabels } from './markdown/ZoomableImage.tsx'
 export * from './icons/index.tsx'

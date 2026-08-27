@@ -2,8 +2,8 @@
  * host.watchPath: per-file external change notifications inside a Workspace root.
  */
 
-import { watch, type FSWatcher } from 'node:fs'
-import { resolve } from 'node:path'
+import { statSync, watch, type FSWatcher } from 'node:fs'
+import { basename, dirname, resolve } from 'node:path'
 import type { WatchPathFrame } from './api/host.ts'
 import {
   pathWithinWorkspace,
@@ -15,6 +15,14 @@ export interface WatchPathInternals {
   watch?: typeof watch
 }
 
+/** Directory to `fs.watch` and optional child-name filter for a bound path. */
+export interface WatchLocation {
+  /** Absolute directory Node watches; the target file's parent, or the target itself when it is a directory. */
+  watchRoot: string
+  /** Basename that must match `filename` for a file target; omitted for directory targets. */
+  filterName: string | undefined
+}
+
 /**
  * True when an fs.watch event type can signal content changed on the watched path.
  * @param eventType - Node fs.watch event name.
@@ -24,10 +32,44 @@ function isContentChangeEvent(eventType: string): boolean {
 }
 
 /**
+ * Choose the `fs.watch` root so atomic publish (temp + rename) does not drop the subscription.
+ * File targets watch the parent directory and filter by basename; directory targets watch themselves.
+ * @param target - resolved absolute path inside the Workspace.
+ * @returns watch root and optional filename filter.
+ */
+export function watchLocationForPath(target: string): WatchLocation {
+  try {
+    if (statSync(target).isDirectory()) {
+      return { watchRoot: target, filterName: undefined }
+    }
+  } catch {
+    // Missing path: still watch the parent so a later create/replace is visible.
+  }
+  return { watchRoot: dirname(target), filterName: basename(target) }
+}
+
+/**
+ * True when a directory-watch `filename` belongs to the subscribed file.
+ * @param filterName - basename of the file target; `undefined` accepts every child.
+ * @param filename - name Node reported for the event; omitted on some platforms and in tests.
+ */
+function filenameMatchesFilter(
+  filterName: string | undefined,
+  filename: string | Buffer | null | undefined,
+): boolean {
+  if (filterName === undefined) return true
+  if (filename == null) return true
+  const name = typeof filename === 'string' ? filename : filename.toString()
+  return name === filterName
+}
+
+/**
  * Stream external disk changes for one path inside a Workspace root until `signal` aborts.
- * Uses Node `fs.watch` on the single target path; does not recurse the Workspace root.
+ * File targets use `fs.watch` on the parent directory (filtered by basename) so a same-directory
+ * atomic rename keeps delivering events; directory targets watch themselves. Does not recurse
+ * the Workspace root.
  * @param workspaceRoot - canonical bound Workspace directory.
- * @param path - absolute file path; must lie within the root.
+ * @param path - absolute file or directory path; must lie within the root.
  * @param signal - caller lifetime; abort ends the stream and closes the watcher.
  * @param internals - optional watch injection for tests.
  */
@@ -42,6 +84,7 @@ export async function* watchWorkspacePath(
   if (!pathWithinWorkspace(workspaceRoot, target)) {
     throw new WorkspacePathOutOfBoundsError(workspaceRoot, target)
   }
+  const { watchRoot, filterName } = watchLocationForPath(target)
 
   const queue: WatchPathFrame[] = []
   let notify: (() => void) | undefined
@@ -55,10 +98,10 @@ export async function* watchWorkspacePath(
 
   let watcher: FSWatcher | undefined
   try {
-    watcher = watchFn(target, (eventType) => {
-      if (isContentChangeEvent(eventType)) {
-        push({ type: 'host/path-changed', path: target })
-      }
+    watcher = watchFn(watchRoot, (eventType, filename) => {
+      if (!isContentChangeEvent(eventType)) return
+      if (!filenameMatchesFilter(filterName, filename)) return
+      push({ type: 'host/path-changed', path: target })
     })
     watcher.on('error', (error) => {
       push({

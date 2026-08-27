@@ -71,6 +71,7 @@ export async function openPathInEditor(
         language: languageForPath(absolutePath),
         buffer: result.text,
         saved: result.text,
+        diskReloadTicket: 0,
       })
     }
     return true

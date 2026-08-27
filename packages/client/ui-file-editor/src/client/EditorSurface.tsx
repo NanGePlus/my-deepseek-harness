@@ -30,14 +30,6 @@ import {
 import css from './EditorSurface.module.css'
 import dialogCss from './FileTreeDialogs.module.css'
 
-/** Pending external-change dialog for one text tab. */
-interface ExternalChangeDialog {
-  /** Host-absolute path. */
-  path: string
-  /** File name shown in the dialog body. */
-  name: string
-}
-
 /** Host file-tree and file I/O callbacks closed over `ctx.workspaces` in apply. */
 export interface FileEditorInjected {
   /**
@@ -208,7 +200,9 @@ const DARK_ATTRIBUTE = 'data-ds-dark-theme'
  * @param props - root runtime share, locale, Workspace-partitioned tab store, and Host callbacks.
  */
 export function EditorSurface({
-  t, visible = true, setDirtyPaths, useSessions, useWorkspaces, useStore, actions, dirtyGuard,
+  t, visible = true, setDirtyPaths, diskPathsChangedEpoch = 0, diskPathsChanged = [],
+  diskPathsChangedReload = true,
+  useSessions, useWorkspaces, useStore, actions, dirtyGuard,
   listWorkspaceEntries, gitStatus, readFile, writeFile,
   deletePath, renamePath, createWorkspaceDirectory, watchPath,
   lspSyncDocument, lspCloseDocument, lspHoverDocument, insertFileContextToComposer,
@@ -246,7 +240,7 @@ export function EditorSurface({
   const [status, setStatus] = useState<EditorPaneStatus>({ kind: 'idle' })
   const [dark, setDark] = useState(() => document.body.hasAttribute(DARK_ATTRIBUTE))
   const [newFileTrigger, _setNewFileTrigger] = useState(0)
-  const [gitRefreshTrigger, setGitRefreshTrigger] = useState(0)
+  const [gitRefresh, setGitRefresh] = useState({ trigger: 0, silent: false })
   const prevExplorerVisible = useRef(visible)
   const [explorerRefresh, setExplorerRefresh] = useState({
     trigger: 0,
@@ -256,7 +250,6 @@ export function EditorSurface({
   const [treeVisible, setTreeVisible] = useState(true)
   const [treeWidthPx, setTreeWidthPx] = useState<number | null>(null)
   const [treeDragging, setTreeDragging] = useState(false)
-  const [externalChange, setExternalChange] = useState<ExternalChangeDialog | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const treeDragBase = useRef(0)
   const ioAbort = useRef<AbortController | null>(null)
@@ -277,6 +270,9 @@ export function EditorSurface({
   const [lspDiagnostics, setLspDiagnostics] = useState<ReadonlyMap<string, readonly HostLspDiagnostic[]>>(new Map())
   const tabsRef = useRef(tabs)
   tabsRef.current = tabs
+  const gitReloadingPathsRef = useRef<Set<string>>(new Set())
+  const suppressWatchSyncPathsRef = useRef<Set<string>>(new Set())
+  const suppressExplorerRefreshUntilRef = useRef(0)
 
   useEffect(() => {
     // Host-absolute dirty text-tab paths for the Git action guard; empty when none are dirty.
@@ -297,8 +293,16 @@ export function EditorSurface({
       ? guardMode.mode
       : null
 
-  const bumpGitRefresh = useCallback(() => {
-    setGitRefreshTrigger(current => current + 1)
+  const bumpGitRefresh = useCallback((silent = false) => {
+    setGitRefresh(prev => ({ trigger: prev.trigger + 1, silent }))
+  }, [])
+
+  const noteOwnDiskWrite = useCallback(() => {
+    suppressExplorerRefreshUntilRef.current = Date.now() + 500
+  }, [])
+
+  const shouldSuppressExplorerRefresh = useCallback((): boolean => {
+    return Date.now() < suppressExplorerRefreshUntilRef.current
   }, [])
 
   useEffect(() => {
@@ -308,37 +312,39 @@ export function EditorSurface({
   }, [visible, bumpGitRefresh])
 
   const bumpExplorerRefresh = useCallback((path: string, mode: 'parent' | 'visible' = 'parent') => {
+    if (shouldSuppressExplorerRefresh()) return
     setExplorerRefresh(prev => ({
       trigger: prev.trigger + 1,
       path,
       mode,
     }))
-  }, [])
+  }, [shouldSuppressExplorerRefresh])
 
   const scheduleVisibleExplorerRefresh = useCallback(() => {
-    if (workspace === undefined) return
+    if (workspace === undefined || shouldSuppressExplorerRefresh()) return
     if (explorerRefreshDebounce.current !== null) clearTimeout(explorerRefreshDebounce.current)
     explorerRefreshDebounce.current = setTimeout(() => {
       explorerRefreshDebounce.current = null
+      if (shouldSuppressExplorerRefresh()) return
       bumpExplorerRefresh(workspace.path, 'visible')
     }, 200)
-  }, [workspace, bumpExplorerRefresh])
+  }, [workspace, bumpExplorerRefresh, shouldSuppressExplorerRefresh])
 
   const saveTab = useCallback(async (path: string): Promise<boolean> => {
     const tab = tabsRef.current.find(item => item.path === path)
     /* v8 ignore next -- guard only runs for open text tabs in a bound Workspace */
     if (tab?.kind !== 'text' || workspace === undefined) return false
     try {
+      noteOwnDiskWrite()
       await writeFile(workspace.workspaceId, path, tab.buffer)
       editorActions?.markSaved(path)
-      bumpGitRefresh()
-      bumpExplorerRefresh(path, 'parent')
+      bumpGitRefresh(true)
       return true
     } catch (error: unknown) {
       void error
       return false
     }
-  }, [workspace, writeFile, editorActions, bumpGitRefresh, bumpExplorerRefresh])
+  }, [workspace, writeFile, editorActions, bumpGitRefresh, noteOwnDiskWrite])
 
   useEffect(() => {
     const sync = (): void => { setDark(document.body.hasAttribute(DARK_ATTRIBUTE)) }
@@ -564,6 +570,7 @@ export function EditorSurface({
           language: languageForPath(entry.path),
           buffer: result.text,
           saved: result.text,
+          diskReloadTicket: 0,
         })
         if (!shouldSkipLsp(result.text)) syncLsp(entry.path, result.text)
       }
@@ -579,20 +586,51 @@ export function EditorSurface({
     }
   }, [editorActions, workspace, readFileWithTimeout, t, syncLsp, focusEditorTab])
 
-  const checkExternalChange = useCallback(async (path: string): Promise<void> => {
+  const syncOpenTabFromDisk = useCallback(async (
+    path: string,
+    options: { fromWatch?: boolean } = {},
+  ): Promise<void> => {
     if (workspace === undefined) return
-    const tab = tabsRef.current.find(item => item.path === path)
-    if (tab?.kind !== 'text') return
-    if (shouldSkipLsp(tab.buffer)) return
-    try {
-      const result = await readFile(workspace.workspaceId, path, 'text')
-      if (result.kind !== 'text') return
-      if (result.text === tab.buffer) return
-      setExternalChange({ path, name: tab.name })
-    } catch (error: unknown) {
-      void error
+    if (suppressWatchSyncPathsRef.current.has(path)) return
+    if (gitReloadingPathsRef.current.has(path)) return
+    const maxAttempts = options.fromWatch ? 8 : 1
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const tab = tabsRef.current.find(item => item.kind === 'text' && item.path === path)
+      if (tab?.kind !== 'text' || shouldSkipLsp(tab.buffer)) return
+      try {
+        const result = await readFile(workspace.workspaceId, path, 'text')
+        if (result.kind !== 'text') return
+        if (result.text === tab.buffer || result.text === tab.saved) {
+          if (!options.fromWatch || attempt + 1 >= maxAttempts) return
+          await new Promise<void>((resolve) => { setTimeout(resolve, 75 * (attempt + 1)) })
+          continue
+        }
+        editorActions?.reloadTextTab(path, result.text)
+        return
+      } catch (error: unknown) {
+        void error
+        return
+      }
     }
-  }, [workspace, readFile])
+  }, [workspace, readFile, editorActions])
+
+  const reloadGitDiskPaths = useCallback(async (paths: readonly string[]): Promise<void> => {
+    if (workspace === undefined) return
+    try {
+      for (const path of paths) {
+        const tab = tabsRef.current.find(item => item.kind === 'text' && item.path === path)
+        if (tab?.kind !== 'text' || shouldSkipLsp(tab.buffer)) continue
+        try {
+          const result = await readFile(workspace.workspaceId, path, 'text')
+          if (result.kind === 'text') editorActions?.reloadTextTab(path, result.text)
+        } catch (error: unknown) {
+          void error
+        }
+      }
+    } finally {
+      for (const path of paths) gitReloadingPathsRef.current.delete(path)
+    }
+  }, [workspace, readFile, editorActions])
 
   useEffect(() => {
     if (workspace === undefined) return
@@ -615,32 +653,45 @@ export function EditorSurface({
 
   useEffect(() => {
     if (workspace === undefined) return
-    const active = tabs.find(tab => tab.path === activePath)
-    const watchedPath = active?.kind === 'text' ? active.path : undefined
+    const openTextPaths = tabs
+      .filter((tab): tab is Extract<EditorTab, { kind: 'text' }> => tab.kind === 'text')
+      .map(tab => tab.path)
+    const openTextPathSet = new Set(openTextPaths)
     for (const [path, controller] of watchAbort.current) {
-      if (path !== watchedPath) {
-        controller.abort()
-        watchAbort.current.delete(path)
-        unwatchedPaths.current.add(path)
+      if (openTextPathSet.has(path)) continue
+      controller.abort()
+      watchAbort.current.delete(path)
+      unwatchedPaths.current.add(path)
+    }
+    for (const path of openTextPaths) {
+      if (unwatchedPaths.current.has(path)) {
+        unwatchedPaths.current.delete(path)
+        void syncOpenTabFromDisk(path)
       }
+      if (watchAbort.current.has(path)) continue
+      const controller = new AbortController()
+      watchAbort.current.set(path, controller)
+      watchPath(
+        workspace.workspaceId,
+        path,
+        () => { void syncOpenTabFromDisk(path, { fromWatch: true }) },
+        controller.signal,
+      )
     }
-    if (watchedPath === undefined || watchAbort.current.has(watchedPath)) return
-    if (unwatchedPaths.current.has(watchedPath)) {
-      unwatchedPaths.current.delete(watchedPath)
-      void checkExternalChange(watchedPath)
+  }, [tabs, workspace, watchPath, syncOpenTabFromDisk])
+
+  useEffect(() => {
+    if (diskPathsChangedEpoch === 0 || diskPathsChanged.length === 0) return
+    if (diskPathsChangedReload) {
+      for (const path of diskPathsChanged) {
+        suppressWatchSyncPathsRef.current.delete(path)
+        gitReloadingPathsRef.current.add(path)
+      }
+      void reloadGitDiskPaths(diskPathsChanged)
+      return
     }
-    const controller = new AbortController()
-    watchAbort.current.set(watchedPath, controller)
-    watchPath(
-      workspace.workspaceId,
-      watchedPath,
-      () => {
-        void checkExternalChange(watchedPath)
-        bumpExplorerRefresh(watchedPath, 'parent')
-      },
-      controller.signal,
-    )
-  }, [tabs, activePath, workspace, watchPath, checkExternalChange, bumpExplorerRefresh])
+    for (const path of diskPathsChanged) suppressWatchSyncPathsRef.current.add(path)
+  }, [diskPathsChangedEpoch, diskPathsChanged, diskPathsChangedReload, reloadGitDiskPaths])
 
   useEffect(() => () => {
     if (explorerRefreshDebounce.current !== null) clearTimeout(explorerRefreshDebounce.current)
@@ -649,22 +700,13 @@ export function EditorSurface({
     for (const controller of watchAbort.current.values()) controller.abort()
     watchAbort.current.clear()
     unwatchedPaths.current.clear()
+    gitReloadingPathsRef.current.clear()
+    suppressWatchSyncPathsRef.current.clear()
     for (const timer of lspDebounce.current.values()) clearTimeout(timer)
     lspDebounce.current.clear()
     for (const controller of lspSyncAbort.current.values()) controller.abort()
     lspSyncAbort.current.clear()
   }, [])
-
-  const reloadExternalChange = useCallback(async (): Promise<void> => {
-    if (externalChange === null || workspace === undefined) return
-    try {
-      const result = await readFile(workspace.workspaceId, externalChange.path, 'text')
-      if (result.kind === 'text') editorActions?.reloadTextTab(externalChange.path, result.text)
-      setExternalChange(null)
-    } catch (error: unknown) {
-      void error
-    }
-  }, [externalChange, workspace, readFile, editorActions])
 
   const saveActive = useCallback(async () => {
     const active = tabs.find(tab => tab.path === activePath)
@@ -675,18 +717,18 @@ export function EditorSurface({
     ioAbort.current = ac
     retryRef.current = () => { void saveActive() }
     try {
+      noteOwnDiskWrite()
       await writeFile(workspace.workspaceId, active.path, active.buffer, ac.signal)
       if (ac.signal.aborted) return
       editorActions?.markSaved(active.path)
-      bumpGitRefresh()
-      bumpExplorerRefresh(active.path, 'parent')
+      bumpGitRefresh(true)
       setStatus(prev => (prev.kind === 'error' && prev.op === 'save' ? { kind: 'idle' } : prev))
     } catch (error: unknown) {
       if (ac.signal.aborted) return
       void error
       setStatus({ kind: 'error', op: 'save', message: t('editor.error.save') })
     }
-  }, [tabs, activePath, workspace, writeFile, editorActions, bumpGitRefresh, bumpExplorerRefresh, t])
+  }, [tabs, activePath, workspace, writeFile, editorActions, bumpGitRefresh, noteOwnDiskWrite, t])
 
   useEffect(() => () => { ioAbort.current?.abort() }, [])
 
@@ -825,7 +867,8 @@ export function EditorSurface({
         treeWidthPx={treeWidthPx}
         onHide={() => { setTreeVisible(false) }}
         newFileTrigger={newFileTrigger}
-        gitRefreshTrigger={gitRefreshTrigger}
+        gitRefreshTrigger={gitRefresh.trigger}
+        gitRefreshSilent={gitRefresh.silent}
         explorerRefreshTrigger={explorerRefresh.trigger}
         explorerRefreshPath={explorerRefresh.path}
         explorerRefreshMode={explorerRefresh.mode}
@@ -871,26 +914,6 @@ export function EditorSurface({
         onSourceSelectionApplied={workspaceId === undefined
           ? undefined
           : (ticket) => { actions.clearSourceSelection(workspaceId, ticket) }}
-      />
-      <Modal
-        open={externalChange !== null}
-        onClose={() => { setExternalChange(null) }}
-        closeLabel={t('editor.dialog.close')}
-        title={t('editor.dialog.externalChange.title')}
-        className={dialogCss.dialogSurface ?? ''}
-        {...externalChange === null
-          ? {}
-          : { description: t('editor.dialog.externalChange.desc', { name: externalChange.name }) }}
-        footer={(
-          <>
-            <Button variant="outline" onClick={() => { setExternalChange(null) }}>
-              {t('editor.dialog.externalChange.keepLocal')}
-            </Button>
-            <Button variant="primary" onClick={() => { void reloadExternalChange() }}>
-              {t('editor.dialog.externalChange.reload')}
-            </Button>
-          </>
-        )}
       />
       <Modal
         open={activeGuard !== null}

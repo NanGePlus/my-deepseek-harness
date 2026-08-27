@@ -32,6 +32,7 @@ describe('file editor store', () => {
       language: 'markdown',
       buffer: 'a',
       saved: 'a',
+      diskReloadTicket: 0,
     })
     instance.actions.renameTabPath(WID, '/w/README.md', '/w/GUIDE.md', 'GUIDE.md')
     const tab = instance.getSnapshot().byWorkspace[WID]?.tabs[0]
@@ -49,6 +50,7 @@ describe('file editor store', () => {
       language: 'markdown',
       buffer: 'a',
       saved: 'a',
+      diskReloadTicket: 0,
     })
     instance.actions.openTab(WID, {
       kind: 'text',
@@ -57,6 +59,7 @@ describe('file editor store', () => {
       language: 'markdown',
       buffer: 'b',
       saved: 'b',
+      diskReloadTicket: 0,
     })
     instance.actions.renameTabPath(WID, '/w/test', '/w/test02', 'test02')
     const tabs = instance.getSnapshot().byWorkspace[WID]?.tabs ?? []
@@ -74,6 +77,7 @@ describe('file editor store', () => {
       language: 'markdown',
       buffer: 'local',
       saved: 'initial',
+      diskReloadTicket: 0,
     })
     instance.actions.reloadTextTab(WID, '/w/README.md', 'external\n')
     const tab = instance.getSnapshot().byWorkspace[WID]?.tabs[0]
@@ -81,6 +85,7 @@ describe('file editor store', () => {
     if (tab?.kind === 'text') {
       expect(tab.buffer).toBe('external\n')
       expect(tab.saved).toBe('external\n')
+      expect(tab.diskReloadTicket).toBe(1)
     }
     expect(tabIsDirty(tab!)).toBe(false)
   })
@@ -88,10 +93,10 @@ describe('file editor store', () => {
   it('closeAllTabs clears every tab and the active path for one Workspace', () => {
     const instance = createFileEditorStore().create()
     instance.actions.openTab(WID, {
-      kind: 'text', path: '/a', name: 'a.ts', language: 'typescript', buffer: 'x', saved: 'x',
+      kind: 'text', path: '/a', name: 'a.ts', language: 'typescript', buffer: 'x', saved: 'x', diskReloadTicket: 0,
     })
     instance.actions.openTab(WID, {
-      kind: 'text', path: '/b', name: 'b.ts', language: 'typescript', buffer: 'y', saved: 'y',
+      kind: 'text', path: '/b', name: 'b.ts', language: 'typescript', buffer: 'y', saved: 'y', diskReloadTicket: 0,
     })
     instance.actions.closeAllTabs(WID)
     expect(instance.getSnapshot().byWorkspace[WID]).toEqual({ tabs: [], activePath: undefined })
@@ -101,10 +106,10 @@ describe('file editor store', () => {
     const instance = createFileEditorStore().create()
     const other = 'ws2' as WorkspaceId
     instance.actions.openTab(WID, {
-      kind: 'text', path: '/a', name: 'a.ts', language: 'typescript', buffer: 'x', saved: 'x',
+      kind: 'text', path: '/a', name: 'a.ts', language: 'typescript', buffer: 'x', saved: 'x', diskReloadTicket: 0,
     })
     instance.actions.openTab(other, {
-      kind: 'text', path: '/b', name: 'b.ts', language: 'typescript', buffer: 'y', saved: 'y',
+      kind: 'text', path: '/b', name: 'b.ts', language: 'typescript', buffer: 'y', saved: 'y', diskReloadTicket: 0,
     })
     expect(instance.getSnapshot().byWorkspace[WID]?.activePath).toBe('/a')
     expect(instance.getSnapshot().byWorkspace[other]?.activePath).toBe('/b')

@@ -25,6 +25,7 @@ import {
 import { flattenVisibleTree, paintVisibleRows } from './flatten-visible.ts'
 import { filterTreeEntries } from './tree-entry-filter.ts'
 import { withDirectoryListingTimeout } from './directory-listing-timeout.ts'
+import { rollupGitBadges } from './git-badge-rollup.ts'
 import css from './FileTreePane.module.css'
 import iconCss from './IconButton.module.css'
 import dialogCss from './FileTreeDialogs.module.css'
@@ -131,6 +132,8 @@ export interface FileTreePaneProps extends FileTreeHost, FileTreeMutationHost {
   newFileTrigger?: number
   /** Increment after disk writes so Git badges refresh without rebinding the Workspace. */
   gitRefreshTrigger?: number
+  /** When true, refresh Git badges without the tree-top loading bar. */
+  gitRefreshSilent?: boolean
   /** Increment after disk writes outside tree mutations so listings refresh. */
   explorerRefreshTrigger?: number
   /** Host-absolute path that changed; its parent listing reloads unless mode is visible. */
@@ -216,6 +219,7 @@ export function FileTreePane({
   workspace, listWorkspaceEntries, gitStatus, deletePath, renamePath,
   createWorkspaceDirectory, writeFile, t, onOpenFile, newFileTrigger = 0,
   gitRefreshTrigger = 0,
+  gitRefreshSilent = false,
   explorerRefreshTrigger = 0,
   explorerRefreshPath,
   explorerRefreshMode = 'parent',
@@ -308,11 +312,12 @@ export function FileTreePane({
       return next
     })
     try {
+      if (ac.signal.aborted && fetchAbortByPath.current.get(dirPath) !== ac) return []
       const listing = await withDirectoryListingTimeout(
         listWorkspaceEntriesRef.current(workspace.workspaceId, dirPath, ac.signal),
         ac,
       )
-      if (ac.signal.aborted) return []
+      if (fetchAbortByPath.current.get(dirPath) !== ac) return []
       const entries = filterTreeEntries(listing.entries)
       setChildrenByPath(current => new Map(current).set(dirPath, entries))
       setTruncatedPaths((current) => {
@@ -324,7 +329,7 @@ export function FileTreePane({
       clearLoadingPath(dirPath)
       return entries
     } catch (error: unknown) {
-      if (ac.signal.aborted) return []
+      if (fetchAbortByPath.current.get(dirPath) !== ac) return []
       void error
       setChildrenByPath(current => new Map(current).set(dirPath, []))
       setFailedPaths(current => new Set(current).add(dirPath))
@@ -435,22 +440,25 @@ export function FileTreePane({
   const boundWorkspaceId = workspace?.workspaceId
   const boundWorkspacePath = workspace?.path
 
-  const refreshGitStatus = useCallback(async () => {
+  const refreshGitStatus = useCallback(async (options: { silent?: boolean } = {}) => {
     if (workspace === undefined) return
     gitAbort.current?.abort()
     const ac = new AbortController()
     gitAbort.current = ac
-    setGitLoading(true)
+    if (!options.silent) setGitLoading(true)
     try {
       const listing = await gitStatusRef.current(workspace.workspaceId, ac.signal)
       if (ac.signal.aborted) return
-      setGitByPath(new Map(listing.entries.map(entry => [entry.path, entry.letter])))
+      setGitByPath(rollupGitBadges(
+        new Map(listing.entries.map(entry => [entry.path, entry.letter])),
+        workspace.path,
+      ))
     } catch (error: unknown) {
       if (ac.signal.aborted) return
       void error
       setGitByPath(new Map())
     } finally {
-      if (!ac.signal.aborted) setGitLoading(false)
+      if (!ac.signal.aborted && !options.silent) setGitLoading(false)
     }
   }, [workspace])
 
@@ -509,7 +517,7 @@ export function FileTreePane({
         setFailedPaths(new Set([boundWorkspacePath]))
       })
     void (async () => {
-      if (boundWorkspaceId === undefined) return
+      if (boundWorkspaceId === undefined || boundWorkspacePath === undefined) return
       gitAbort.current?.abort()
       const gitAc = new AbortController()
       gitAbort.current = gitAc
@@ -517,7 +525,10 @@ export function FileTreePane({
       try {
         const listing = await gitStatusRef.current(boundWorkspaceId, gitAc.signal)
         if (gitAc.signal.aborted) return
-        setGitByPath(new Map(listing.entries.map(entry => [entry.path, entry.letter])))
+        setGitByPath(rollupGitBadges(
+          new Map(listing.entries.map(entry => [entry.path, entry.letter])),
+          boundWorkspacePath,
+        ))
       } catch (error: unknown) {
         if (gitAc.signal.aborted) return
         void error
@@ -534,8 +545,8 @@ export function FileTreePane({
 
   useEffect(() => {
     if (gitRefreshTrigger === 0) return
-    void refreshGitStatus()
-  }, [gitRefreshTrigger, refreshGitStatus])
+    void refreshGitStatus({ silent: gitRefreshSilent })
+  }, [gitRefreshTrigger, gitRefreshSilent, refreshGitStatus])
 
   useEffect(() => {
     if (explorerRefreshTrigger === 0 || workspace === undefined) return

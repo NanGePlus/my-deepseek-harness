@@ -19,6 +19,7 @@ const editor = {
   setSelection,
   revealLineInCenter,
   onDidChangeModelContent: (listener: () => void): void => { listeners.push(listener) },
+  onDidScrollChange: vi.fn(() => ({ dispose: vi.fn() })),
   onMouseDown: vi.fn(() => ({ dispose: vi.fn() })),
   onMouseMove: vi.fn(() => ({ dispose: vi.fn() })),
   onMouseUp: vi.fn(() => ({ dispose: vi.fn() })),
@@ -110,6 +111,7 @@ describe('MonacoEditor', () => {
     )
     const host = view.container.querySelector('[role="textbox"]')
     expect(host?.getAttribute('aria-label')).toBe('a.ts，TypeScript，浅色')
+    expect(view.container.firstElementChild?.getAttribute('data-surface')).toBe('document')
     const { installMonacoEnvironment } = await import('../src/client/monaco-environment.ts')
     expect(installMonacoEnvironment).toHaveBeenCalled()
 
