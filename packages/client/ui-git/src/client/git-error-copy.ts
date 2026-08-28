@@ -10,3 +10,15 @@ export function isMissingRemoteGitError(message: string): boolean {
     || text.includes('no configured push destination')
     || text.includes('no such remote')
 }
+
+/**
+ * True when Git rejected a push because the remote has commits that would not
+ * fast-forward.
+ * @param message - `git-failed` RPC message.
+ */
+export function isRejectedPushGitError(message: string): boolean {
+  const text = message.toLowerCase()
+  return text.includes('[rejected]')
+    || text.includes('non-fast-forward')
+    || text.includes('(fetch first)')
+}

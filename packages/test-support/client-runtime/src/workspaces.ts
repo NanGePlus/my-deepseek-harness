@@ -321,6 +321,44 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
+   * Add `origin` (recorded). The default is not-a-repository.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param url - remote URL forwarded like production.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns the refreshed working tree.
+   */
+  async gitAddRemote(
+    workspaceId: WorkspaceId,
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    this.calls.push({ method: 'gitAddRemote', args: [workspaceId, url, signal] })
+    const stub = this.stubs.get('gitAddRemote')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, url, signal) as Promise<GitWorkingTreeResult>)
+    }
+    return { availability: 'not-a-repository' }
+  }
+
+  /**
+   * Remove `origin` (recorded). The default is not-a-repository.
+   * @param workspaceId - Workspace whose bound root is the discovery start.
+   * @param signal - optional abort signal forwarded like production.
+   * @returns the refreshed working tree.
+   */
+  async gitRemoveRemote(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<GitWorkingTreeResult> {
+    this.calls.push({ method: 'gitRemoveRemote', args: [workspaceId, signal] })
+    const stub = this.stubs.get('gitRemoveRemote')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, signal) as Promise<GitWorkingTreeResult>)
+    }
+    return { availability: 'not-a-repository' }
+  }
+
+  /**
    * Read commit history (recorded). The default is not-a-repository.
    * @param workspaceId - Workspace whose bound root is the discovery start.
    * @param query - optional page size and skip forwarded like production.
@@ -439,6 +477,30 @@ export class TestWorkspaces implements IWorkspaces {
     const slash = path.lastIndexOf('/')
     const parent = slash >= 0 ? path.slice(0, slash) : ''
     return { path: parent === '' ? newName : `${parent}/${newName}` }
+  }
+
+  /**
+   * Move a Workspace path into another directory (recorded). The default joins dest and basename.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute source path.
+   * @param destinationDirectory - absolute existing directory that will receive the source.
+   * @param signal - optional abort signal.
+   * @returns the destination absolute path.
+   */
+  async movePath(
+    workspaceId: WorkspaceId,
+    path: string,
+    destinationDirectory: string,
+    signal?: AbortSignal,
+  ): Promise<PathMutationResult> {
+    this.calls.push({ method: 'movePath', args: [workspaceId, path, destinationDirectory, signal] })
+    const stub = this.stubs.get('movePath')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, path, destinationDirectory, signal) as Promise<PathMutationResult>)
+    }
+    const slash = path.lastIndexOf('/')
+    const name = slash >= 0 ? path.slice(slash + 1) : path
+    return { path: `${destinationDirectory}/${name}` }
   }
 
   /**

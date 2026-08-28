@@ -90,9 +90,20 @@ export type GitWorkingTreeResult =
     staged: GitWorkingTreeChange[]
     /**
      * True when {@link HostApi.gitPush} can publish local commits on the current
-     * branch (ahead of upstream, or no upstream on a named branch).
+     * branch (ahead of upstream, or a named branch that has a commit and no
+     * upstream). False on an unborn branch even when `origin` exists.
      */
     pushAvailable: boolean
+    /**
+     * True when `git remote` lists at least one name. Host always sets this on
+     * repository results; omitted only in older fixtures.
+     */
+    hasRemote?: boolean
+    /**
+     * URL of remote `origin` from `git remote get-url origin`. Omitted when
+     * `origin` is missing, including when other remotes exist.
+     */
+    originUrl?: string
     /** Commits on HEAD not on @{upstream}; omitted when upstream is unset. */
     ahead?: number
   }
@@ -232,7 +243,7 @@ export interface FileWriteResult {
   path: string
 }
 
-/** host.deletePath / host.renamePath / host.createWorkspaceDirectory response value. */
+/** host.deletePath / host.renamePath / host.movePath / host.createWorkspaceDirectory response value. */
 export interface PathMutationResult {
   /** Absolute host path affected by the mutation. */
   path: string
@@ -425,9 +436,11 @@ export interface HostApi {
   /**
    * Unstage one staged working-tree change. Omit `hunkHeader` to unstage the
    * whole file; when present, only that tracked-text hunk is unstaged. Does not
-   * rewrite the disk working tree. Returns the refreshed working tree. Missing
-   * staged rows or hunks fail with `git-path-not-found`; a missing git binary
-   * with `git-unavailable`; other git invocation failures with `git-failed`.
+   * rewrite the disk working tree. On an unborn branch, whole-file unstage uses
+   * `git rm --cached -f` because `git restore --staged` cannot resolve HEAD.
+   * Returns the refreshed working tree. Missing staged rows or hunks fail with
+   * `git-path-not-found`; a missing git binary with `git-unavailable`; other git
+   * invocation failures with `git-failed`.
    */
   gitUnstage(
     request: RpcRequest<{ workspaceId: WorkspaceId; path: string; hunkHeader?: string }>,
@@ -471,6 +484,27 @@ export interface HostApi {
    * Returns the refreshed working tree.
    */
   gitPush(
+    request: RpcRequest<{ workspaceId: WorkspaceId }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<GitWorkingTreeResult>>
+
+  /**
+   * Add `origin` with the given URL. Does not fetch, push, or rename an existing
+   * remote. An empty trimmed URL fails with `git-failed` `empty remote url`.
+   * When `origin` already exists, Git's own text rides `git-failed`. Returns the
+   * refreshed working tree. Missing git fails with `git-unavailable`.
+   */
+  gitAddRemote(
+    request: RpcRequest<{ workspaceId: WorkspaceId; url: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<GitWorkingTreeResult>>
+
+  /**
+   * Remove remote `origin`. Does not fetch, push, or touch remotes with other
+   * names. When `origin` is missing, Git's own text rides `git-failed`. Returns
+   * the refreshed working tree. Missing git fails with `git-unavailable`.
+   */
+  gitRemoveRemote(
     request: RpcRequest<{ workspaceId: WorkspaceId }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<GitWorkingTreeResult>>
@@ -532,6 +566,16 @@ export interface HostApi {
    */
   renamePath(
     request: RpcRequest<{ workspaceId: WorkspaceId; path: string; newName: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<PathMutationResult>>
+
+  /**
+   * Move one file or directory to another existing directory inside a
+   * registered Workspace, keeping the base name; an existing target fails
+   * with `directory-exists`.
+   */
+  movePath(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string; destinationDirectory: string }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<PathMutationResult>>
 

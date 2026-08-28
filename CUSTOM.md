@@ -23,9 +23,9 @@
 - 会话头入口：**图标 +「工具箱」** capsule 按钮（与 Session log 同高 32px）；tooltip / `aria-label` 仍为「打开 / 收起工具箱」
 - 工具箱 segmented Tab：**资源管理器 | Git面板 | 工具详情**；Tab 条样式与对话区 **对话 / 轨迹** 一致（左对齐、13px、`state-business-primary` 选中下划线）；Git 段槽位 `conversation.details.git` 供 `ui-git` 注入，切走只隐藏不卸载；资源管理器段传入 `visible`，切回后重读文件树 Git 状态标记；`ui-conversation` 持有 dirty 路径只读集合（Explorer `setDirtyPaths` 写入，Git `dirtyPaths` 读取，不进 runtime 对象层）
 - **Git 面板变更列表**：段标题可收起/展开（左侧 chevron）；右侧显示文件数量；段头「全部选入/全部移出」与单行操作不变；未暂存按内容高度撑开，「待提交」跟在其后，在 Changes body 内滚动
-- **Git 面板 Graph**：待提交下方可折叠提交历史（主干 + 合入弧、分页 50）；每一行说明紧挨该行最右侧的点或线；引用胶囊 14px、长名省略，有引用时放在说明下一行靠右；悬停固定定位详情卡（完整引用、作者、相对/绝对时间、说明、正文、短 hash）；Changes 打开时钉在操作列底部；**单击某一提交在右栏堆叠该提交相对第一父提交的文件差异**（只读、可折叠文件段，最多 80 个文件）
+- **Git 面板 Graph**：待提交下方可折叠提交历史（主干 + 合入弧、分页 50）；每一行说明紧挨该行最右侧的点或线；引用胶囊 14px、长名省略，有引用时放在说明下一行靠右；悬停固定定位详情卡（完整引用、作者、相对/绝对时间、说明、正文、短 hash）；Changes 打开时钉在操作列底部；**单击某一提交在右栏堆叠该提交相对第一父提交的文件差异**（只读、可折叠文件段，最多 80 个文件）；进入面板或重读 Graph 不自动打开最新提交，右栏只保留用户上次点开的工作区文件或 Graph 提交（切走 Git Tab 因 occupant 仍挂载而恢复；整页刷新从空预览开始）；切回 Git Tab 时 Graph 与右栏保持已展示内容，后台重读不换成 loading
 - **Git 面板 Changes / Graph**：操作列两个同级可折叠组；**CHANGES** / **GRAPH** 段头 13px 加粗全大写；**CHANGES** 标题右侧显示未暂存加待提交行数（干净仓库为 0），与 GRAPH 已加载提交数同一套灰色数字；Changes 打开时 Graph 钉在底部（上限约半高）；Changes body（分支、提交区、两段变更列表）与 Graph 列表相对文件夹标题缩进 14px
-- **Git 面板提交区**：备注输入单行起步、内容增多自动增高（最高约 120px、无内滚动条）；placeholder「请填写提交备注信息」；说明为空时在输入框下方 inline 提示、不发起 Host 提交；主按钮「提交」+ 右侧下拉「提交 / 提交并推送」；**提交、提交并推送、推送** 点击后在该按钮右下角弹出带描边与阴影的确认框；本地有未推送提交时，分支名下一行显示「有 N 个提交尚未推送」或「尚未推送到远程」及独立 **推送** 按钮（`host.gitPush`，无需新暂存）；没有未推送提交时该行隐藏；**推送** 按钮 hover 提示区分「尚未推送的提交」与「首次推送」；提交/推送 RPC 进行中时备注框外圈旋转高亮 loading（`--dsw-alias-state-business-primary`）、输入框禁用，按钮仅 disabled 不改文案；Host 返回后在**对应按钮旁**显示成功/失败（提交 / 提交并推送 / 推送 文案区分），无 remote 时显示「没有配置远程仓库地址」而非 Git 的 `fatal: No configured push destination`；成功 4s 自动消失；暂存/撤销/丢弃错误显示在变更列表上方；**撤销更改** 图标仍走既有确认弹框；不阻塞暂存/撤销等其它 Git 操作；选入/移出/撤销进行中不把提交、推送按钮置为 disabled（避免闪一下）；左侧操作区默认宽度 260px；`host.gitCommit` 可选 `push: true`（无 upstream 时 Host 自动 `-u origin HEAD`；带 push 的 RPC 不使用 30 秒一元超时）
+- **Git 面板提交区**：备注输入单行起步、内容增多自动增高（最高约 120px、无内滚动条）；placeholder「请填写提交备注信息」；说明为空时在输入框下方 inline 提示、不发起 Host 提交；主按钮「提交」+ 右侧下拉「提交 / 提交并推送」；**提交、提交并推送、推送、删除远程地址** 点击后在该按钮右下角弹出带描边与阴影的确认框；本地有未推送提交时，分支名下一行显示「有 N 个提交尚未推送」或「尚未推送到远程」及独立 **推送** 按钮（`host.gitPush`，无需新暂存）；没有未推送提交时该行隐藏，从未提交（无 HEAD）时即使刚添加 origin 也不显示；**推送** 按钮 hover 提示区分「尚未推送的提交」与「首次推送」；提交/推送 RPC 进行中时备注框外圈旋转高亮 loading（`--dsw-alias-state-business-primary`）、输入框禁用，按钮仅 disabled 不改文案；Host 返回后在**对应按钮旁**显示成功/失败（提交 / 提交并推送 / 推送 文案区分），无 remote 时显示「没有配置远程仓库地址」而非 Git 的 `fatal: No configured push destination`，并提供 **添加远程地址**（`host.gitAddRemote`，写入 `origin`）；推送因远程已有提交无法快进时显示「远程已有提交，无法快进推送」而非截断的 `To https://…`；没有 remote 时分支名下一行显示该入口、不显示 **推送**；已配置 `origin` 时分支名下一行显示该 URL 与 **删除远程地址**（`host.gitRemoveRemote`）；成功 4s 自动消失；暂存/撤销/丢弃错误显示在变更列表上方；**撤销更改** 图标仍走既有确认弹框；不阻塞暂存/撤销等其它 Git 操作；选入/移出/撤销进行中不把提交、推送按钮置为 disabled（避免闪一下）；左侧操作区默认宽度 260px；`host.gitCommit` 可选 `push: true`（无 upstream 时 Host 自动 `-u origin HEAD`；带 push 的 RPC 不使用 30 秒一元超时）
 - 文件编辑器 Tab 注入 `@deepseek-ai/dsh-client-ui-file-editor`（`cordis.patch.yml` 注册）
 - 工具箱可拖宽；Tool 行点击可跳转工具详情并保持面板存活（PR #38 前后续修复）
 
@@ -38,14 +38,16 @@
 | `host.gitInit` | 仅当无祖先仓库时在绑定 Workspace 根 `git init` |
 | `host.gitDiffPreview` | 只认磁盘的差异预览（`text` 含 hunks + `fileText` 全文件正文；`untracked-text` / `binary` / `deleted-text` / `deleted-binary`） |
 | `host.gitStage` | 整文件或按块暂存一条未暂存变更；返回刷新后的工作树 |
-| `host.gitUnstage` | 整文件或按块取消暂存；不改写磁盘 |
+| `host.gitUnstage` | 整文件或按块取消暂存；不改写磁盘；无 HEAD 时整文件走 `git rm --cached -f` |
 | `host.gitDiscard` | 整文件或按块丢弃未暂存变更（已跟踪还原 / 未跟踪删除）；不碰已暂存 |
 | `host.gitCommit` | 用暂存区新建 HEAD 提交；说明可为空（`--allow-empty-message`）；可选 `push: true` 在提交后执行 `git push`；作者只取 Git 配置；不 amend |
-| `host.gitPush` | 推送当前分支；无 upstream 时 `-u origin HEAD` |
+| `host.gitPush` | 推送当前分支；无 upstream 时 `-u origin HEAD`；无 remote 时 `git-failed` `no remote configured` |
+| `host.gitAddRemote` | 添加 `origin`（`git remote add -- origin <url>`）；空 URL 为 `git-failed` `empty remote url`；返回刷新后的工作树（含 `hasRemote`、`originUrl`） |
+| `host.gitRemoveRemote` | 删除 `origin`（`git remote remove origin`）；`origin` 不存在时 `git-failed` 带 Git 原文；返回刷新后的工作树 |
 | `host.gitLog` | 分页读取提交历史（每页默认 50 条，`skip` + `hasMore`，`--topo-order`）：hash、父提交、说明、作者、作者时间 `%aI`、正文 `%b`、分支/标签引用；解析时去掉 git `--format` 记录后的换行；远程引用保留 `origin/` 前缀 |
 | `host.gitCommitDiff` | 只读：某一提交相对第一父提交（根提交相对空树）的文件差异；复用 `GitDiffPreview`；最多 80 个文件；`truncated` 标记截断 |
 | `host.readFile` / `host.writeFile` | 文本 UTF-8 读写；图片 `bytes` + base64 预览 |
-| `host.deletePath` / `host.renamePath` / `host.createWorkspaceDirectory` | 文件树工具栏增删改 |
+| `host.deletePath` / `host.renamePath` / `host.movePath` / `host.createWorkspaceDirectory` | 文件树增删改与跨目录移动 |
 | `host.watchPath` | 浏览器走 WebSocket、进程内仍 SSE；监听已打开路径的外部磁盘变更；文件目标监视父目录以覆盖 Agent 原子 write |
 | LSP（`lspSyncDocument` / `lspHoverDocument` / `lspCloseDocument`） | 编辑器内诊断与 hover（经 `lsp-editor` + `lsp-stdio`） |
 
@@ -56,7 +58,7 @@
 - 多 Tab、dirty 标记、**显式保存**（⌘S / Ctrl+S）；Markdown **预览 / 源码**切换（**默认源码**）
 - Markdown **预览态可编辑**（TipTap + `@tiptap/markdown` 双向序列化）：段落 + 行内 **B/I/U/S/Code/Link**；选区浮动工具栏；**链接**为同一 BubbleMenu 内切换的胶囊输入框（点「链接」即显）；预览内 **链接可点击**（新标签页打开）；**代码块 / Mermaid 只读**（`readOnlyFencedBlock` atom + `MarkdownText` 渲染）；**中文 IME** 组合输入期间不回写 buffer；**单击仅定位光标**（误选区自动折叠，双击/拖拽选区不受影响）
 - Markdown **源码（Monaco）** 与预览同样保护 **IME 组合输入**：聚焦/拼音组合期间不 `setValue` 重载模型；**默认 soft wrap**；Markdown 使用 `wrappingStrategy: simple` + `accessibilitySupport: off` 以保持 CJK IME preedit 紧跟光标（不再组合期间切换 wrap）；**单击仅定位光标**（误选区自动折叠）；**任意可编辑文本文件（含 Markdown 源码与其他语言 Monaco 编辑器）** 选区 **Add to Chat** 插入 composer 可见 pill chip（13/20，与输入框同字重以免长英文宽于光标；光标落在胶囊外空格上，可继续输入；发送时展开行内容进 prompt；**已发送用户气泡**同样投影为 pill、可点击打开编辑器，session log 仍保留展开全文）
-- 文件树工具栏：新建文件/文件夹、重命名、删除（确认对话框）；**右键菜单**（文件/文件夹分类型操作）
+- 文件树工具栏：新建文件/文件夹、重命名、删除（确认对话框）；**右键菜单**（文件/文件夹分类型操作）；点击树空白处取消行选中，工具栏新建回到 Workspace 根；拖拽文件或文件夹到另一目录或树空白处移动（空白处即根）
 - **Tab 栏批量关闭**（关闭当前 / 其它 / 全部 / 左侧 / 右侧，VS Code 风格）
 - **文件夹重命名**时同步更新已打开子文件 Tab 路径；**删除文件夹**时关闭子树 Tab 并清理树缓存
 - 同名冲突：文件↔文件、文件夹↔文件夹分别提示；Host 层拦截路径类型冲突
@@ -83,19 +85,19 @@
 | 名称 | 形态 | 作用 | 日期 |
 |------|------|------|------|
 | `@deepseek-ai/dsh-client-ui-file-editor` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-file-editor` | 工具箱内文件编辑器 surface | 2026-08 |
-| `@deepseek-ai/dsh-client-ui-git` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-git` | 工具箱 Git 面板：仓库绑定、两段列表、空态、刷新与初始化；整文件暂存 / 取消暂存 / 丢弃（须确认）/ 提交；提交说明草稿按 Session；单击行在面板内差异预览；单击 Graph 提交在右栏只读多文件差异；已跟踪文本可按块暂存 / 取消暂存 / 丢弃；Git 操作守卫拦住 dirty 路径的暂存 / 丢弃 / 提交，取消暂存不受限 | 2026-08 |
+| `@deepseek-ai/dsh-client-ui-git` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-git` | 工具箱 Git 面板：仓库绑定、两段列表、空态、刷新与初始化；整文件暂存 / 取消暂存 / 丢弃（须确认）/ 提交；提交说明草稿按 Session；单击行在面板内差异预览；单击 Graph 提交在右栏只读多文件差异（不自动打开最新提交）；已跟踪文本可按块暂存 / 取消暂存 / 丢弃；Git 操作守卫拦住 dirty 路径的暂存 / 丢弃 / 提交，取消暂存不受限；无 remote 时可添加 `origin` | 2026-08 |
 | `@deepseek-ai/dsh-lsp-editor` | Host 面新包 + apiproxy 接线 | 编辑器 LSP 文档 sync / hover / close | 2026-08 |
 
 ## 我改过的官方文件（尽量为空）
 | 文件/目录 | 改了什么 | 日期 |
 |-----------|----------|------|
-| `packages/host/apiproxy/` | 文件编辑器 Host RPC、listing 性能、`readFile` 大小上限；**2026-08-26** `watchPath` 文件目标监视父目录（Agent 原子 write）；**2026-08-26** Git porcelain `--untracked-files=all`（未跟踪目录列出内部文件）；**2026-08-25** Git 面板只读 RPC（`gitWorkingTree` / `gitInit` / `gitDiffPreview`）；**2026-08-25** Git 面板写 RPC（`gitStage` / `gitUnstage` / `gitDiscard` / `gitCommit`）；**2026-08-25** `GitWorkingTreeChange.kind`（modified / untracked / deleted）；**2026-08-25** porcelain 引号路径 UTF-8 八进制解码；Git UI 过滤 `.DS_Store`；**2026-08-25** `gitDiffPreview` 的 `text` 形态附带 `fileText`（工作区/暂存区全文）；**2026-08-26** `gitCommit` 允许空说明与可选 `push`；**2026-08-27** `host.gitLog`；**2026-08-27** `parseGitLogOutput` trim 每条 `--format` 记录（去掉 git 追加的换行）；**2026-08-27** `parseGitLogRefs` 保留 `origin/` 前缀；**2026-08-27** `host.gitLog` 分页（`skip` + `hasMore`，`--max-count=limit+1`）；**2026-08-27** `host.gitLog` 增加 `%aI` 作者时间与 `%b` 正文；**2026-08-27** `host.gitCommitDiff`（第一父提交文件差异，上限 80）；**2026-08-27** 无 remote 时 `gitPush` / `gitCommit({push:true})` 返回 `git-failed` `no remote configured`（带 push 的提交不落盘） | 2026-08 |
-| `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat；**2026-08-23** 保存/外部变更后文件树自动刷新；**2026-08-25** 资源管理器 `visible` 切回后重读 Git 徽章；**2026-08-25** 经 `setDirtyPaths` 发布 dirty Tab 路径供 Git 操作守卫；**2026-08-26** 编辑区 scroll-reveal 滚动条对齐会话区；**2026-08-26** Git 徽章上卷到未跟踪目录的祖先文件夹；**2026-08-26** 非 Markdown 编辑画布与 Markdown 同用 `bg-base`；**2026-08-26** listing 超时显示 **!** 而非卡住 spinner | 2026-08 |
+| `packages/host/apiproxy/` | 文件编辑器 Host RPC、listing 性能、`readFile` 大小上限；**2026-08-26** `watchPath` 文件目标监视父目录（Agent 原子 write）；**2026-08-26** Git porcelain `--untracked-files=all`（未跟踪目录列出内部文件）；**2026-08-25** Git 面板只读 RPC（`gitWorkingTree` / `gitInit` / `gitDiffPreview`）；**2026-08-25** Git 面板写 RPC（`gitStage` / `gitUnstage` / `gitDiscard` / `gitCommit`）；**2026-08-25** `GitWorkingTreeChange.kind`（modified / untracked / deleted）；**2026-08-25** porcelain 引号路径 UTF-8 八进制解码；Git UI 过滤 `.DS_Store`；**2026-08-25** `gitDiffPreview` 的 `text` 形态附带 `fileText`（工作区/暂存区全文）；**2026-08-26** `gitCommit` 允许空说明与可选 `push`；**2026-08-27** `host.gitLog`；**2026-08-27** `parseGitLogOutput` trim 每条 `--format` 记录（去掉 git 追加的换行）；**2026-08-27** `parseGitLogRefs` 保留 `origin/` 前缀；**2026-08-27** `host.gitLog` 分页（`skip` + `hasMore`，`--max-count=limit+1`）；**2026-08-27** `host.gitLog` 增加 `%aI` 作者时间与 `%b` 正文；**2026-08-27** `host.gitCommitDiff`（第一父提交文件差异，上限 80）；**2026-08-27** 无 remote 时 `gitPush` / `gitCommit({push:true})` 返回 `git-failed` `no remote configured`（带 push 的提交不落盘）；**2026-08-27** 工作树 `hasRemote` 与 `originUrl`；`host.gitAddRemote` 添加 `origin`；`host.gitRemoveRemote` 删除 `origin`；**2026-08-28** 无 HEAD 时 `pushAvailable` 为 false（即使已有 origin）；**2026-08-28** 无 HEAD 时 `gitUnstage` 用 `git rm --cached -f`；**2026-08-28** 推送失败去掉 `To <url>` 行；**2026-08-28** `host.movePath` 跨目录移动 | 2026-08 |
+| `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat；**2026-08-23** 保存/外部变更后文件树自动刷新；**2026-08-25** 资源管理器 `visible` 切回后重读 Git 徽章；**2026-08-25** 经 `setDirtyPaths` 发布 dirty Tab 路径供 Git 操作守卫；**2026-08-26** 编辑区 scroll-reveal 滚动条对齐会话区；**2026-08-26** Git 徽章上卷到未跟踪目录的祖先文件夹；**2026-08-26** 非 Markdown 编辑画布与 Markdown 同用 `bg-base`；**2026-08-26** listing 超时显示 **!** 而非卡住 spinner；**2026-08-28** 树空白点击回到根、拖拽移动 | 2026-08 |
 | `packages/client/connection/` | **2026-08-26** `host.watchPath` 浏览器下行改 WebSocket，避免 HTTP/1.1 六连接占满后文件树 listing 排队超时 | 2026-08 |
-| `packages/client/ui-git/` | **新包**：工具箱 Git 面板 occupant（绑定 Workspace、两段变更列表、四种空态、初始化）；**2026-08-25** 整文件暂存 / 取消暂存 / 丢弃确认 / 提交与按 Session 草稿；**2026-08-25** 单击行差异预览与按块暂存 / 取消暂存 / 丢弃；**2026-08-25** Git 操作守卫；**2026-08-25** 左侧操作区与差异预览分栏；**2026-08-25** 差异预览 VS Code 化；**2026-08-26** 提交区 UX（单行自动增高、可空说明、split 提交按钮）；**2026-08-26** 图标 tooltip / discard 尺寸；**2026-08-27** 未暂存长列表不再与「待提交」叠层；**2026-08-27** 未推送文案与 **推送** 放在分支名下一行，无未推送时隐藏；**2026-08-27** 选入/移出/撤销不再闪提交按钮；**2026-08-27** 待提交下方 Graph（主干 + 节点到节点合入弧、侧道换色、`origin/` 橙色胶囊）；**2026-08-27** Graph 每页 50 条，列表滚到底部继续加载直至全部；**2026-08-27** Graph 引用胶囊收窄省略，有引用时放在说明下一行靠右，悬停打开提交详情卡；**2026-08-27** Changes 与 Graph 同级可折叠，Changes 包住分支/提交/两段列表；**2026-08-27** CHANGES/GRAPH 全大写加粗，Graph 钉底，Changes body 与 Graph 列表缩进 14px；**2026-08-27** Graph 每行说明紧挨该行点或线；**2026-08-27** 单击 Graph 提交在右栏只读多文件差异；**2026-08-27** 提交/推送确认框贴触发按钮右下角并加描边阴影；**2026-08-27** CHANGES 段头右侧显示未暂存加待提交行数；**2026-08-27** 无 remote 时提交/推送显示「没有配置远程仓库地址」 | 2026-08 |
+| `packages/client/ui-git/` | **新包**：工具箱 Git 面板 occupant（绑定 Workspace、两段变更列表、四种空态、初始化）；**2026-08-25** 整文件暂存 / 取消暂存 / 丢弃确认 / 提交与按 Session 草稿；**2026-08-25** 单击行差异预览与按块暂存 / 取消暂存 / 丢弃；**2026-08-25** Git 操作守卫；**2026-08-25** 左侧操作区与差异预览分栏；**2026-08-25** 差异预览 VS Code 化；**2026-08-26** 提交区 UX（单行自动增高、可空说明、split 提交按钮）；**2026-08-26** 图标 tooltip / discard 尺寸；**2026-08-27** 未暂存长列表不再与「待提交」叠层；**2026-08-27** 未推送文案与 **推送** 放在分支名下一行，无未推送时隐藏；**2026-08-27** 选入/移出/撤销不再闪提交按钮；**2026-08-27** 待提交下方 Graph（主干 + 节点到节点合入弧、侧道换色、`origin/` 橙色胶囊）；**2026-08-27** Graph 每页 50 条，列表滚到底部继续加载直至全部；**2026-08-27** Graph 引用胶囊收窄省略，有引用时放在说明下一行靠右，悬停打开提交详情卡；**2026-08-27** Changes 与 Graph 同级可折叠，Changes 包住分支/提交/两段列表；**2026-08-27** CHANGES/GRAPH 全大写加粗，Graph 钉底，Changes body 与 Graph 列表缩进 14px；**2026-08-27** Graph 每行说明紧挨该行点或线；**2026-08-27** 单击 Graph 提交在右栏只读多文件差异；**2026-08-28** 进入面板 / 重读 Graph 不自动打开最新提交；**2026-08-28** 切回 Git Tab 时 Graph 与右栏不闪 loading；**2026-08-27** 提交/推送确认框贴触发按钮右下角并加描边阴影；**2026-08-27** CHANGES 段头右侧显示未暂存加待提交行数；**2026-08-27** 无 remote 时提交/推送显示「没有配置远程仓库地址」；**2026-08-27** 无 remote 时分支下行 **添加远程地址**；已有 `origin` 时显示 URL 与 **删除远程地址**；**2026-08-28** 无 HEAD 时添加 origin 不显示尚未推送到远程；**2026-08-28** 推送非快进拒绝显示「远程已有提交，无法快进推送」 | 2026-08 |
 | `packages/client/ui-primitives/` | **2026-08-25** 导出 `highlightLines` / `subscribeGrammarLoaded` / `HighlightSpan` 供 Git 差异预览复用 shiki 高亮；**2026-08-26** 新增 `IconDiscardOutline16`（撤销工作区更改，非 refresh） | 2026-08 |
 | `packages/client/web/` | **2026-08-25** seed 显式 pin `highlightLines` / `grammarLoadCount` / `subscribeGrammarLoaded`，供 Git 差异预览等平台插件消费 | 2026-08 |
-| `packages/client/runtime/` | `WorkspaceRuntime` 转发新 Host RPC；**2026-08-25** 转发 Git 面板只读 RPC；**2026-08-25** 转发 Git 面板写 RPC；**2026-08-27** `gitLog` 转发 `limit`/`skip` 与 `hasMore`；**2026-08-27** `gitCommitDiff` | 2026-08 |
+| `packages/client/runtime/` | `WorkspaceRuntime` 转发新 Host RPC；**2026-08-25** 转发 Git 面板只读 RPC；**2026-08-25** 转发 Git 面板写 RPC；**2026-08-27** `gitLog` 转发 `limit`/`skip` 与 `hasMore`；**2026-08-27** `gitCommitDiff`；**2026-08-27** `gitAddRemote`；**2026-08-27** `gitRemoveRemote`；**2026-08-28** `movePath` | 2026-08 |
 | `packages/client/ui-primitives/` | Mermaid 块、ZoomPanLightbox、Markdown 图片 | 2026-08 |
 | `packages/client/ui-tool/` | Tool 行 selection → details 跳转 | 2026-08 |
 | `packages/client/ui-layout/` | 工具箱栏宽度 / AppFrame 微调 | 2026-08 |
@@ -246,3 +248,11 @@
 | 2026-08-27 | Git 提交确认框贴按钮 | 确认框带描边与阴影，固定定位在触发按钮右下角，不再居中盖住右栏预览 |
 | 2026-08-27 | Git CHANGES 段头数量 | 与 GRAPH 一样在标题右侧显示未暂存加待提交行数（干净仓库为 0） |
 | 2026-08-27 | Git 无 remote 推送文案 | 初始化后未配置远程时，提交并推送/推送显示「没有配置远程仓库地址」，不再截断 Git fatal |
+| 2026-08-27 | Git 添加远程地址 | 无 remote 时分支下行提供入口；`host.gitAddRemote` 写入 `origin`；错误旁同一入口 |
+| 2026-08-27 | Git 删除远程地址 | 已有 `origin` 时分支下行显示 URL 与删除；`host.gitRemoveRemote` 删除 `origin` |
+| 2026-08-28 | Git 无提交不显示首次推送 | 未出生分支（无 HEAD）即使刚添加 origin 也不显示「尚未推送到远程」；`pushAvailable` 要求本地已有 commit |
+| 2026-08-28 | Git 未提交时移出提交 | 无 HEAD 时 `git restore --staged` 报 `could not resolve HEAD`；整文件改走 `git rm --cached -f`，文件回到未跟踪且不改磁盘 |
+| 2026-08-28 | Git 推送被拒绝文案 | 远程已有提交导致无法快进时，不再把截断的 `To https://…` 当成错误；显示「远程已有提交，无法快进推送」 |
+| 2026-08-28 | Git 右栏不默认打开最新提交 | `gitLog` 成功后不再把 `selectedCommitHash` 设为 `commits[0]`；右栏只展示用户上次点开的文件或 Graph 提交 |
+| 2026-08-28 | Git 切回 Tab 不闪 Graph/预览 | 已有 Graph 与右栏内容在重读时保持；`loading` 只用于首次加载或换选中项 |
+| 2026-08-28 | 资源管理器空白选根与拖拽移动 | 点击文件树空白取消行选中，工具栏新建回到 Workspace 根；拖拽到目录或空白处走 `host.movePath` |

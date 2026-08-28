@@ -1,10 +1,10 @@
 /**
- * host.deletePath / host.renamePath / host.createWorkspaceDirectory:
+ * host.deletePath / host.renamePath / host.movePath / host.createWorkspaceDirectory:
  * bounded path mutations inside a Workspace root.
  */
 
 import { mkdir, rename, rm, stat } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import {
   pathWithinWorkspace,
   WorkspacePathOutOfBoundsError,
@@ -18,7 +18,7 @@ export interface WorkspacePathMutationInternals {
   rm?: (...args: Parameters<typeof rm>) => ReturnType<typeof rm>
 }
 
-/** Shared success shape for delete, rename, and workspace directory creation. */
+/** Shared success shape for delete, rename, move, and workspace directory creation. */
 export interface PathMutationResult {
   /** Absolute host path affected by the mutation. */
   path: string
@@ -48,6 +48,14 @@ export class WorkspacePathRenameFailedError extends Error {
   }
 }
 
+/** A path inside a Workspace could not be moved to another directory. */
+export class WorkspacePathMoveFailedError extends Error {
+  constructor(readonly path: string, cause: string) {
+    super(`cannot move ${path}: ${cause}`)
+    this.name = 'WorkspacePathMoveFailedError'
+  }
+}
+
 /** A child directory inside a Workspace already exists. */
 export class WorkspaceDirectoryExistsError extends Error {
   constructor(readonly path: string) {
@@ -74,6 +82,16 @@ function isEexist(error: unknown): boolean {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * Whether {@link child} is a path strictly inside {@link parent}.
+ * @param parent - resolved absolute directory.
+ * @param child - resolved absolute path.
+ */
+function isStrictSubpath(parent: string, child: string): boolean {
+  const rel = relative(parent, child)
+  return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)
 }
 
 /**
@@ -184,6 +202,79 @@ export async function renameWorkspacePath(
     if (isEnoent(error)) throw new WorkspacePathNotFoundError(source)
     if (isEexist(error)) throw new WorkspaceDirectoryExistsError(target)
     throw new WorkspacePathRenameFailedError(source, messageOf(error))
+  }
+}
+
+/**
+ * Move one file or directory to another existing directory inside a Workspace root.
+ * The base name is preserved. Moving a directory into itself or a descendant fails.
+ * @param workspaceRoot - canonical bound Workspace directory.
+ * @param path - absolute source path; must lie within the root and must not be the root.
+ * @param destinationDirectory - absolute existing directory that will receive the source.
+ * @param signal - caller lifetime forwarded to filesystem I/O.
+ * @returns the destination absolute path (unchanged when the source is already there).
+ */
+export async function moveWorkspacePath(
+  workspaceRoot: string,
+  path: string,
+  destinationDirectory: string,
+  signal?: AbortSignal,
+  internals: WorkspacePathMutationInternals = {},
+): Promise<PathMutationResult> {
+  const statFn = internals.stat ?? stat
+  const renameFn = internals.rename ?? rename
+  const source = resolveWithinWorkspace(workspaceRoot, path)
+  const destDir = resolveWithinWorkspace(workspaceRoot, destinationDirectory)
+  if (source === resolve(workspaceRoot)) {
+    throw new WorkspacePathMoveFailedError(source, 'cannot move the workspace root')
+  }
+  let sourceIsDirectory: boolean
+  try {
+    sourceIsDirectory = (await statFn(source)).isDirectory()
+  } catch (error: unknown) {
+    if (isEnoent(error)) throw new WorkspacePathNotFoundError(source)
+    throw new WorkspacePathMoveFailedError(source, messageOf(error))
+  }
+  try {
+    const destStat = await statFn(destDir)
+    if (!destStat.isDirectory()) {
+      throw new WorkspacePathMoveFailedError(source, 'destination is not a directory')
+    }
+  } catch (error: unknown) {
+    if (error instanceof WorkspacePathMoveFailedError) throw error
+    if (isEnoent(error)) throw new WorkspacePathNotFoundError(destDir)
+    throw new WorkspacePathMoveFailedError(source, messageOf(error))
+  }
+  if (destDir === source || isStrictSubpath(source, destDir)) {
+    throw new WorkspacePathMoveFailedError(source, 'cannot move a directory into itself')
+  }
+  const target = resolveWithinWorkspace(workspaceRoot, join(destDir, basename(source)))
+  if (target === source) {
+    return { path: source }
+  }
+  try {
+    const targetStat = await statFn(target)
+    if (targetStat.isDirectory() === sourceIsDirectory) {
+      throw new WorkspaceDirectoryExistsError(target)
+    }
+    throw new WorkspacePathMoveFailedError(
+      source,
+      'a file and folder cannot share the same path',
+    )
+  } catch (error: unknown) {
+    if (error instanceof WorkspaceDirectoryExistsError) throw error
+    if (error instanceof WorkspacePathMoveFailedError) throw error
+    if (!isEnoent(error)) throw new WorkspacePathMoveFailedError(source, messageOf(error))
+  }
+  signal?.throwIfAborted()
+  try {
+    await renameFn(source, target)
+    return { path: target }
+  } catch (error: unknown) {
+    signal?.throwIfAborted()
+    if (isEnoent(error)) throw new WorkspacePathNotFoundError(source)
+    if (isEexist(error)) throw new WorkspaceDirectoryExistsError(target)
+    throw new WorkspacePathMoveFailedError(source, messageOf(error))
   }
 }
 

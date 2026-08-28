@@ -14,7 +14,7 @@ The Git panel must stage, unstage, discard, and commit through Host-owned operat
 
 `host.gitStage({ workspaceId, path, hunkHeader? })` stages one unstaged change. Omitting `hunkHeader` runs `git add` for the whole file, including untracked paths. When `hunkHeader` is set, it must match a hunk from the unstaged `gitDiffPreview` of a tracked text file; the Host extracts that hunk from `git diff` and applies it with `git apply --cached`. Untracked paths reject hunk staging with `git-path-not-found`.
 
-`host.gitUnstage({ workspaceId, path, hunkHeader? })` unstages one staged change without rewriting disk. Whole-file uses `git restore --staged`. A hunk uses the staged `git diff --cached` plus `git apply --cached --reverse`.
+`host.gitUnstage({ workspaceId, path, hunkHeader? })` unstages one staged change without rewriting disk. Whole-file uses `git restore --staged` when HEAD exists. On an unborn branch it uses `git rm --cached -f` so added paths leave the index without resolving HEAD. A hunk uses the staged `git diff --cached` plus `git apply --cached --reverse`.
 
 `host.gitDiscard({ workspaceId, path, hunkHeader? })` discards only unstaged changes. Whole-file: untracked paths are deleted from disk; tracked modifications and deletions restore the worktree from the index. A hunk applies `git apply --reverse` to the unstaged diff. Staged-only paths fail with `git-path-not-found` so discard never mutates the index.
 
@@ -43,9 +43,10 @@ Implementation lives in `git-working-tree.ts`; wire types and zod schemas extend
 - `ui-git` (Issues #55–#59) calls these RPCs through `WorkspaceRuntime`, not `ui-file-editor` internals.
 - Inspect RPCs are unchanged: git missing and not-a-repository remain success `availability` values on `gitWorkingTree`.
 - Hunk headers from a preview can become stale after another hunk is applied; the Client must re-preview before a subsequent hunk write.
+- Unborn-branch whole-file unstage is [Git unstage on an unborn branch](../bug-fix/2026-08-28-git-unborn-unstage.md).
 
 ## Testing
 
-`packages/host/apiproxy/tests/api-proxy-git-write.spec.ts` covers whole-file and hunk stage/unstage/discard, commit constraints, author-identity failure text, typed error codes, and the absence of an argv channel through `createApiProxy`.
+`packages/host/apiproxy/tests/api-proxy-git-write.spec.ts` covers whole-file and hunk stage/unstage/discard, unborn-branch unstage, commit constraints, author-identity failure text, typed error codes, and the absence of an argv channel through `createApiProxy`.
 
 `packages/client/runtime/tests/workspaces-service.client.spec.ts` covers Client forwarding and `DirectoryBrowseError`.

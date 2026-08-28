@@ -2609,12 +2609,17 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       gitDiscard: request => ok(request, { availability: 'not-a-repository' as const }),
       gitCommit: request => ok(request, { availability: 'not-a-repository' as const }),
       gitPush: request => ok(request, { availability: 'not-a-repository' as const }),
+      gitAddRemote: request => ok(request, { availability: 'not-a-repository' as const }),
+      gitRemoveRemote: request => ok(request, { availability: 'not-a-repository' as const }),
       gitLog: request => ok(request, { availability: 'not-a-repository' as const }),
       gitCommitDiff: request => ok(request, { availability: 'not-a-repository' as const }),
       readFile: request => ok(request, { kind: 'text', path: request.payload.path, text: '' }),
       writeFile: request => ok(request, { path: request.payload.path }),
       deletePath: request => ok(request, { path: request.payload.path }),
       renamePath: request => ok(request, { path: request.payload.path }),
+      movePath: request => ok(request, {
+        path: `${request.payload.destinationDirectory}/${request.payload.path.split('/').pop() ?? ''}`,
+      }),
       createWorkspaceDirectory: request => ok(request, {
         path: `${request.payload.path}/${request.payload.name}`,
       }),
@@ -3168,12 +3173,15 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'host.gitDiscard': return this.api.host.gitDiscard(request, signal)
       case 'host.gitCommit': return this.api.host.gitCommit(request, signal)
       case 'host.gitPush': return this.api.host.gitPush(request, signal)
+      case 'host.gitAddRemote': return this.api.host.gitAddRemote(request, signal)
+      case 'host.gitRemoveRemote': return this.api.host.gitRemoveRemote(request, signal)
       case 'host.gitLog': return this.api.host.gitLog(request, signal)
       case 'host.gitCommitDiff': return this.api.host.gitCommitDiff(request, signal)
       case 'host.readFile': return this.api.host.readFile(request, signal)
       case 'host.writeFile': return this.api.host.writeFile(request, signal)
       case 'host.deletePath': return this.api.host.deletePath(request, signal)
       case 'host.renamePath': return this.api.host.renamePath(request, signal)
+      case 'host.movePath': return this.api.host.movePath(request, signal)
       case 'host.createWorkspaceDirectory': return this.api.host.createWorkspaceDirectory(request, signal)
       case 'host.openPath': return this.api.host.openPath(request, new AbortController().signal)
       case 'host.lspSyncDocument': return this.api.host.lspSyncDocument(request, signal)

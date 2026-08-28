@@ -56,7 +56,28 @@ async function git(
 }
 
 /**
+ * True when `HEAD` names a commit (false on an unborn branch).
+ * @param run - command runner.
+ * @param repoRoot - absolute Git repository root.
+ * @param signal - caller lifetime.
+ */
+async function hasHeadCommit(
+  run: NativeCommandRunner,
+  repoRoot: string,
+  signal: AbortSignal,
+): Promise<boolean> {
+  try {
+    await git(run, repoRoot, ['rev-parse', '--verify', 'HEAD'], signal)
+    return true
+  } catch (error: unknown) {
+    if (signal.aborted) throw error
+    return false
+  }
+}
+
+/**
  * Whether the current branch can be pushed and how many commits lead upstream.
+ * Missing @{upstream} is first-time push only when HEAD already names a commit.
  * @param run - command runner.
  * @param repoRoot - absolute Git repository root.
  * @param branch - current branch label from {@link readCurrentBranch}.
@@ -78,7 +99,7 @@ async function readPublishState(
     return ahead > 0 ? { ahead, pushAvailable: true } : { pushAvailable: false }
   } catch (error: unknown) {
     if (signal.aborted) throw error
-    return { pushAvailable: true }
+    return { pushAvailable: await hasHeadCommit(run, repoRoot, signal) }
   }
 }
 
@@ -162,7 +183,7 @@ export function parseWorkingTreePorcelain(
  * Inspect the Git working tree for one bound Workspace.
  * @param workspaceRoot - canonical bound Workspace directory.
  * @param signal - caller lifetime; abort terminates git children.
- * @returns Git unavailable, not-a-repository, or repository state with both change lists.
+ * @returns Git unavailable, not-a-repository, or repository state with change lists, `hasRemote`, and optional `originUrl`.
  */
 export async function inspectGitWorkingTree(
   workspaceRoot: string,
@@ -176,6 +197,8 @@ export async function inspectGitWorkingTree(
     const porcelain = await git(run, repoRoot, GIT_PORCELAIN_UNTRACKED_FILES, signal)
     const { unstaged, staged } = parseWorkingTreePorcelain(porcelain, repoRoot)
     const publish = await readPublishState(run, repoRoot, branch, signal)
+    const hasRemote = await repositoryHasRemote(run, repoRoot, signal)
+    const originUrl = await readOriginUrl(run, repoRoot, signal)
     return {
       availability: 'repository',
       repoRoot,
@@ -183,6 +206,8 @@ export async function inspectGitWorkingTree(
       unstaged,
       staged,
       pushAvailable: publish.pushAvailable,
+      hasRemote,
+      ...(originUrl === undefined ? {} : { originUrl }),
       ...(publish.ahead === undefined ? {} : { ahead: publish.ahead }),
     }
   } catch (error: unknown) {
@@ -219,9 +244,20 @@ export class GitCommandFailedError extends Error {
 
 function gitFailureMessage(error: unknown): string {
   if (typeof error === 'object' && error !== null && 'stderr' in error && typeof error.stderr === 'string' && error.stderr.trim() !== '') {
-    return error.stderr.trim()
+    return omitGitPushDestinationLines(error.stderr.trim())
   }
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * Drop Git's `To <url>` destination lines so a failed push's first visible
+ * line is the rejection, not the remote URL.
+ * @param text - captured stderr or Error message.
+ */
+function omitGitPushDestinationLines(text: string): string {
+  const stripped = text.split(/\r?\n/).filter(line => !/^To\s+\S/.test(line)).join('\n').trim()
+  /* v8 ignore next -- a failed push always has a rejection line after `To <url>`. */
+  return stripped === '' ? text : stripped
 }
 
 /**
@@ -436,6 +472,8 @@ function isStagedPair(pair: { index: string; work: string }): boolean {
 
 /**
  * Unstage one staged working-tree change without rewriting disk.
+ * Whole-file unstage uses `git restore --staged` when HEAD exists, otherwise
+ * `git rm --cached -f` (unborn branch).
  * @param workspaceRoot - canonical bound Workspace directory.
  * @param absolutePath - Host-absolute path under the Git repository root.
  * @param signal - caller lifetime.
@@ -460,8 +498,10 @@ export async function unstageGitPath(
       const patch = extractHunkPatch(diff, hunkHeader)
       if (patch === undefined) throw new GitPathNotFoundError(absolutePath)
       await applyPatch(repoRoot, ['--cached', '--reverse', '--whitespace=nowarn'], patch, signal)
-    } else {
+    } else if (await hasHeadCommit(run, repoRoot, signal)) {
       await git(run, repoRoot, ['restore', '--staged', '--', rel], signal)
+    } else {
+      await git(run, repoRoot, ['rm', '--cached', '-f', '--', rel], signal)
     }
     return await inspectGitWorkingTree(workspaceRoot, signal)
   } catch (error: unknown) {
@@ -523,6 +563,40 @@ function isMissingUpstreamPushError(error: unknown): boolean {
 }
 
 /**
+ * True when `git remote` lists at least one name.
+ * @param run - command runner.
+ * @param repoRoot - absolute Git repository root.
+ * @param signal - caller lifetime.
+ */
+async function repositoryHasRemote(
+  run: NativeCommandRunner,
+  repoRoot: string,
+  signal: AbortSignal,
+): Promise<boolean> {
+  return (await git(run, repoRoot, ['remote'], signal)).trim() !== ''
+}
+
+/**
+ * URL of remote `origin`, or undefined when that name is missing.
+ * @param run - command runner.
+ * @param repoRoot - absolute Git repository root.
+ * @param signal - caller lifetime.
+ */
+async function readOriginUrl(
+  run: NativeCommandRunner,
+  repoRoot: string,
+  signal: AbortSignal,
+): Promise<string | undefined> {
+  try {
+    const url = (await git(run, repoRoot, ['remote', 'get-url', 'origin'], signal)).trim()
+    return url === '' ? undefined : url
+  } catch (error: unknown) {
+    if (signal.aborted) throw error
+    return undefined
+  }
+}
+
+/**
  * Fail before `git push` when the repository has no remotes.
  * @param run - command runner.
  * @param repoRoot - absolute Git repository root.
@@ -533,8 +607,9 @@ async function requireConfiguredRemote(
   repoRoot: string,
   signal: AbortSignal,
 ): Promise<void> {
-  const remotes = (await git(run, repoRoot, ['remote'], signal)).trim()
-  if (remotes === '') throw new GitCommandFailedError('no remote configured')
+  if (!await repositoryHasRemote(run, repoRoot, signal)) {
+    throw new GitCommandFailedError('no remote configured')
+  }
 }
 
 /**
@@ -576,6 +651,52 @@ export async function pushGitBranch(
       throw new GitCommandFailedError('cannot push detached HEAD')
     }
     await pushCurrentBranch(run, repoRoot, signal)
+    return await inspectGitWorkingTree(workspaceRoot, signal)
+  } catch (error: unknown) {
+    remapWriteFailure(error, signal, workspaceRoot)
+  }
+}
+
+/**
+ * Add `origin` pointing at `url`. Does not fetch or push.
+ * @param workspaceRoot - canonical bound Workspace directory.
+ * @param url - remote URL; trimmed. Empty after trim fails with `empty remote url`.
+ * @param signal - caller lifetime.
+ * @returns the refreshed working tree.
+ */
+export async function addGitRemote(
+  workspaceRoot: string,
+  url: string,
+  signal: AbortSignal,
+): Promise<GitWorkingTreeResult> {
+  const run = runNativeCommand
+  try {
+    const repoRoot = await requireRepository(workspaceRoot, signal)
+    const trimmed = url.trim()
+    if (trimmed === '' || trimmed.includes('\0') || trimmed.includes('\r') || trimmed.includes('\n')) {
+      throw new GitCommandFailedError('empty remote url')
+    }
+    await git(run, repoRoot, ['remote', 'add', '--', 'origin', trimmed], signal)
+    return await inspectGitWorkingTree(workspaceRoot, signal)
+  } catch (error: unknown) {
+    remapWriteFailure(error, signal, workspaceRoot)
+  }
+}
+
+/**
+ * Remove remote `origin`. Does not fetch, push, or touch other remotes.
+ * @param workspaceRoot - canonical bound Workspace directory.
+ * @param signal - caller lifetime.
+ * @returns the refreshed working tree.
+ */
+export async function removeGitRemote(
+  workspaceRoot: string,
+  signal: AbortSignal,
+): Promise<GitWorkingTreeResult> {
+  const run = runNativeCommand
+  try {
+    const repoRoot = await requireRepository(workspaceRoot, signal)
+    await git(run, repoRoot, ['remote', 'remove', 'origin'], signal)
     return await inspectGitWorkingTree(workspaceRoot, signal)
   } catch (error: unknown) {
     remapWriteFailure(error, signal, workspaceRoot)

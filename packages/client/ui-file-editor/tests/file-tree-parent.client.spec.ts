@@ -3,7 +3,7 @@ import type { WorkspaceEntry } from '@deepseek-ai/dsh-client-runtime/client'
 import {
   directoryChainToFile, isPathInDirectorySubtree, joinChildPath, parentDirectoryForCreate,
   parentDirectoryOfEntry, parentDirectoryOfPath, remapPathAfterRename, siblingKindNameExists,
-  siblingNameConflictKey,
+  siblingNameConflictKey, baseNameOfPath, destinationDirectoryForTreeDrop,
 } from '../src/client/file-tree-parent.ts'
 
 const ROOT = '/w/alpha'
@@ -78,11 +78,41 @@ describe('file-tree-parent helpers', () => {
   })
 
   it('lists workspace-root and intermediate directories for a nested file', () => {
-    expect(directoryChainToFile(ROOT, `${ROOT}/README.md`)).toEqual([ROOT])
+    expect(parentDirectoryForCreate(ROOT, { name: 'x', path: 'noslash', isDirectory: false, hidden: false }))
+      .toBe(ROOT)
+    expect(baseNameOfPath('plain')).toBe('plain')
+    expect(directoryChainToFile(ROOT, ROOT)).toEqual([ROOT])
     expect(directoryChainToFile(ROOT, `${ROOT}/src/app.ts`)).toEqual([ROOT, `${ROOT}/src`])
     expect(directoryChainToFile(ROOT, `${ROOT}/docs/adr/0001.md`)).toEqual([
       ROOT, `${ROOT}/docs`, `${ROOT}/docs/adr`,
     ])
     expect(directoryChainToFile(ROOT, '/other/app.ts')).toEqual([])
+  })
+
+  it('returns the last path segment as the base name', () => {
+    expect(baseNameOfPath(`${ROOT}/src/app.ts`)).toBe('app.ts')
+    expect(baseNameOfPath(`${ROOT}/src/`)).toBe('src')
+  })
+
+  it('resolves tree drop destinations for folders and blank root, not files or no-ops', () => {
+    const nested = `${ROOT}/src/app.ts`
+    expect(destinationDirectoryForTreeDrop(ROOT, `${ROOT}/untracked.ts`, { kind: 'directory', path: `${ROOT}/src` }))
+      .toBe(`${ROOT}/src`)
+    expect(destinationDirectoryForTreeDrop(ROOT, nested, { kind: 'root' })).toBe(ROOT)
+    expect(destinationDirectoryForTreeDrop(ROOT, `${ROOT}/untracked.ts`, { kind: 'file', path: `${ROOT}/README.md` }))
+      .toBeNull()
+    expect(destinationDirectoryForTreeDrop(ROOT, `${ROOT}/untracked.ts`, { kind: 'root' })).toBeNull()
+    expect(destinationDirectoryForTreeDrop(ROOT, `${ROOT}/src`, { kind: 'directory', path: `${ROOT}/src` }))
+      .toBeNull()
+    expect(destinationDirectoryForTreeDrop(ROOT, `${ROOT}/src`, { kind: 'directory', path: `${ROOT}/src/lib` }))
+      .toBeNull()
+    expect(destinationDirectoryForTreeDrop(ROOT, `${ROOT}/untracked.ts`, { kind: 'directory', path: '/other' }))
+      .toBeNull()
+    expect(destinationDirectoryForTreeDrop(ROOT, `${ROOT}/src`, { kind: 'directory', path: `${ROOT}/src\\lib` }))
+      .toBeNull()
+    expect(destinationDirectoryForTreeDrop('C:\\w', 'C:\\w\\src', { kind: 'directory', path: 'C:\\w\\lib' }))
+      .toBe('C:\\w\\lib')
+    expect(destinationDirectoryForTreeDrop(ROOT, `${ROOT}/untracked.ts`, { kind: 'directory', path: '/other\\w' }))
+      .toBeNull()
   })
 })

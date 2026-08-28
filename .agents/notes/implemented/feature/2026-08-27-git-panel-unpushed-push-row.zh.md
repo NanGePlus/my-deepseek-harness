@@ -24,7 +24,7 @@ Git 面板把 Git 行话（`领先 N` / `N ahead`）和「提交到分支」放�
 
 ## 后果
 
-提交工具栏不再放独立 **推送**。首次推送仍走第二行的尚未推送文案。
+提交工具栏不再放独立 **推送**。首次推送仍走第二行的尚未推送文案，前提是已有 HEAD 且没有 `@{upstream}`。未出生分支上报 `pushAvailable` false；添加 `origin` 不改变这一点。见 [Git 未提交时不提供首次推送](../bug-fix/2026-08-28-git-unborn-push-available.md)。
 
 ## 测试
 

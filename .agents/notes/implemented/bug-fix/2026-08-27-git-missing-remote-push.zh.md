@@ -16,11 +16,11 @@ Host 在任何 push 前用 `git remote` 列出远程。空输出以 `git-failed`
 
 **用 tooltip 展示完整 Git stderr。** 否决：需求是点明缺少远程地址的产品文案，不是更长的 fatal 原文。
 
-**在有 remote 之前禁用提交并推送。** 本轮否决：面板仍没有添加 remote 的 RPC；先给出明确错误。单独 **提交** 仍可用。
+**在有 remote 之前禁用提交并推送。** 本轮否决：先给出明确错误。单独 **提交** 仍可用。从面板添加 remote 见 [Git 面板添加远程地址](../feature/2026-08-27-git-add-remote.md)。
 
 ## Consequences
 
-用户仍不能在面板里添加 remote。其它推送失败仍显示 Git 原文。
+用户在 `hasRemote` 为 false 时从面板添加 `origin`；见 [Git 面板添加远程地址](../feature/2026-08-27-git-add-remote.md)。非快进拒绝见 [Git 推送被拒绝的文案](2026-08-28-git-push-rejected-copy.md)。其它推送失败仍显示 Git 原文。
 
 ## Testing
 

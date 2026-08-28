@@ -50,6 +50,7 @@ export interface RpcErrorDetailsMap {
   'path-not-found': { path: string }
   'path-delete-failed': { path: string }
   'path-rename-failed': { path: string }
+  'path-move-failed': { path: string }
   'directory-unreadable': { path: string }
   'directory-exists': { path: string }
   'directory-create-failed': { path: string }

@@ -21,6 +21,7 @@ import {
   directoryChainToFile, isPathInDirectorySubtree, joinChildPath, parentDirectoryForCreate,
   remapPathAfterRename,
   parentDirectoryOfEntry, parentDirectoryOfPath, siblingNameConflictKey,
+  destinationDirectoryForTreeDrop,
 } from './file-tree-parent.ts'
 import { flattenVisibleTree, paintVisibleRows } from './flatten-visible.ts'
 import { filterTreeEntries } from './tree-entry-filter.ts'
@@ -77,6 +78,19 @@ export interface FileTreeMutationHost {
     workspaceId: WorkspaceId,
     path: string,
     newName: string,
+    signal?: AbortSignal,
+  ) => Promise<PathMutationResult>
+  /**
+   * Move one path into another existing directory, keeping the base name.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute source path.
+   * @param destinationDirectory - absolute existing directory that will receive the source.
+   * @param signal - aborts a superseded mutation.
+   */
+  movePath: (
+    workspaceId: WorkspaceId,
+    path: string,
+    destinationDirectory: string,
     signal?: AbortSignal,
   ) => Promise<PathMutationResult>
   /**
@@ -216,7 +230,7 @@ function crossKindPathError(
  * @returns the filter chrome, toolbar, and virtualized tree.
  */
 export function FileTreePane({
-  workspace, listWorkspaceEntries, gitStatus, deletePath, renamePath,
+  workspace, listWorkspaceEntries, gitStatus, deletePath, renamePath, movePath,
   createWorkspaceDirectory, writeFile, t, onOpenFile, newFileTrigger = 0,
   gitRefreshTrigger = 0,
   gitRefreshSilent = false,
@@ -246,6 +260,10 @@ export function FileTreePane({
   const [opError, setOpError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [treeMenu, setTreeMenu] = useState<{ entry: WorkspaceEntry; rect: DOMRect } | null>(null)
+  const [dropOver, setDropOver] = useState<string | 'root' | null>(null)
+  const [moveError, setMoveError] = useState<string | null>(null)
+  const dragSourceRef = useRef<WorkspaceEntry | null>(null)
+  const suppressClickAfterDragRef = useRef(false)
   const listingAbort = useRef<AbortController | null>(null)
   const fetchAbortByPath = useRef<Map<string, AbortController>>(new Map())
   const listWorkspaceEntriesRef = useRef(listWorkspaceEntries)
@@ -500,6 +518,9 @@ export function FileTreePane({
     setNameError(null)
     setOpError(null)
     setSubmitting(false)
+    setDropOver(null)
+    setMoveError(null)
+    dragSourceRef.current = null
     if (boundWorkspaceId === undefined || boundWorkspacePath === undefined) {
       setGitLoading(false)
       return () => { ac.abort() }
@@ -824,6 +845,52 @@ export function FileTreePane({
     }
   }
 
+  const commitTreeMove = async (dest: string): Promise<void> => {
+    const source = dragSourceRef.current
+    if (workspace === undefined || source === null || submitting) return
+    setSubmitting(true)
+    setMoveError(null)
+    try {
+      const sourceParent = parentDirectoryOfEntry(workspace.path, source)
+      const siblings = await fetchDirectory(dest, { force: true })
+      const conflict = siblingNameConflictKey(siblings, source.name, source.isDirectory)
+      if (conflict !== null) {
+        setMoveError(t(conflict))
+        return
+      }
+      const result = await movePath(workspace.workspaceId, source.path, dest)
+      if (source.isDirectory) {
+        purgeCachedSubtree(source.path)
+        setExpanded((current) => {
+          const next = new Set<string>()
+          for (const path of current) {
+            next.add(remapPathAfterRename(source.path, result.path, path))
+          }
+          next.add(dest)
+          return next
+        })
+      } else {
+        setExpanded(current => new Set(current).add(dest))
+      }
+      await invalidateDirectory(sourceParent)
+      await invalidateDirectory(dest)
+      onPathRenamed?.(source.path, result.path, source.name)
+      setSelectedPath(result.path)
+      void refreshGitStatus()
+    } catch (error: unknown) {
+      void error
+      if (isNameConflict(error)) {
+        setMoveError(t(source.isDirectory
+          ? 'editor.error.folderNameConflict'
+          : 'editor.error.fileNameConflict'))
+        return
+      }
+      setMoveError(t('editor.error.move'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const nameDialogTitle = nameDialog?.kind === 'new-file'
     ? t('editor.dialog.newFile.title')
     : nameDialog?.kind === 'new-folder'
@@ -943,11 +1010,51 @@ export function FileTreePane({
           </Tooltip>
         </div>
       </div>
+      {moveError !== null && (
+        <div className={clsx(dialogCss.fieldError, css.moveError)} role="alert">{moveError}</div>
+      )}
       <div
-        className={clsx(css.treeScroll, scrollActive && css.treeScrollActive)}
+        className={clsx(
+          css.treeScroll,
+          scrollActive && css.treeScrollActive,
+          dropOver === 'root' && css.treeScrollDropTarget,
+        )}
         ref={treeScrollRef}
         data-tree-scroll="true"
         data-empty={showTreeEmpty || undefined}
+        data-drop-over={dropOver === 'root' ? 'root' : undefined}
+        onClick={(event) => {
+          if (suppressClickAfterDragRef.current) {
+            suppressClickAfterDragRef.current = false
+            return
+          }
+          if (!isFileTreeBlankClick(event.target)) return
+          setSelectedPath(undefined)
+          setMoveError(null)
+        }}
+        onDragOver={(event) => {
+          if (event.target instanceof Element && event.target.closest('[role="treeitem"]') !== null) {
+            return
+          }
+          event.preventDefault()
+          const source = dragSourceRef.current
+          if (workspace === undefined || source === null) return
+          const dest = destinationDirectoryForTreeDrop(workspace.path, source.path, { kind: 'root' })
+          const transfer = event.dataTransfer
+          if (transfer != null) transfer.dropEffect = dest === null ? 'none' : 'move'
+          setDropOver(dest === null ? null : 'root')
+        }}
+        onDrop={(event) => {
+          if (event.target instanceof Element && event.target.closest('[role="treeitem"]') !== null) {
+            return
+          }
+          event.preventDefault()
+          const source = dragSourceRef.current
+          if (workspace === undefined || source === null) return
+          const dest = destinationDirectoryForTreeDrop(workspace.path, source.path, { kind: 'root' })
+          setDropOver(null)
+          if (dest !== null) void commitTreeMove(dest)
+        }}
       >
         {showTreeEmpty && (
           <div className={css.empty}>
@@ -981,16 +1088,26 @@ export function FileTreePane({
                 <div
                   key={row.entry.path}
                   role="treeitem"
+                  draggable
                   aria-expanded={row.entry.isDirectory ? row.expanded : undefined}
                   aria-selected={selected}
                   aria-level={row.depth + 1}
                   aria-busy={row.loading || undefined}
-                  className={clsx(css.row, selected && css.rowSelected)}
+                  data-drop-over={dropOver === row.entry.path || undefined}
+                  className={clsx(
+                    css.row,
+                    selected && css.rowSelected,
+                    dropOver === row.entry.path && css.rowDropTarget,
+                  )}
                   style={{
                     transform: `translateY(${start}px)`,
                     paddingLeft: `${row.depth * 12}px`,
                   }}
                   onClick={() => {
+                    if (suppressClickAfterDragRef.current) {
+                      suppressClickAfterDragRef.current = false
+                      return
+                    }
                     setSelectedPath(row.entry.path)
                     if (row.entry.isDirectory) void toggleDirectory(row.entry)
                     else onOpenFile(row.entry)
@@ -1003,6 +1120,50 @@ export function FileTreePane({
                       entry: row.entry,
                       rect: event.currentTarget.getBoundingClientRect(),
                     })
+                  }}
+                  onDragStart={(event) => {
+                    dragSourceRef.current = row.entry
+                    suppressClickAfterDragRef.current = false
+                    setMoveError(null)
+                    const transfer = event.dataTransfer
+                    if (transfer != null) {
+                      transfer.effectAllowed = 'move'
+                      try {
+                        transfer.setData('text/plain', row.entry.path)
+                      } catch (error: unknown) {
+                        void error
+                      }
+                    }
+                  }}
+                  onDragEnd={() => {
+                    dragSourceRef.current = null
+                    setDropOver(null)
+                    suppressClickAfterDragRef.current = true
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    const source = dragSourceRef.current
+                    if (workspace === undefined || source === null) return
+                    const drop = row.entry.isDirectory
+                      ? { kind: 'directory' as const, path: row.entry.path }
+                      : { kind: 'file' as const, path: row.entry.path }
+                    const dest = destinationDirectoryForTreeDrop(workspace.path, source.path, drop)
+                    const transfer = event.dataTransfer
+                    if (transfer != null) transfer.dropEffect = dest === null ? 'none' : 'move'
+                    setDropOver(dest === null ? null : row.entry.path)
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    const source = dragSourceRef.current
+                    if (workspace === undefined || source === null) return
+                    const drop = row.entry.isDirectory
+                      ? { kind: 'directory' as const, path: row.entry.path }
+                      : { kind: 'file' as const, path: row.entry.path }
+                    const dest = destinationDirectoryForTreeDrop(workspace.path, source.path, drop)
+                    setDropOver(null)
+                    if (dest !== null) void commitTreeMove(dest)
                   }}
                 >
                   {row.entry.isDirectory
@@ -1183,4 +1344,15 @@ function badgeClass(letter: string): string {
   if (letter === 'M') return css.badgeModified as string
   if (letter === 'D') return css.badgeDeleted as string
   return css.badgeUntracked as string
+}
+
+/**
+ * Whether a click landed on tree chrome rather than a row or control.
+ * @param target - event target.
+ */
+function isFileTreeBlankClick(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  if (target.closest('[role="treeitem"]') !== null) return false
+  if (target.closest('button') !== null) return false
+  return true
 }

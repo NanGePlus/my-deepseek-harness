@@ -167,6 +167,12 @@ export class FakeApiClient implements IApiClient {
   onGitPush: (payload: unknown) => Promise<RpcResponse<GitWorkingTreeResult>> =
     () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
 
+  onGitAddRemote: (payload: unknown) => Promise<RpcResponse<GitWorkingTreeResult>> =
+    () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
+
+  onGitRemoveRemote: (payload: unknown) => Promise<RpcResponse<GitWorkingTreeResult>> =
+    () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
+
   onGitLog: (payload: unknown) => Promise<RpcResponse<GitLogResult>> =
     () => Promise.resolve(ok({ availability: 'not-a-repository' as const }))
 
@@ -195,6 +201,13 @@ export class FakeApiClient implements IApiClient {
     const parent = slash >= 0 ? request.path.slice(0, slash) : ''
     const renamed = parent === '' ? request.newName : `${parent}/${request.newName}`
     return Promise.resolve(ok({ path: renamed }))
+  }
+
+  onMovePath: (payload: unknown) => Promise<RpcResponse<{ path: string }>> = (payload) => {
+    const request = payload as { path: string; destinationDirectory: string }
+    const slash = request.path.lastIndexOf('/')
+    const name = slash >= 0 ? request.path.slice(slash + 1) : request.path
+    return Promise.resolve(ok({ path: `${request.destinationDirectory}/${name}` }))
   }
 
   onCreateWorkspaceDirectory: (payload: unknown) => Promise<RpcResponse<{ path: string }>> = (payload) => {
@@ -266,12 +279,15 @@ export class FakeApiClient implements IApiClient {
     gitDiscard: (payload: unknown) => this.record('host.gitDiscard', payload, this.onGitDiscard(payload)),
     gitCommit: (payload: unknown) => this.record('host.gitCommit', payload, this.onGitCommit(payload)),
     gitPush: (payload: unknown) => this.record('host.gitPush', payload, this.onGitPush(payload)),
+    gitAddRemote: (payload: unknown) => this.record('host.gitAddRemote', payload, this.onGitAddRemote(payload)),
+    gitRemoveRemote: (payload: unknown) => this.record('host.gitRemoveRemote', payload, this.onGitRemoveRemote(payload)),
     gitLog: (payload: unknown) => this.record('host.gitLog', payload, this.onGitLog(payload)),
     gitCommitDiff: (payload: unknown) => this.record('host.gitCommitDiff', payload, this.onGitCommitDiff(payload)),
     readFile: (payload: unknown) => this.record('host.readFile', payload, this.onReadFile(payload)),
     writeFile: (payload: unknown) => this.record('host.writeFile', payload, this.onWriteFile(payload)),
     deletePath: (payload: unknown) => this.record('host.deletePath', payload, this.onDeletePath(payload)),
     renamePath: (payload: unknown) => this.record('host.renamePath', payload, this.onRenamePath(payload)),
+    movePath: (payload: unknown) => this.record('host.movePath', payload, this.onMovePath(payload)),
     createWorkspaceDirectory: (payload: unknown) => this.record(
       'host.createWorkspaceDirectory',
       payload,

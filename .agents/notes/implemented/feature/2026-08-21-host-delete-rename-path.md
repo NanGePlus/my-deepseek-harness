@@ -29,6 +29,7 @@ Implementation lives in `workspace-path-mutations.ts`; wire types and zod schema
 ## Consequences
 
 - Downstream `ui-file-editor` file-operation toolbar can call these RPCs through `WorkspaceRuntime`.
+- Cross-directory moves are owned by [explorer blank click and drag move](2026-08-28-explorer-blank-click-and-drag-move.md).
 - External change detection is documented in [host watchPath](2026-08-21-host-watch-path.md).
 - Recursive delete follows Node `fs.rm` semantics for directory trees.
 

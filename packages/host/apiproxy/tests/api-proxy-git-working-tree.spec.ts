@@ -126,6 +126,27 @@ describe('host.gitWorkingTree', () => {
       unstaged: [],
       staged: [],
       pushAvailable: true,
+      hasRemote: false,
+    })
+  })
+
+  it('does not offer first-time push on an unborn branch', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const tree = expectOk(await api.host.gitWorkingTree(
+      request({ workspaceId: workspace.workspaceId }),
+      new AbortController().signal,
+    ))
+
+    expect(tree).toMatchObject({
+      availability: 'repository',
+      branch: 'main',
+      pushAvailable: false,
+      hasRemote: false,
     })
   })
 
@@ -471,6 +492,59 @@ describe('host.gitWorkingTree', () => {
       mkdirSync(workspacePath)
       initGitRepo(workspacePath)
       commitFile(workspacePath, 'readme.txt', 'hello', 'init')
+      const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+      const response = await api.host.gitWorkingTree(
+        request({ workspaceId: workspace.workspaceId }),
+        ac.signal,
+      )
+      expect(response.result).toMatchObject({ ok: false, error: { code: 'cancelled' } })
+    } finally {
+      runSpy.mockRestore()
+    }
+  })
+
+  it('reports cancelled when the caller aborts while counting unpublished commits', async () => {
+    const ac = new AbortController()
+    const original = nativeCommand.runNativeCommand
+    const runSpy = vi.spyOn(nativeCommand, 'runNativeCommand').mockImplementation(async (file, args, signal) => {
+      if (args.includes('rev-list')) {
+        ac.abort()
+        throw new Error('aborted')
+      }
+      return original(file, args, signal)
+    })
+    try {
+      const { api, root } = await harness()
+      const workspacePath = join(root, 'repo')
+      mkdirSync(workspacePath)
+      initGitRepo(workspacePath)
+      commitFile(workspacePath, 'readme.txt', 'hello', 'init')
+      const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+      const response = await api.host.gitWorkingTree(
+        request({ workspaceId: workspace.workspaceId }),
+        ac.signal,
+      )
+      expect(response.result).toMatchObject({ ok: false, error: { code: 'cancelled' } })
+    } finally {
+      runSpy.mockRestore()
+    }
+  })
+
+  it('reports cancelled when the caller aborts while probing HEAD for first-time push', async () => {
+    const ac = new AbortController()
+    const original = nativeCommand.runNativeCommand
+    const runSpy = vi.spyOn(nativeCommand, 'runNativeCommand').mockImplementation(async (file, args, signal) => {
+      if (args.includes('--verify') && args.includes('HEAD')) {
+        ac.abort()
+        throw new Error('aborted')
+      }
+      return original(file, args, signal)
+    })
+    try {
+      const { api, root } = await harness()
+      const workspacePath = join(root, 'repo')
+      mkdirSync(workspacePath)
+      initGitRepo(workspacePath)
       const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
       const response = await api.host.gitWorkingTree(
         request({ workspaceId: workspace.workspaceId }),

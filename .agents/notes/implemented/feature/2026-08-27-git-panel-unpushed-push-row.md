@@ -24,7 +24,7 @@ Push success and failure hints stay beside **Push** on that line. After a succes
 
 ## Consequences
 
-The commit toolbar no longer hosts a standalone **Push**. First-time push still uses the second line with unpublished copy.
+The commit toolbar no longer hosts a standalone **Push**. First-time push still uses the second line with unpublished copy when HEAD exists and `@{upstream}` is unset. An unborn branch reports `pushAvailable` false; adding `origin` does not change that. See [Git unpublished push requires a local commit](../bug-fix/2026-08-28-git-unborn-push-available.md).
 
 ## Testing
 

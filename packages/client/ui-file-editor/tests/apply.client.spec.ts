@@ -20,6 +20,7 @@ async function bench() {
     writeFile: vi.fn(() => Promise.resolve({ path: '/w/a.ts' })),
     deletePath: vi.fn(() => Promise.resolve({ path: '/w/a.ts' })),
     renamePath: vi.fn(() => Promise.resolve({ path: '/w/b.ts' })),
+    movePath: vi.fn(() => Promise.resolve({ path: '/w/src/a.ts' })),
     createWorkspaceDirectory: vi.fn(() => Promise.resolve({ path: '/w/src' })),
     watchPath: vi.fn(),
   }
@@ -71,9 +72,11 @@ describe('ui-file-editor apply', () => {
     expect(b.workspaces.writeFile).toHaveBeenCalledWith('ws', '/w/a.ts', 'x', undefined)
     await expect(face.deletePath('ws' as WorkspaceId, '/w/a.ts')).resolves.toEqual({ path: '/w/a.ts' })
     await expect(face.renamePath('ws' as WorkspaceId, '/w/a.ts', 'b.ts')).resolves.toEqual({ path: '/w/b.ts' })
+    await expect(face.movePath('ws' as WorkspaceId, '/w/a.ts', '/w/src')).resolves.toEqual({ path: '/w/src/a.ts' })
     await expect(face.createWorkspaceDirectory('ws' as WorkspaceId, '/w', 'src')).resolves.toEqual({ path: '/w/src' })
     expect(b.workspaces.deletePath).toHaveBeenCalledWith('ws', '/w/a.ts', undefined)
     expect(b.workspaces.renamePath).toHaveBeenCalledWith('ws', '/w/a.ts', 'b.ts', undefined)
+    expect(b.workspaces.movePath).toHaveBeenCalledWith('ws', '/w/a.ts', '/w/src', undefined)
     expect(b.workspaces.createWorkspaceDirectory).toHaveBeenCalledWith('ws', '/w', 'src', undefined)
     face.watchPath('ws' as WorkspaceId, '/w/a.ts', () => {}, undefined)
     expect(b.workspaces.watchPath).toHaveBeenCalledWith('ws', '/w/a.ts', expect.any(Function), undefined)

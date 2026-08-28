@@ -100,6 +100,19 @@ export interface FileEditorInjected {
     signal?: AbortSignal,
   ) => Promise<PathMutationResult>
   /**
+   * Move one path into another existing directory, keeping the base name.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute source path.
+   * @param destinationDirectory - absolute existing directory that will receive the source.
+   * @param signal - aborts a superseded mutation.
+   */
+  movePath: (
+    workspaceId: WorkspaceId,
+    path: string,
+    destinationDirectory: string,
+    signal?: AbortSignal,
+  ) => Promise<PathMutationResult>
+  /**
    * Create one child directory under an existing parent.
    * @param workspaceId - Workspace whose root bounds the path.
    * @param path - absolute parent directory.
@@ -204,7 +217,7 @@ export function EditorSurface({
   diskPathsChangedReload = true,
   useSessions, useWorkspaces, useStore, actions, dirtyGuard,
   listWorkspaceEntries, gitStatus, readFile, writeFile,
-  deletePath, renamePath, createWorkspaceDirectory, watchPath,
+  deletePath, renamePath, movePath, createWorkspaceDirectory, watchPath,
   lspSyncDocument, lspCloseDocument, lspHoverDocument, insertFileContextToComposer,
 }: EditorSurfaceProps) {
   const currentSessionId = useSessions(state => state.current)
@@ -860,6 +873,7 @@ export function EditorSurface({
         gitStatus={gitStatus}
         deletePath={deletePath}
         renamePath={renamePath}
+        movePath={movePath}
         createWorkspaceDirectory={createWorkspaceDirectory}
         writeFile={writeFile}
         t={t}

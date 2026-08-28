@@ -158,6 +158,51 @@ describe('host.gitUnstage', () => {
     })
     expect(readFileSync(join(workspacePath, 'tracked.txt'), 'utf8')).toBe('v2\n')
   })
+
+  it('unstages an added path in an unborn repository without rewriting disk', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    writeFileSync(join(workspacePath, 'nangeai.md'), 'draft\n')
+    execSync('git add nangeai.md', { cwd: workspacePath, stdio: 'ignore' })
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const tree = expectOk(await api.host.gitUnstage(
+      request({ workspaceId: workspace.workspaceId, path: join(workspace.path, 'nangeai.md') }),
+      new AbortController().signal,
+    ))
+
+    expect(tree).toMatchObject({
+      availability: 'repository',
+      unstaged: [{ path: 'nangeai.md', absolutePath: join(workspace.path, 'nangeai.md'), kind: 'untracked' }],
+      staged: [],
+    })
+    expect(readFileSync(join(workspacePath, 'nangeai.md'), 'utf8')).toBe('draft\n')
+  })
+
+  it('unstages an added path whose worktree diverged before the first commit', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    writeFileSync(join(workspacePath, 'nangeai.md'), 'draft\n')
+    execSync('git add nangeai.md', { cwd: workspacePath, stdio: 'ignore' })
+    writeFileSync(join(workspacePath, 'nangeai.md'), 'edited\n')
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const tree = expectOk(await api.host.gitUnstage(
+      request({ workspaceId: workspace.workspaceId, path: join(workspace.path, 'nangeai.md') }),
+      new AbortController().signal,
+    ))
+
+    expect(tree).toMatchObject({
+      availability: 'repository',
+      unstaged: [{ path: 'nangeai.md', kind: 'untracked' }],
+      staged: [],
+    })
+    expect(readFileSync(join(workspacePath, 'nangeai.md'), 'utf8')).toBe('edited\n')
+  })
 })
 
 describe('host.gitDiscard', () => {
@@ -511,6 +556,7 @@ describe('host.gitCommit', () => {
       availability: 'repository',
       ahead: 2,
       pushAvailable: true,
+      hasRemote: true,
       staged: [],
     })
   })
@@ -565,6 +611,36 @@ describe('host.gitCommit', () => {
     expect(execSync('git rev-parse HEAD', { cwd: workspacePath, encoding: 'utf8' }).trim()).toBe(head)
   })
 
+  it('reports a rejected first push without the To-url destination line as the message', async () => {
+    const { api, root } = await harness()
+    const barePath = join(root, 'origin.git')
+    mkdirSync(barePath)
+    execSync('git init --bare -b main', { cwd: barePath, stdio: 'ignore' })
+
+    const seedPath = join(root, 'seed')
+    mkdirSync(seedPath)
+    initGitRepo(seedPath)
+    execSync(`git remote add origin ${barePath}`, { cwd: seedPath, stdio: 'ignore' })
+    commitFile(seedPath, 'README.md', 'remote\n', 'readme')
+    execSync('git push -u origin main', { cwd: seedPath, stdio: 'ignore' })
+
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    execSync(`git remote add origin ${barePath}`, { cwd: workspacePath, stdio: 'ignore' })
+    commitFile(workspacePath, 'local.txt', 'local\n', 'init')
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const response = await api.host.gitPush(
+      request({ workspaceId: workspace.workspaceId }),
+      new AbortController().signal,
+    )
+    expect(response.result).toMatchObject({ ok: false, error: { code: 'git-failed' } })
+    if (response.result.ok) throw new Error('unreachable')
+    expect(response.result.error.message).not.toMatch(/^To /)
+    expect(response.result.error.message).toMatch(/\[rejected]|non-fast-forward|fetch first/)
+  })
+
   it('refuses commit-and-push when the repository has no remotes and does not create the commit', async () => {
     const { api, root } = await harness()
     const workspacePath = join(root, 'repo')
@@ -587,6 +663,155 @@ describe('host.gitCommit', () => {
     })
     expect(execSync('git rev-parse HEAD', { cwd: workspacePath, encoding: 'utf8' }).trim()).toBe(parent)
     expect(execSync('git diff --cached --name-only', { cwd: workspacePath, encoding: 'utf8' }).trim()).toBe('tracked.txt')
+  })
+
+  it('adds origin and reports hasRemote on the refreshed tree', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    commitFile(workspacePath, 'tracked.txt', 'v1\n', 'init')
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const before = expectOk(await api.host.gitWorkingTree(
+      request({ workspaceId: workspace.workspaceId }),
+      new AbortController().signal,
+    ))
+    expect(before).toMatchObject({ availability: 'repository', hasRemote: false })
+
+    const tree = expectOk(await api.host.gitAddRemote(
+      request({ workspaceId: workspace.workspaceId, url: 'https://example.com/org/repo.git' }),
+      new AbortController().signal,
+    ))
+    expect(tree).toMatchObject({
+      availability: 'repository',
+      hasRemote: true,
+      originUrl: 'https://example.com/org/repo.git',
+      pushAvailable: true,
+    })
+    expect(execSync('git remote get-url origin', { cwd: workspacePath, encoding: 'utf8' }).trim())
+      .toBe('https://example.com/org/repo.git')
+  })
+
+  it('does not offer first-time push after adding origin when HEAD has no commits', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const tree = expectOk(await api.host.gitAddRemote(
+      request({ workspaceId: workspace.workspaceId, url: 'https://example.com/org/repo.git' }),
+      new AbortController().signal,
+    ))
+    expect(tree).toMatchObject({
+      availability: 'repository',
+      hasRemote: true,
+      originUrl: 'https://example.com/org/repo.git',
+      pushAvailable: false,
+    })
+  })
+
+  it('refuses an empty or newline remote URL without creating origin', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    for (const url of ['', '   ', 'https://example.com\n/repo.git', 'https://example.com\r/repo.git', 'https://example.com/repo.git\0']) {
+      const response = await api.host.gitAddRemote(
+        request({ workspaceId: workspace.workspaceId, url }),
+        new AbortController().signal,
+      )
+      expect(response.result).toMatchObject({
+        ok: false,
+        error: { code: 'git-failed', message: 'empty remote url' },
+      })
+    }
+    expect(execSync('git remote', { cwd: workspacePath, encoding: 'utf8' }).trim()).toBe('')
+  })
+
+  it('refuses gitAddRemote when origin already exists', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    execSync('git remote add origin https://example.com/org/repo.git', { cwd: workspacePath, stdio: 'ignore' })
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const response = await api.host.gitAddRemote(
+      request({ workspaceId: workspace.workspaceId, url: 'https://example.com/other.git' }),
+      new AbortController().signal,
+    )
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'git-failed' },
+    })
+    expect(execSync('git remote get-url origin', { cwd: workspacePath, encoding: 'utf8' }).trim())
+      .toBe('https://example.com/org/repo.git')
+  })
+
+  it('removes origin and omits originUrl on the refreshed tree', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    execSync('git remote add origin https://example.com/org/repo.git', { cwd: workspacePath, stdio: 'ignore' })
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const before = expectOk(await api.host.gitWorkingTree(
+      request({ workspaceId: workspace.workspaceId }),
+      new AbortController().signal,
+    ))
+    expect(before).toMatchObject({
+      availability: 'repository',
+      hasRemote: true,
+      originUrl: 'https://example.com/org/repo.git',
+    })
+
+    const tree = expectOk(await api.host.gitRemoveRemote(
+      request({ workspaceId: workspace.workspaceId }),
+      new AbortController().signal,
+    ))
+    expect(tree).toMatchObject({ availability: 'repository', hasRemote: false })
+    expect(tree).not.toHaveProperty('originUrl')
+    expect(execSync('git remote', { cwd: workspacePath, encoding: 'utf8' }).trim()).toBe('')
+  })
+
+  it('leaves other remotes when removing origin', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+    execSync('git remote add origin https://example.com/org/repo.git', { cwd: workspacePath, stdio: 'ignore' })
+    execSync('git remote add upstream https://example.com/org/up.git', { cwd: workspacePath, stdio: 'ignore' })
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const tree = expectOk(await api.host.gitRemoveRemote(
+      request({ workspaceId: workspace.workspaceId }),
+      new AbortController().signal,
+    ))
+    expect(tree).toMatchObject({ availability: 'repository', hasRemote: true })
+    expect(tree).not.toHaveProperty('originUrl')
+    expect(execSync('git remote', { cwd: workspacePath, encoding: 'utf8' }).trim()).toBe('upstream')
+  })
+
+  it('refuses gitRemoveRemote when origin is missing', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    initGitRepo(workspacePath)
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const response = await api.host.gitRemoveRemote(
+      request({ workspaceId: workspace.workspaceId }),
+      new AbortController().signal,
+    )
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'git-failed' },
+    })
   })
 
   it('rejects commit when the staged area is empty', async () => {
@@ -683,6 +908,11 @@ describe('host Git write RPC set', () => {
       await api.host.gitUnstage(request({ workspaceId: missing, path }), new AbortController().signal),
       await api.host.gitDiscard(request({ workspaceId: missing, path }), new AbortController().signal),
       await api.host.gitCommit(request({ workspaceId: missing, message: 'x' }), new AbortController().signal),
+      await api.host.gitAddRemote(
+        request({ workspaceId: missing, url: 'https://example.com/repo.git' }),
+        new AbortController().signal,
+      ),
+      await api.host.gitRemoveRemote(request({ workspaceId: missing }), new AbortController().signal),
     ]) {
       expect(response.result).toMatchObject({
         ok: false,

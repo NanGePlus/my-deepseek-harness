@@ -21,6 +21,8 @@ async function bench() {
     gitDiscard: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitCommit: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitPush: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
+    gitAddRemote: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
+    gitRemoveRemote: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitLog: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
     gitCommitDiff: vi.fn(() => Promise.resolve({ availability: 'not-a-repository' as const })),
   }
@@ -85,6 +87,12 @@ describe('ui-git apply', () => {
     await expect(face.gitPush('ws' as WorkspaceId)).resolves.toEqual({
       availability: 'not-a-repository',
     })
+    await expect(face.gitAddRemote('ws' as WorkspaceId, 'https://example.com/repo.git')).resolves.toEqual({
+      availability: 'not-a-repository',
+    })
+    await expect(face.gitRemoveRemote('ws' as WorkspaceId)).resolves.toEqual({
+      availability: 'not-a-repository',
+    })
     await expect(face.gitLog('ws' as WorkspaceId, { limit: 50 })).resolves.toEqual({
       availability: 'not-a-repository',
     })
@@ -100,6 +108,8 @@ describe('ui-git apply', () => {
     expect(b.workspaces.gitCommit).toHaveBeenCalledWith('ws', 'msg', undefined)
     expect(b.workspaces.gitCommit).toHaveBeenCalledWith('ws', 'msg', true)
     expect(b.workspaces.gitPush).toHaveBeenCalledWith('ws', undefined)
+    expect(b.workspaces.gitAddRemote).toHaveBeenCalledWith('ws', 'https://example.com/repo.git')
+    expect(b.workspaces.gitRemoveRemote).toHaveBeenCalledWith('ws', undefined)
     expect(b.workspaces.gitLog).toHaveBeenCalledWith('ws', { limit: 50 }, undefined)
     expect(b.workspaces.gitCommitDiff).toHaveBeenCalledWith('ws', 'abc1234', undefined)
   })
