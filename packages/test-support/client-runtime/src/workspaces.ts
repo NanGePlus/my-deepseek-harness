@@ -480,6 +480,30 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
+   * Move a Workspace path into another directory (recorded). The default joins dest and basename.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute source path.
+   * @param destinationDirectory - absolute existing directory that will receive the source.
+   * @param signal - optional abort signal.
+   * @returns the destination absolute path.
+   */
+  async movePath(
+    workspaceId: WorkspaceId,
+    path: string,
+    destinationDirectory: string,
+    signal?: AbortSignal,
+  ): Promise<PathMutationResult> {
+    this.calls.push({ method: 'movePath', args: [workspaceId, path, destinationDirectory, signal] })
+    const stub = this.stubs.get('movePath')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, path, destinationDirectory, signal) as Promise<PathMutationResult>)
+    }
+    const slash = path.lastIndexOf('/')
+    const name = slash >= 0 ? path.slice(slash + 1) : path
+    return { path: `${destinationDirectory}/${name}` }
+  }
+
+  /**
    * Create a child directory inside a Workspace (recorded). The default joins parent and name.
    * @param workspaceId - Workspace whose root bounds the path.
    * @param path - absolute existing parent directory.

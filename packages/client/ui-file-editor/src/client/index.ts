@@ -116,6 +116,8 @@ export function apply(ctx: ClientContext): void {
       ctx.workspaces.deletePath(workspaceId, path, signal),
     renamePath: (workspaceId, path, newName, signal) =>
       ctx.workspaces.renamePath(workspaceId, path, newName, signal),
+    movePath: (workspaceId, path, destinationDirectory, signal) =>
+      ctx.workspaces.movePath(workspaceId, path, destinationDirectory, signal),
     createWorkspaceDirectory: (workspaceId, path, name, signal) =>
       ctx.workspaces.createWorkspaceDirectory(workspaceId, path, name, signal),
     watchPath: (workspaceId, path, onChanged, signal) =>

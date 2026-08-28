@@ -2617,6 +2617,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       writeFile: request => ok(request, { path: request.payload.path }),
       deletePath: request => ok(request, { path: request.payload.path }),
       renamePath: request => ok(request, { path: request.payload.path }),
+      movePath: request => ok(request, {
+        path: `${request.payload.destinationDirectory}/${request.payload.path.split('/').pop() ?? ''}`,
+      }),
       createWorkspaceDirectory: request => ok(request, {
         path: `${request.payload.path}/${request.payload.name}`,
       }),
@@ -3178,6 +3181,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'host.writeFile': return this.api.host.writeFile(request, signal)
       case 'host.deletePath': return this.api.host.deletePath(request, signal)
       case 'host.renamePath': return this.api.host.renamePath(request, signal)
+      case 'host.movePath': return this.api.host.movePath(request, signal)
       case 'host.createWorkspaceDirectory': return this.api.host.createWorkspaceDirectory(request, signal)
       case 'host.openPath': return this.api.host.openPath(request, new AbortController().signal)
       case 'host.lspSyncDocument': return this.api.host.lspSyncDocument(request, signal)

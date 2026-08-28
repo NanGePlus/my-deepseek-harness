@@ -10,7 +10,7 @@
 
 ## 解决方案
 
-在现有 details 栏增加「资源管理器」分段 Tab，与「Tool 详情」切换；选中后展示完整编辑界面（文件树 + 多 Tab 编辑区），不需要时切回 Tool 详情即关闭编辑器视图。文件树跟随当前 Session 的绑定 Workspace，全量可见、按目录展开懒加载，支持文件名过滤、文件类型图标与只读 Git 状态标记。可编辑文本进入编辑缓冲，语法高亮，经显式保存写入磁盘；常见图片只读预览；其余二进制提示不可打开。支持新建文件、新建文件夹、重命名、删除（删除须确认）。已打开文件的外部变更弹出对话框，由用户选择重新加载或保留本地编辑缓冲。切换 Session 或关闭 dirty Tab 时经 Session 切换守卫逐文件保存、丢弃或取消，禁止静默丢失。
+在现有 details 栏增加「资源管理器」分段 Tab，与「Tool 详情」切换；选中后展示完整编辑界面（文件树 + 多 Tab 编辑区），不需要时切回 Tool 详情即关闭编辑器视图。文件树跟随当前 Session 的绑定 Workspace，全量可见、按目录展开懒加载，支持文件名过滤、文件类型图标与只读 Git 状态标记。可编辑文本进入编辑缓冲，语法高亮，经显式保存写入磁盘；常见图片只读预览；其余二进制提示不可打开。支持新建文件、新建文件夹、重命名、删除（删除须确认）、拖拽跨目录移动；点击文件树空白处取消行选中，工具栏新建落在 Workspace 根。已打开文件的外部变更弹出对话框，由用户选择重新加载或保留本地编辑缓冲。切换 Session 或关闭 dirty Tab 时经 Session 切换守卫逐文件保存、丢弃或取消，禁止静默丢失。
 
 ## 用户故事
 
@@ -76,6 +76,10 @@ US-29：作为 Web 开发者，当打开或保存文件较慢时，我想在编�
 
 US-30：作为 Web 开发者，当保存或打开失败时，我想在编辑区内看到错误说明并可重试，以便从权限或 I/O 失败中恢复。
 
+US-31：作为 Web 开发者，当我已经选中某个文件或文件夹后，我想点击文件树空白处回到 Workspace 根，以便工具栏新建文件和新建文件夹落在根目录。
+
+US-32：作为 Web 开发者，我想把选中的文件或文件夹拖到另一目录或树空白处来移动它，以便整理目录而不必删了再新建。
+
 ## UI 与设计要求
 
 **UI 模式**：`spec-driven`。**UI 设计描述**为编码的唯一权威来源。禁止在本 PRD 要求设计稿、规划变体设计稿，或重写 `DESIGN.md` 的 Token 规格。
@@ -87,10 +91,10 @@ US-30：作为 Web 开发者，当保存或打开失败时，我想在编辑区�
 | 用户故事编号 | 端 | page-id | 该页承担的故事范围 | UI 设计描述要点 |
 | --- | --- | --- | --- | --- |
 | US-1~US-3 | Web | app-shell | 打开/收起资源管理器、与 Tool 详情切换、details 拖宽 | 三栏壳 + details 分段 Tab |
-| US-4~US-30 | Web | editor-surface | 绑定、文件树、过滤、打开三档、多 Tab、显式保存、文件操作、外部变更、Session 切换守卫、主题与加载错误 | 文件树 + 多 Tab 编辑区 |
+| US-4~US-32 | Web | editor-surface | 绑定、文件树、过滤、打开三档、多 Tab、显式保存、文件操作、外部变更、Session 切换守卫、主题与加载错误 | 文件树 + 多 Tab 编辑区 |
 
 - 无孤立故事：有 UI 的用户故事均已映射。
-- 无孤立页面：`editor-surface` 支撑 US-4~US-30；`app-shell` 为壳层（US-1~US-3）。
+- 无孤立页面：`editor-surface` 支撑 US-4~US-32；`app-shell` 为壳层（US-1~US-3）。
 - 每个 `platform-id` 有且仅有一个 `app-shell`，且排在功能页之前。
 
 ### 状态策略
@@ -125,9 +129,9 @@ US-30：作为 Web 开发者，当保存或打开失败时，我想在编辑区�
 - **page-id**：`editor-surface`
 - **页面标题**：编辑界面
 - **主任务**：在绑定 Workspace 内浏览文件树、打开文件、编辑并显式保存、完成基础文件操作
-- **覆盖的用户故事**：US-4~US-30
+- **覆盖的用户故事**：US-4~US-32
 - **DESIGN 复用**：§5 列表行、搜索框、状态徽章、图标按钮、空状态、Loading、按钮、输入、卡片容器、文件 Tab 栏；§4 `editor-hover-tint` / `editor-selected-tint` / `editor-dirty-dot` / `editor-tab-active-line`；§2 文件树 `bg-overlay`、编辑区 `markdown-code-block`
-- **UI 设计描述**：继承 `web` app-shell，details 分段 Tab 选中「资源管理器」；本页只描述 details 内容区。内容区左右分栏：左侧文件树（约 36% 宽、最小约 180px，背景 `--dsw-alias-bg-overlay`），右侧编辑区（弹性填充，背景 `--dsw-alias-markdown-code-block`），中间一条竖向 ghost 线 `--dsw-alias-border-l2`。树顶为贴顶过滤框（高 28px，左搜索图标，placeholder「按文件名过滤」，有内容时右侧清除）。过滤框下为树工具栏：24×24 ghost 图标按钮「新建文件」「新建文件夹」，选中条目时另显「重命名」「删除」。其下为虚拟滚动文件树：行高 22px、无行间分隔、每级缩进 12px；行首 16px 文件类型图标 + 文件名 `label-primary` 13px；行尾 Git 字母微徽章（M 用 `state-warn-label`，U 用 `label-caption`，D 用 `semantic-error`）；hover `editor-hover-tint`，selected `editor-selected-tint`。单击文件：可编辑文本打开为编辑器标签页；常见图片打开为只读预览 Tab；其余二进制不加载，编辑区居中卡片提示「不支持打开此文件类型」。双击文件夹或行首折叠图标展开/折叠；展开时该行右侧 16px spinner。右侧顶部为水平滚动文件 Tab 栏（高 32px）：选中底边 2px `editor-tab-active-line`；dirty 标题前 6px `editor-dirty-dot`；关闭为 28×28 ghost。Tab 栏下为 Monaco（可编辑文本，语法高亮，`--ds-font-family-code` 13px/20px）或图片只读预览（居中 contain）或不可打开提示。显式保存：⌘S / Ctrl+S 或工具栏主按钮「保存」；非 dirty / 只读预览时保存禁用。空状态变体：无打开 Tab 时，编辑区居中 overlay 卡片，48px 文件 outline，标题「未打开文件」，说明「从左侧文件树选择文件，或新建文件」，CTA「新建文件」。过滤无结果变体：树区居中「无匹配文件」，清除过滤为文字按钮。空 Workspace 变体：树区「此目录为空」，CTA「新建文件」。加载变体：打开文件 / 保存时编辑区居中 24px spinner + 「加载中…」/「保存中…」。错误变体：保存/打开失败在编辑区卡片内 `semantic-error` 文案 + 「重试」；重命名冲突输入框错误描边 + 「已存在同名路径」。删除确认对话框变体：标题「删除」，说明含路径，主按钮「删除」（危险）/ 次按钮「取消」。外部变更对话框变体：标题「文件已在磁盘上更改」，说明文件名，主按钮「重新加载」/ 次按钮「保留本地编辑」。Session 切换守卫 / 关闭 dirty Tab 变体：逐文件「保存」「丢弃」「取消」。Git 非仓库：无徽章、无错误提示。
+- **UI 设计描述**：继承 `web` app-shell，details 分段 Tab 选中「资源管理器」；本页只描述 details 内容区。内容区左右分栏：左侧文件树（约 36% 宽、最小约 180px，背景 `--dsw-alias-bg-overlay`），右侧编辑区（弹性填充，背景 `--dsw-alias-markdown-code-block`），中间一条竖向 ghost 线 `--dsw-alias-border-l2`。树顶为贴顶过滤框（高 28px，左搜索图标，placeholder「按文件名过滤」，有内容时右侧清除）。过滤框下为树工具栏：24×24 ghost 图标按钮「新建文件」「新建文件夹」，选中条目时另显「重命名」「删除」。其下为虚拟滚动文件树：行高 22px、无行间分隔、每级缩进 12px；行首 16px 文件类型图标 + 文件名 `label-primary` 13px；行尾 Git 字母微徽章（M 用 `state-warn-label`，U 用 `label-caption`，D 用 `semantic-error`）；hover `editor-hover-tint`，selected `editor-selected-tint`。点击文件树空白处（非 treeitem / 按钮）取消行选中，工具栏新建落在 Workspace 根。拖拽文件或文件夹到另一目录行或树空白处移动（空白处为根）；拖到文件行、自身、当前父级或子孙目录无效。单击文件：可编辑文本打开为编辑器标签页；常见图片打开为只读预览 Tab；其余二进制不加载，编辑区居中卡片提示「不支持打开此文件类型」。双击文件夹或行首折叠图标展开/折叠；展开时该行右侧 16px spinner。右侧顶部为水平滚动文件 Tab 栏（高 32px）：选中底边 2px `editor-tab-active-line`；dirty 标题前 6px `editor-dirty-dot`；关闭为 28×28 ghost。Tab 栏下为 Monaco（可编辑文本，语法高亮，`--ds-font-family-code` 13px/20px）或图片只读预览（居中 contain）或不可打开提示。显式保存：⌘S / Ctrl+S 或工具栏主按钮「保存」；非 dirty / 只读预览时保存禁用。空状态变体：无打开 Tab 时，编辑区居中 overlay 卡片，48px 文件 outline，标题「未打开文件」，说明「从左侧文件树选择文件，或新建文件」，CTA「新建文件」。过滤无结果变体：树区居中「无匹配文件」，清除过滤为文字按钮。空 Workspace 变体：树区「此目录为空」，CTA「新建文件」。加载变体：打开文件 / 保存时编辑区居中 24px spinner + 「加载中…」/「保存中…」。错误变体：保存/打开失败在编辑区卡片内 `semantic-error` 文案 + 「重试」；重命名冲突输入框错误描边 + 「已存在同名路径」。删除确认对话框变体：标题「删除」，说明含路径，主按钮「删除」（危险）/ 次按钮「取消」。外部变更对话框变体：标题「文件已在磁盘上更改」，说明文件名，主按钮「重新加载」/ 次按钮「保留本地编辑」。Session 切换守卫 / 关闭 dirty Tab 变体：逐文件「保存」「丢弃」「取消」。Git 非仓库：无徽章、无错误提示。
 
 ### DESIGN 合规自检
 
@@ -156,7 +160,7 @@ US-30：作为 Web 开发者，当保存或打开失败时，我想在编辑区�
 
 ### Host RPC 契约
 
-在现有 Host API 上扩展资源管理器所需 RPC，Client 只消费 RPC、不直接接触磁盘。路径参数为 Host 绝对路径；实现必须拒绝绑定 Workspace 根之外的路径（越界失败，不静默截断）。建议方法与语义：`readFile`（读文本或图片字节）、`writeFile`（显式保存；仅可编辑文本）、`deletePath`（删除文件或文件夹）、`renamePath`（重命名/移动同一父级下的新名）、`watchPath`（对单个已打开路径推送外部变更）、`gitStatus`（在绑定 Workspace 根执行 `git status --porcelain`；非仓库或 git 不可用时返回空列表，不报错）。新建文件走 `writeFile` 创建；新建文件夹复用或并列现有创建目录语义（已存在则失败，与现有 `directory-exists` 同类失败对齐）。
+在现有 Host API 上扩展资源管理器所需 RPC，Client 只消费 RPC、不直接接触磁盘。路径参数为 Host 绝对路径；实现必须拒绝绑定 Workspace 根之外的路径（越界失败，不静默截断）。建议方法与语义：`readFile`（读文本或图片字节）、`writeFile`（显式保存；仅可编辑文本）、`deletePath`（删除文件或文件夹）、`renamePath`（重命名/移动同一父级下的新名）、`movePath`（保留原名移入另一已存在目录）、`watchPath`（对单个已打开路径推送外部变更）、`gitStatus`（在绑定 Workspace 根执行 `git status --porcelain`；非仓库或 git 不可用时返回空列表，不报错）。新建文件走 `writeFile` 创建；新建文件夹复用或并列现有创建目录语义（已存在则失败，与现有 `directory-exists` 同类失败对齐）。
 
 ### host.listWorkspaceEntries
 
@@ -200,11 +204,11 @@ US-30：作为 Web 开发者，当保存或打开失败时，我想在编辑区�
 
 ### Host RPC 集成 seam
 
-在现有 Host API 测试先例上断言新 RPC 的响应字段与失败码：读/写/删/改名后磁盘与返回路径一致；`listWorkspaceEntries` 含文件与文件夹且越界路径失败；`writeFile` / `deletePath` / `renamePath` 拒绝绑定 Workspace 外路径；`gitStatus` 在非仓库返回空列表；`watchPath` 在文件被外部改写后产生一次可观测变更事件，取消订阅后不再投递。不测 git porcelain 解析器的内部字符串分片，只测映射到 Client 所需的状态字母（M/U/D 等）是否出现在响应里。
+在现有 Host API 测试先例上断言新 RPC 的响应字段与失败码：读/写/删/改名/跨目录移动后磁盘与返回路径一致；`listWorkspaceEntries` 含文件与文件夹且越界路径失败；`writeFile` / `deletePath` / `renamePath` / `movePath` 拒绝绑定 Workspace 外路径；`movePath` 拒绝把目录移入自身；`gitStatus` 在非仓库返回空列表；`watchPath` 在文件被外部改写后产生一次可观测变更事件，取消订阅后不再投递。不测 git porcelain 解析器的内部字符串分片，只测映射到 Client 所需的状态字母（M/U/D 等）是否出现在响应里。
 
 ### ui-file-editor 组件 seam
 
-用 Fake Host API 驱动 `ui-file-editor`，断言用户可见行为：展开目录才发起该层列表；文件名过滤收窄节点；单击打开三档（可编辑文本 Tab / 只读预览 / 不可打开提示）；多 Tab 切换；编辑后出现 dirty 圆点，显式保存后圆点消失且 Fake `writeFile` 被调用；新建/重命名/删除走工具栏且删除有确认；外部变更对话框在 Fake watch 事件后出现，选「重新加载」丢缓冲、「保留本地编辑」不丢；Session 切换在 dirty 时被拦住，取消则仍停在原 Session。不断言 className、hook 调用次数或 Monaco 模型内部 API。
+用 Fake Host API 驱动 `ui-file-editor`，断言用户可见行为：展开目录才发起该层列表；文件名过滤收窄节点；单击打开三档（可编辑文本 Tab / 只读预览 / 不可打开提示）；多 Tab 切换；编辑后出现 dirty 圆点，显式保存后圆点消失且 Fake `writeFile` 被调用；新建/重命名/删除走工具栏且删除有确认；点击文件树空白后工具栏新建落在根；拖到目录或树空白处调用 Fake `movePath`；外部变更对话框在 Fake watch 事件后出现，选「重新加载」丢缓冲、「保留本地编辑」不丢；Session 切换在 dirty 时被拦住，取消则仍停在原 Session。不断言 className、hook 调用次数或 Monaco 模型内部 API。
 
 ### Web browser snapshot seam
 
@@ -216,7 +220,7 @@ V1 不做下列事项（Not now）：
 
 - Agent 工具面（不新增/不替代 `read` / `write` / `str_replace_editor`）
 - Terminal 面板、独立 Git 侧栏、stage / commit / push
-- 拖拽移动、回收站、右键菜单
+- 回收站
 - 按文件内容搜索、Quick Open、⌘P / ⌘⇧F
 - 自动保存、按 Session 持久化 Tab 与编辑缓冲
 - 图片编辑、hex 查看、任意二进制当文本打开

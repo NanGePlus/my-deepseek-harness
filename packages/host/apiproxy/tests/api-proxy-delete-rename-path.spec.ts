@@ -171,6 +171,128 @@ describe('host.renamePath', () => {
   })
 })
 
+describe('host.movePath', () => {
+  it('moves a file into another directory and returns the new absolute path', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    const destDir = join(workspacePath, 'src')
+    mkdirSync(destDir)
+    const oldPath = join(workspacePath, 'old.txt')
+    const newPath = join(destDir, 'old.txt')
+    writeFileSync(oldPath, 'move me\n')
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const moved = expectOk(await api.host.movePath(
+      request({ workspaceId: workspace.workspaceId, path: oldPath, destinationDirectory: destDir }),
+      new AbortController().signal,
+    ))
+
+    expect(moved).toEqual({ path: newPath })
+    expect(existsSync(oldPath)).toBe(false)
+    expect(readFileSync(newPath, 'utf8')).toBe('move me\n')
+  })
+
+  it('fails when the move target already exists and leaves disk unchanged', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    const destDir = join(workspacePath, 'src')
+    mkdirSync(destDir)
+    const sourcePath = join(workspacePath, 'source.txt')
+    const targetPath = join(destDir, 'source.txt')
+    writeFileSync(sourcePath, 'source\n')
+    writeFileSync(targetPath, 'target\n')
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const response = await api.host.movePath(
+      request({ workspaceId: workspace.workspaceId, path: sourcePath, destinationDirectory: destDir }),
+      new AbortController().signal,
+    )
+
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'directory-exists', details: { path: targetPath } },
+    })
+    expect(readFileSync(sourcePath, 'utf8')).toBe('source\n')
+    expect(readFileSync(targetPath, 'utf8')).toBe('target\n')
+  })
+
+  it('fails when moving a directory into itself', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    const srcDir = join(workspacePath, 'src')
+    mkdirSync(srcDir)
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const response = await api.host.movePath(
+      request({ workspaceId: workspace.workspaceId, path: srcDir, destinationDirectory: srcDir }),
+      new AbortController().signal,
+    )
+
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'path-move-failed' },
+    })
+    expect(existsSync(srcDir)).toBe(true)
+  })
+
+  it('reports cancelled when the caller aborts a move', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    const destDir = join(workspacePath, 'src')
+    mkdirSync(destDir)
+    const oldPath = join(workspacePath, 'old.txt')
+    writeFileSync(oldPath, 'move me\n')
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const aborted = new AbortController()
+    aborted.abort()
+    const response = await api.host.movePath(
+      request({ workspaceId: workspace.workspaceId, path: oldPath, destinationDirectory: destDir }),
+      aborted.signal,
+    )
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'cancelled' },
+    })
+    expect(existsSync(oldPath)).toBe(true)
+  })
+
+  it('reports workspace-not-found for an unknown workspace id', async () => {
+    const { api } = await harness()
+    const response = await api.host.movePath(
+      request({ workspaceId: 'missing' as never, path: '/w/old.txt', destinationDirectory: '/w/src' }),
+      new AbortController().signal,
+    )
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'workspace-not-found', details: { workspaceId: 'missing' } },
+    })
+  })
+
+  it('fails when the source path is missing', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    const destDir = join(workspacePath, 'src')
+    mkdirSync(destDir)
+    const missing = join(workspacePath, 'gone.txt')
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const response = await api.host.movePath(
+      request({ workspaceId: workspace.workspaceId, path: missing, destinationDirectory: destDir }),
+      new AbortController().signal,
+    )
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'path-not-found', details: { path: missing } },
+    })
+  })
+})
+
 describe('host.createWorkspaceDirectory', () => {
   it('creates a child directory and returns its absolute path', async () => {
     const { api, root } = await harness()
@@ -209,7 +331,7 @@ describe('host.createWorkspaceDirectory', () => {
   })
 })
 
-describe('host.deletePath, host.renamePath, and host.createWorkspaceDirectory path bounds', () => {
+describe('host.deletePath, host.renamePath, host.movePath, and host.createWorkspaceDirectory path bounds', () => {
   it('reject deletes outside the bound Workspace root', async () => {
     const { api, root } = await harness()
     const workspacePath = join(root, 'repo')
@@ -243,6 +365,34 @@ describe('host.deletePath, host.renamePath, and host.createWorkspaceDirectory pa
     const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
     const response = await api.host.renamePath(
       request({ workspaceId: workspace.workspaceId, path: outside, newName: 'moved.txt' }),
+      new AbortController().signal,
+    )
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'workspace-path-out-of-bounds',
+        details: { workspaceId: workspace.workspaceId, path: outside },
+      },
+    })
+    expect(readFileSync(outside, 'utf8')).toBe('outside\n')
+  })
+
+  it('reject moves when the source path is outside the bound Workspace root', async () => {
+    const { api, root } = await harness()
+    const workspacePath = join(root, 'repo')
+    mkdirSync(workspacePath)
+    const destDir = join(workspacePath, 'src')
+    mkdirSync(destDir)
+    const outside = join(root, 'outside.txt')
+    writeFileSync(outside, 'outside\n')
+
+    const workspace = expectOk(await api.workspace.create(request({ path: workspacePath }))).workspace
+    const response = await api.host.movePath(
+      request({
+        workspaceId: workspace.workspaceId,
+        path: outside,
+        destinationDirectory: destDir,
+      }),
       new AbortController().signal,
     )
     expect(response.result).toMatchObject({

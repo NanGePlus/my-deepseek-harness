@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-21-host-delete-rename-path.md
+2026-08-21-host-delete-rename-path.md: da7ffcb3b4ebeed3c53f821435ea4d1429cb5ea0
+2026-08-21-host-delete-rename-path.zh.md: 9f7cfa851fa1a77e88797a731985d5feee335387

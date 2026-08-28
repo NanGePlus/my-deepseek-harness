@@ -94,6 +94,9 @@ function scriptedApi(overrides: {
       writeFile: r => ok(r, { path: r.payload.path }),
       deletePath: r => ok(r, { path: r.payload.path }),
       renamePath: r => ok(r, { path: r.payload.path }),
+      movePath: r => ok(r, {
+        path: `${r.payload.destinationDirectory}/${r.payload.path.split('/').pop() ?? ''}`,
+      }),
       createWorkspaceDirectory: r => ok(r, { path: `${r.payload.path}/${r.payload.name}` }),
       createDirectory: r => ok(r, { path: '/t/new' }),
       openPath: r => ok(r, { opened: true as const }),

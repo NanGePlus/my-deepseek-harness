@@ -54,6 +54,7 @@ import {
   hostWriteFileRequestSchema,
   hostDeletePathRequestSchema,
   hostRenamePathRequestSchema,
+  hostMovePathRequestSchema,
   hostCreateWorkspaceDirectoryRequestSchema,
   hostWatchPathQuerySchema,
 } from '../api/host.schema.ts'
@@ -149,6 +150,7 @@ const UNARY_ROUTES: UnaryRoutes = {
   'host.writeFile': { schema: hostWriteFileRequestSchema, invoke: (api, r, signal) => api.host.writeFile(r, signal) },
   'host.deletePath': { schema: hostDeletePathRequestSchema, invoke: (api, r, signal) => api.host.deletePath(r, signal) },
   'host.renamePath': { schema: hostRenamePathRequestSchema, invoke: (api, r, signal) => api.host.renamePath(r, signal) },
+  'host.movePath': { schema: hostMovePathRequestSchema, invoke: (api, r, signal) => api.host.movePath(r, signal) },
   'host.createWorkspaceDirectory': { schema: hostCreateWorkspaceDirectoryRequestSchema, invoke: (api, r, signal) => api.host.createWorkspaceDirectory(r, signal) },
   'host.openPath': { schema: hostOpenPathRequestSchema, invoke: (api, r, signal) => api.host.openPath(r, signal) },
   'host.lspSyncDocument': { schema: hostLspSyncDocumentRequestSchema, invoke: (api, r, signal) => api.host.lspSyncDocument(r, signal) },

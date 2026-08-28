@@ -184,6 +184,7 @@ function mount(over: {
   write?: EditorSurfaceProps['writeFile']
   deletePath?: EditorSurfaceProps['deletePath']
   renamePath?: EditorSurfaceProps['renamePath']
+  movePath?: EditorSurfaceProps['movePath']
   createWorkspaceDirectory?: EditorSurfaceProps['createWorkspaceDirectory']
   watchPath?: EditorSurfaceProps['watchPath']
   setDirtyPaths?: EditorSurfaceProps['setDirtyPaths']
@@ -201,6 +202,9 @@ function mount(over: {
   const deletePath = vi.fn(over.deletePath ?? (async (_id: WorkspaceId, path: string) => ({ path })))
   const renamePath = vi.fn(over.renamePath ?? (async (_id: WorkspaceId, path: string, newName: string) => ({
     path: path.replace(/[^/]+$/, newName),
+  })))
+  const movePath = vi.fn(over.movePath ?? (async (_id: WorkspaceId, path: string, destinationDirectory: string) => ({
+    path: `${destinationDirectory}/${path.split('/').pop() ?? path}`,
   })))
   const createWorkspaceDirectory = vi.fn(over.createWorkspaceDirectory ?? (async (_id: WorkspaceId, parent: string, name: string) => ({
     path: `${parent}/${name}`,
@@ -225,6 +229,7 @@ function mount(over: {
     writeFile,
     deletePath,
     renamePath,
+    movePath,
     createWorkspaceDirectory,
     watchPath,
     lspSyncDocument,
@@ -239,7 +244,7 @@ function mount(over: {
   const view = render(<EditorSurface {...props} />)
   return {
     view, props, instance, sessionsStore, workspacesStore, listWorkspaceEntries, gitStatus, readFile, writeFile,
-    deletePath, renamePath, createWorkspaceDirectory, watchPath,
+    deletePath, renamePath, movePath, createWorkspaceDirectory, watchPath,
   }
 }
 
@@ -1342,6 +1347,33 @@ describe('EditorSurface file operations', () => {
     fireEvent.click(await waitFor(() => screen.getByRole('menuitem', { name: label })))
   }
 
+  function treeRow(name: string, options: { directory?: boolean } = {}): HTMLElement {
+    const tree = screen.getByRole('tree', { name: 'alpha' })
+    const matches = within(tree).getAllByText(name)
+    const row = (options.directory
+      ? matches
+        .map(node => node.closest('[role="treeitem"]'))
+        .find(item => item?.hasAttribute('aria-expanded'))
+      : matches[0]?.closest('[role="treeitem"]'))
+    expect(row).not.toBeNull()
+    return row as HTMLElement
+  }
+
+  function dragRowOnto(source: HTMLElement, target: HTMLElement): void {
+    const dataTransfer = {
+      effectAllowed: 'none',
+      dropEffect: 'none',
+      setData: () => {
+        throw new Error('jsdom dataTransfer')
+      },
+      getData: vi.fn(() => ''),
+    }
+    fireEvent.dragStart(source, { dataTransfer })
+    fireEvent.dragOver(target, { dataTransfer })
+    fireEvent.drop(target, { dataTransfer })
+    fireEvent.dragEnd(source, { dataTransfer })
+  }
+
   it('toolbar-default: shows enabled new-file and new-folder toolbar controls', async () => {
     mount()
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
@@ -1496,6 +1528,268 @@ describe('EditorSurface file operations', () => {
     await waitFor(() => { expect(screen.getByRole('tab', { name: /draft\.ts/ })).toBeTruthy() })
     expect(b.writeFile).toHaveBeenCalledWith(WID, `${ROOT}/draft.ts`, '')
     expect(listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length).toBeGreaterThan(1)
+  })
+
+  it('toolbar-create: a selected folder is the create parent until blank-area click restores the root', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    await selectRow('src')
+    fireEvent.click(toolbarButton('新建文件夹'))
+    const inFolder = await waitFor(() => screen.getByRole('dialog', { name: '新建文件夹' }))
+    fireEvent.change(within(inFolder).getByLabelText('名称'), { target: { value: 'nested' } })
+    fireEvent.click(within(inFolder).getByRole('button', { name: '创建' }))
+    await waitFor(() => { expect(b.createWorkspaceDirectory).toHaveBeenCalledWith(WID, `${ROOT}/src`, 'nested') })
+    await waitFor(() => { expect(screen.queryByRole('dialog', { name: '新建文件夹' })).toBeNull() })
+    fireEvent.click(document.querySelector('[data-tree-scroll="true"]')!)
+    await waitFor(() => {
+      expect(treeRow('src', { directory: true }).getAttribute('aria-selected')).toBe('false')
+    })
+    fireEvent.click(toolbarButton('新建文件夹'))
+    const atRoot = await waitFor(() => screen.getByRole('dialog', { name: '新建文件夹' }))
+    fireEvent.change(within(atRoot).getByLabelText('名称'), { target: { value: 'notes' } })
+    fireEvent.click(within(atRoot).getByRole('button', { name: '创建' }))
+    await waitFor(() => { expect(b.createWorkspaceDirectory).toHaveBeenCalledWith(WID, ROOT, 'notes') })
+  })
+
+  it('drag-move: dropping a file on a folder moves it into that folder', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
+    dragRowOnto(treeRow('untracked.ts'), treeRow('src', { directory: true }))
+    await waitFor(() => {
+      expect(b.movePath).toHaveBeenCalledWith(WID, `${ROOT}/untracked.ts`, `${ROOT}/src`)
+    })
+  })
+
+  it('drag-move: dropping a nested file on blank tree area moves it to the workspace root', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    await selectRow('src')
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    dragRowOnto(treeRow('app.ts'), document.querySelector('[data-tree-scroll="true"]') as HTMLElement)
+    await waitFor(() => {
+      expect(b.movePath).toHaveBeenCalledWith(WID, `${ROOT}/src/app.ts`, ROOT)
+    })
+  })
+
+  it('drag-move: dropping onto a file or the source folder does not call Host move', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
+    dragRowOnto(treeRow('untracked.ts'), treeRow('README.md'))
+    dragRowOnto(treeRow('src', { directory: true }), treeRow('src', { directory: true }))
+    expect(b.movePath).not.toHaveBeenCalled()
+  })
+
+  it('drag-move: dropping a folder on another folder moves the folder', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    dragRowOnto(treeRow('src', { directory: true }), treeRow('node_modules', { directory: true }))
+    await waitFor(() => {
+      expect(b.movePath).toHaveBeenCalledWith(WID, `${ROOT}/src`, `${ROOT}/node_modules`)
+    })
+  })
+
+  it('drag-move: a same-name sibling at the destination shows a field error', async () => {
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === `${ROOT}/src`) {
+        return {
+          path,
+          entries: [
+            ...SRC_CHILDREN,
+            { name: 'untracked.ts', path: `${ROOT}/src/untracked.ts`, isDirectory: false, hidden: false },
+          ],
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    const b = mount({ list: listWorkspaceEntries })
+    await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
+    dragRowOnto(treeRow('untracked.ts'), treeRow('src', { directory: true }))
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('已存在同名文件') })
+    expect(b.movePath).not.toHaveBeenCalled()
+  })
+
+  it('drag-move: Host directory-exists on a folder maps to folder copy', async () => {
+    const movePath = vi.fn(async () => {
+      throw new DirectoryBrowseError({
+        code: 'directory-exists',
+        message: 'exists',
+        details: { path: `${ROOT}/node_modules/src` },
+      })
+    })
+    mount({ movePath })
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    dragRowOnto(treeRow('src', { directory: true }), treeRow('node_modules', { directory: true }))
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('已存在同名文件夹') })
+  })
+
+  it('drag-move: Host directory-exists maps to the same-name copy', async () => {
+    const movePath = vi.fn(async () => {
+      throw new DirectoryBrowseError({
+        code: 'directory-exists',
+        message: 'exists',
+        details: { path: `${ROOT}/src/untracked.ts` },
+      })
+    })
+    mount({ movePath })
+    await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
+    dragRowOnto(treeRow('untracked.ts'), treeRow('src', { directory: true }))
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('已存在同名文件') })
+  })
+
+  it('drag-move: Host failure shows move error copy', async () => {
+    const movePath = vi.fn(async () => {
+      throw new Error('denied')
+    })
+    mount({ movePath })
+    await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
+    dragRowOnto(treeRow('untracked.ts'), treeRow('src', { directory: true }))
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('无法移动此路径') })
+  })
+
+  it('drag-move: dropping without a drag source does not call Host', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
+    fireEvent.drop(treeRow('src', { directory: true }))
+    fireEvent.drop(document.querySelector('[data-tree-scroll="true"]')!)
+    expect(b.movePath).not.toHaveBeenCalled()
+  })
+
+  it('drag-move: dropping a root-level file on blank tree area is a no-op', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
+    dragRowOnto(treeRow('untracked.ts'), document.querySelector('[data-tree-scroll="true"]') as HTMLElement)
+    expect(b.movePath).not.toHaveBeenCalled()
+  })
+
+  it('drag-move: dropping a folder onto a descendant does not call Host', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('.git')).toBeTruthy() })
+    await selectRow('.git')
+    await waitFor(() => { expect(screen.getByText('hooks')).toBeTruthy() })
+    dragRowOnto(treeRow('.git', { directory: true }), treeRow('hooks', { directory: true }))
+    expect(b.movePath).not.toHaveBeenCalled()
+  })
+
+  it('drag-move: a same-name folder at the destination shows a folder conflict', async () => {
+    const listWorkspaceEntries = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === `${ROOT}/node_modules`) {
+        return {
+          path,
+          entries: [{ name: 'src', path: `${ROOT}/node_modules/src`, isDirectory: true, hidden: false }],
+          truncated: false,
+        }
+      }
+      return listingFor(path)
+    })
+    const b = mount({ list: listWorkspaceEntries })
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    dragRowOnto(treeRow('src', { directory: true }), treeRow('node_modules', { directory: true }))
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('已存在同名文件夹') })
+    expect(b.movePath).not.toHaveBeenCalled()
+  })
+
+  it('drag-move: dragEnd swallows the following row click', async () => {
+    mount()
+    await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
+    const row = treeRow('untracked.ts')
+    fireEvent.dragStart(row)
+    fireEvent.dragEnd(row)
+    fireEvent.click(row)
+    expect(screen.queryByRole('tab', { name: /untracked\.ts/ })).toBeNull()
+  })
+
+  it('drag-move: dragEnd swallows the following blank click', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    await selectRow('src')
+    const row = treeRow('src', { directory: true })
+    fireEvent.dragStart(row)
+    fireEvent.dragEnd(row)
+    fireEvent.click(document.querySelector('[data-tree-scroll="true"]')!)
+    fireEvent.click(toolbarButton('新建文件夹'))
+    const inFolder = await waitFor(() => screen.getByRole('dialog', { name: '新建文件夹' }))
+    fireEvent.change(within(inFolder).getByLabelText('名称'), { target: { value: 'nested' } })
+    fireEvent.click(within(inFolder).getByRole('button', { name: '创建' }))
+    await waitFor(() => { expect(b.createWorkspaceDirectory).toHaveBeenCalledWith(WID, `${ROOT}/src`, 'nested') })
+  })
+
+  it('drag-move: a second drop while Host is in flight is ignored', async () => {
+    let release!: (value: { path: string }) => void
+    const movePath = vi.fn(() => new Promise<{ path: string }>((resolve) => {
+      release = resolve
+    }))
+    mount({ movePath })
+    await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
+    const source = treeRow('untracked.ts')
+    const dest = treeRow('src', { directory: true })
+    fireEvent.dragStart(source)
+    fireEvent.drop(dest)
+    await waitFor(() => { expect(movePath).toHaveBeenCalledTimes(1) })
+    fireEvent.drop(dest)
+    expect(movePath).toHaveBeenCalledTimes(1)
+    await act(async () => { release({ path: `${ROOT}/src/untracked.ts` }) })
+  })
+
+  it('drag-move: drag-over on a file row or blank root no-op does not call Host', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
+    const source = treeRow('untracked.ts')
+    fireEvent.dragStart(source)
+    fireEvent.dragOver(treeRow('README.md'))
+    fireEvent.dragOver(document.querySelector('[data-tree-scroll="true"]') as HTMLElement)
+    fireEvent.dragEnd(source)
+    expect(b.movePath).not.toHaveBeenCalled()
+  })
+
+  it('drag-move: expanding a folder then dropping it remaps the expanded path', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    await selectRow('src')
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    dragRowOnto(treeRow('src', { directory: true }), treeRow('node_modules', { directory: true }))
+    await waitFor(() => {
+      expect(b.movePath).toHaveBeenCalledWith(WID, `${ROOT}/src`, `${ROOT}/node_modules`)
+    })
+  })
+
+  it('drag-move: drag-over blank chrome highlights the root drop target', async () => {
+    mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    await selectRow('src')
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    const dataTransfer = {
+      effectAllowed: 'none',
+      dropEffect: 'none',
+      setData: () => {},
+      getData: () => '',
+    }
+    fireEvent.dragStart(treeRow('app.ts'), { dataTransfer })
+    const scroll = document.querySelector('[data-tree-scroll="true"]') as HTMLElement
+    fireEvent.dragOver(scroll, { dataTransfer })
+    expect(scroll.getAttribute('data-drop-over')).toBe('root')
+    fireEvent.dragOver(scroll, { dataTransfer, target: treeRow('app.ts') })
+    fireEvent.drop(scroll, { dataTransfer, target: treeRow('app.ts') })
+  })
+
+  it('drag-move: drag-over without a source leaves drop effect unset', async () => {
+    mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: () => {}, getData: () => '' }
+    fireEvent.dragOver(treeRow('src', { directory: true }), { dataTransfer })
+    fireEvent.dragOver(document.querySelector('[data-tree-scroll="true"]') as HTMLElement, { dataTransfer })
+  })
+
+  it('toolbar-create: clicking a tree row does not count as blank chrome', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    await selectRow('src')
+    fireEvent.click(treeRow('src', { directory: true }))
+    fireEvent.click(toolbarButton('新建文件夹'))
+    const inFolder = await waitFor(() => screen.getByRole('dialog', { name: '新建文件夹' }))
+    fireEvent.change(within(inFolder).getByLabelText('名称'), { target: { value: 'nested' } })
+    fireEvent.click(within(inFolder).getByRole('button', { name: '创建' }))
+    await waitFor(() => { expect(b.createWorkspaceDirectory).toHaveBeenCalledWith(WID, `${ROOT}/src`, 'nested') })
   })
 
   it('renames the selected path and updates an open tab', async () => {

@@ -267,6 +267,20 @@ export interface IWorkspaces {
     signal?: AbortSignal,
   ): Promise<PathMutationResult>
   /**
+   * Move one file or directory to another existing directory inside a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute source path.
+   * @param destinationDirectory - absolute existing directory that will receive the source.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the destination absolute path.
+   */
+  movePath(
+    workspaceId: WorkspaceId,
+    path: string,
+    destinationDirectory: string,
+    signal?: AbortSignal,
+  ): Promise<PathMutationResult>
+  /**
    * Create one child directory under an existing parent inside a registered Workspace.
    * @param workspaceId - Workspace whose root bounds the path.
    * @param path - absolute existing parent directory.

@@ -34,6 +34,7 @@ import {
   hostWriteFileValueSchema,
   hostDeletePathValueSchema,
   hostRenamePathValueSchema,
+  hostMovePathValueSchema,
   hostCreateWorkspaceDirectoryValueSchema,
   hostLspSyncDocumentValueSchema,
   hostLspCloseDocumentValueSchema,
@@ -151,6 +152,7 @@ export interface IApiClient {
     writeFile(payload: RequestPayload<'host.writeFile'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.writeFile'>>>
     deletePath(payload: RequestPayload<'host.deletePath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.deletePath'>>>
     renamePath(payload: RequestPayload<'host.renamePath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.renamePath'>>>
+    movePath(payload: RequestPayload<'host.movePath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.movePath'>>>
     createWorkspaceDirectory(payload: RequestPayload<'host.createWorkspaceDirectory'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.createWorkspaceDirectory'>>>
     openPath(payload: RequestPayload<'host.openPath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.openPath'>>>
     lspSyncDocument(payload: RequestPayload<'host.lspSyncDocument'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.lspSyncDocument'>>>
@@ -258,6 +260,7 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'host.writeFile': hostWriteFileValueSchema,
   'host.deletePath': hostDeletePathValueSchema,
   'host.renamePath': hostRenamePathValueSchema,
+  'host.movePath': hostMovePathValueSchema,
   'host.createWorkspaceDirectory': hostCreateWorkspaceDirectoryValueSchema,
   'host.openPath': hostOpenPathValueSchema,
   'host.lspSyncDocument': hostLspSyncDocumentValueSchema,
@@ -550,6 +553,7 @@ export abstract class AbstractApiClient implements IApiClient {
     writeFile: (payload, signal) => this.callUnary('host.writeFile', payload, signal),
     deletePath: (payload, signal) => this.callUnary('host.deletePath', payload, signal),
     renamePath: (payload, signal) => this.callUnary('host.renamePath', payload, signal),
+    movePath: (payload, signal) => this.callUnary('host.movePath', payload, signal),
     createWorkspaceDirectory: (payload, signal) => this.callUnary('host.createWorkspaceDirectory', payload, signal),
     openPath: (payload, signal) => this.callUnary('host.openPath', payload, signal),
     lspSyncDocument: (payload, signal) => this.callUnary('host.lspSyncDocument', payload, signal),

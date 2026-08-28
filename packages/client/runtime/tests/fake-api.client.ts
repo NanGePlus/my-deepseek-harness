@@ -203,6 +203,13 @@ export class FakeApiClient implements IApiClient {
     return Promise.resolve(ok({ path: renamed }))
   }
 
+  onMovePath: (payload: unknown) => Promise<RpcResponse<{ path: string }>> = (payload) => {
+    const request = payload as { path: string; destinationDirectory: string }
+    const slash = request.path.lastIndexOf('/')
+    const name = slash >= 0 ? request.path.slice(slash + 1) : request.path
+    return Promise.resolve(ok({ path: `${request.destinationDirectory}/${name}` }))
+  }
+
   onCreateWorkspaceDirectory: (payload: unknown) => Promise<RpcResponse<{ path: string }>> = (payload) => {
     const request = payload as { path: string; name: string }
     const created = request.path.endsWith('/') ? `${request.path}${request.name}` : `${request.path}/${request.name}`
@@ -280,6 +287,7 @@ export class FakeApiClient implements IApiClient {
     writeFile: (payload: unknown) => this.record('host.writeFile', payload, this.onWriteFile(payload)),
     deletePath: (payload: unknown) => this.record('host.deletePath', payload, this.onDeletePath(payload)),
     renamePath: (payload: unknown) => this.record('host.renamePath', payload, this.onRenamePath(payload)),
+    movePath: (payload: unknown) => this.record('host.movePath', payload, this.onMovePath(payload)),
     createWorkspaceDirectory: (payload: unknown) => this.record(
       'host.createWorkspaceDirectory',
       payload,

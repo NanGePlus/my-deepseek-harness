@@ -135,10 +135,12 @@ import {
 import {
   createWorkspaceDirectory,
   deleteWorkspacePath,
+  moveWorkspacePath,
   renameWorkspacePath,
   WorkspaceDirectoryCreateFailedError,
   WorkspaceDirectoryExistsError,
   WorkspacePathDeleteFailedError,
+  WorkspacePathMoveFailedError,
   WorkspacePathNotFoundError,
   WorkspacePathRenameFailedError,
 } from './workspace-path-mutations.ts'
@@ -3524,6 +3526,54 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           if (error instanceof WorkspacePathRenameFailedError) {
             return err(request, {
               code: 'path-rename-failed',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async movePath(request, signal) {
+        const { workspaceId, path, destinationDirectory } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          return ok(request, await moveWorkspacePath(workspace.path, path, destinationDirectory, signal))
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'path move was aborted', details: {} })
+          }
+          if (error instanceof WorkspacePathOutOfBoundsError) {
+            return err(request, {
+              code: 'workspace-path-out-of-bounds',
+              message: error.message,
+              details: { workspaceId, path: error.path },
+            })
+          }
+          if (error instanceof WorkspacePathNotFoundError) {
+            return err(request, {
+              code: 'path-not-found',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          if (error instanceof WorkspaceDirectoryExistsError) {
+            return err(request, {
+              code: 'directory-exists',
+              message: error.message,
+              details: { path: error.path },
+            })
+          }
+          if (error instanceof WorkspacePathMoveFailedError) {
+            return err(request, {
+              code: 'path-move-failed',
               message: error.message,
               details: { path: error.path },
             })

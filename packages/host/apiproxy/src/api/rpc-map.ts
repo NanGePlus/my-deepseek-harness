@@ -60,6 +60,7 @@ export interface RpcMethodMap {
   'host.writeFile': HostApi['writeFile']
   'host.deletePath': HostApi['deletePath']
   'host.renamePath': HostApi['renamePath']
+  'host.movePath': HostApi['movePath']
   'host.createWorkspaceDirectory': HostApi['createWorkspaceDirectory']
   'host.openPath': HostApi['openPath']
   'host.lspSyncDocument': HostApi['lspSyncDocument']

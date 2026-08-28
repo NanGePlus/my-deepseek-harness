@@ -243,7 +243,7 @@ export interface FileWriteResult {
   path: string
 }
 
-/** host.deletePath / host.renamePath / host.createWorkspaceDirectory response value. */
+/** host.deletePath / host.renamePath / host.movePath / host.createWorkspaceDirectory response value. */
 export interface PathMutationResult {
   /** Absolute host path affected by the mutation. */
   path: string
@@ -566,6 +566,16 @@ export interface HostApi {
    */
   renamePath(
     request: RpcRequest<{ workspaceId: WorkspaceId; path: string; newName: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<PathMutationResult>>
+
+  /**
+   * Move one file or directory to another existing directory inside a
+   * registered Workspace, keeping the base name; an existing target fails
+   * with `directory-exists`.
+   */
+  movePath(
+    request: RpcRequest<{ workspaceId: WorkspaceId; path: string; destinationDirectory: string }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<PathMutationResult>>
 

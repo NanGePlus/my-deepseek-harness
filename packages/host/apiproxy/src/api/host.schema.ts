@@ -361,6 +361,18 @@ export const hostRenamePathValueSchema = z.object({
   path: z.string(),
 }) satisfies z.ZodType<Wire<ResponseValue<'host.renamePath'>>>
 
+/** host.movePath request payload: destinationDirectory is an existing directory path. */
+export const hostMovePathRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  path: z.string(),
+  destinationDirectory: z.string(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.movePath'>>>
+
+/** host.movePath response value. */
+export const hostMovePathValueSchema = z.object({
+  path: z.string(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.movePath'>>>
+
 /** host.createWorkspaceDirectory request payload: name must be one plain path segment. */
 export const hostCreateWorkspaceDirectoryRequestSchema = z.object({
   workspaceId: workspaceIdSchema,

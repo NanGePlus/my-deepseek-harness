@@ -547,6 +547,25 @@ export class WorkspaceRuntime implements IWorkspaces {
   }
 
   /**
+   * Move one file or directory to another existing directory inside a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the path.
+   * @param path - absolute source path.
+   * @param destinationDirectory - absolute existing directory that will receive the source.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   * @returns the destination absolute path.
+   */
+  async movePath(
+    workspaceId: WorkspaceId,
+    path: string,
+    destinationDirectory: string,
+    signal?: AbortSignal,
+  ): Promise<PathMutationResult> {
+    const response = await this.api.host.movePath({ workspaceId, path, destinationDirectory }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
    * Create one child directory under an existing parent inside a registered Workspace.
    * @param workspaceId - Workspace whose root bounds the path.
    * @param path - absolute existing parent directory.

@@ -210,6 +210,17 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async renamePath(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { path: request.payload.path } } }
       },
+      async movePath(request) {
+        return {
+          rpcId: request.rpcId,
+          result: {
+            ok: true,
+            value: {
+              path: `${request.payload.destinationDirectory}/${request.payload.path.split('/').pop() ?? ''}`,
+            },
+          },
+        }
+      },
       async createWorkspaceDirectory(request) {
         return {
           rpcId: request.rpcId,

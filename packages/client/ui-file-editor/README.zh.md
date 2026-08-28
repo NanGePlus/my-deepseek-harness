@@ -4,7 +4,7 @@
 
 Web details 栏 **文件编辑器** Tab 的编辑界面：注入 `conversation.details.editor` 的 `editor-surface` occupant。左栏是 Workspace 文件树（懒加载列表、文件名过滤、类型图标、只读 Git 徽章；资源管理器 Tab 从隐藏回到可见时重读 `gitStatus`；未跟踪目录内的文件显示 `U`，祖先文件夹继承更强的后代字母）。右栏把文件打开为 Session 作用域 Tab：可编辑文本走 Monaco（Monaco 无法启动时回退为 textarea；画布一律 `bg-base`，与 Markdown 内容区一致）、常见图片只读预览、或不可打开提示。dirty 文本只经显式 **保存** / ⌘S / Ctrl+S 落盘。occupant 经 owner `setDirtyPaths` 发布 dirty Tab 的 Host 绝对路径，供 Git 操作守卫使用；该列表不是 runtime 对象层事实。
 
-文件树绑定到 `sessionIds` 包含当前 Session 的 Workspace。已加载层展示 Host 返回的全部行，包括隐藏名、`.git` 与 `node_modules`。仅在展开文件夹时调用 `listWorkspaceEntries`；已缓存层会复用。文件名过滤对已加载名称做大小写不敏感匹配，并保留匹配项的祖先文件夹；不会因过滤而递归拉取。单击文件即打开；再次单击已打开路径只聚焦该 Tab，不再次 `readFile`。双击文件夹即展开。
+文件树绑定到 `sessionIds` 包含当前 Session 的 Workspace。已加载层展示 Host 返回的全部行，包括隐藏名、`.git` 与 `node_modules`。仅在展开文件夹时调用 `listWorkspaceEntries`；已缓存层会复用。文件名过滤对已加载名称做大小写不敏感匹配，并保留匹配项的祖先文件夹；不会因过滤而递归拉取。单击文件即打开；再次单击已打开路径只聚焦该 Tab，不再次 `readFile`。双击文件夹即展开。点击文件树空白处取消行选中，工具栏 **新建文件** / **新建文件夹** 回到 Workspace 根。拖拽文件或文件夹到另一目录行或树空白处即移动（空白处为根）；不能移入自身或子孙。
 
 打开模式在单击时按路径判定：图片扩展名（`.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.svg`）调用 `readFile(..., 'bytes')` 并预览；已知二进制扩展名（如 `.wasm`）显示「不支持打开此文件类型」且不得读取；其余调用 `readFile(..., 'text')`，语言 id 由扩展名决定。编辑缓冲与 dirty 活在独占 Client store，不进入 session 日志。
 

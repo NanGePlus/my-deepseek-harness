@@ -77,6 +77,56 @@ export function parentDirectoryForCreate(
 }
 
 /**
+ * Base name of a Host-absolute path.
+ * @param path - file or directory path.
+ * @returns the last path segment.
+ */
+export function baseNameOfPath(path: string): string {
+  const normalized = path.replace(/[/\\]+$/, '')
+  const slash = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'))
+  return slash >= 0 ? normalized.slice(slash + 1) : normalized
+}
+
+/** Drop target for a file-tree drag move. */
+export type TreeDropTarget =
+  | { kind: 'root' }
+  | { kind: 'directory'; path: string }
+  | { kind: 'file'; path: string }
+
+/**
+ * Resolve the destination directory for a tree drag-and-drop move.
+ * Files, the source itself, the source's current parent, and descendants of a
+ * dragged directory are not valid destinations.
+ * @param workspaceRoot - bound Workspace root path.
+ * @param sourcePath - Host-absolute path being dragged.
+ * @param drop - row or blank-area drop target.
+ * @returns the destination directory, or null when the drop must be ignored.
+ */
+export function destinationDirectoryForTreeDrop(
+  workspaceRoot: string,
+  sourcePath: string,
+  drop: TreeDropTarget,
+): string | null {
+  if (drop.kind === 'file') return null
+  const normalizedRoot = workspaceRoot.replace(/[/\\]+$/, '')
+  const normalizedSource = sourcePath.replace(/[/\\]+$/, '')
+  const destRaw = drop.kind === 'root' ? workspaceRoot : drop.path
+  const dest = destRaw.replace(/[/\\]+$/, '')
+  if (dest === normalizedSource) return null
+  if (dest.startsWith(`${normalizedSource}/`) || dest.startsWith(`${normalizedSource}\\`)) return null
+  const currentParent = parentDirectoryOfPath(workspaceRoot, sourcePath).replace(/[/\\]+$/, '')
+  if (dest === currentParent) return null
+  if (
+    dest !== normalizedRoot
+    && !dest.startsWith(`${normalizedRoot}/`)
+    && !dest.startsWith(`${normalizedRoot}\\`)
+  ) {
+    return null
+  }
+  return dest
+}
+
+/**
  * Join a parent directory and single-segment child name.
  * @param parent - absolute parent directory.
  * @param name - single path segment.

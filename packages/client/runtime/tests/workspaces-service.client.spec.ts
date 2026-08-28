@@ -647,6 +647,20 @@ describe('WorkspaceRuntime', () => {
     await expect(renameFailure).rejects.toBeInstanceOf(DirectoryBrowseError)
     await expect(renameFailure).rejects.toMatchObject({ rpcError: { code: 'directory-exists' } })
 
+    api.onMovePath = () => Promise.resolve(ok({ path: '/w/alpha/src/old.txt' }))
+    await expect(workspaces.movePath(wid('alpha'), '/w/alpha/old.txt', '/w/alpha/src')).resolves.toEqual({
+      path: '/w/alpha/src/old.txt',
+    })
+    expect(api.callsOf('host.movePath')).toEqual([
+      { workspaceId: 'alpha', path: '/w/alpha/old.txt', destinationDirectory: '/w/alpha/src' },
+    ])
+    api.onMovePath = () => Promise.resolve(err({
+      code: 'directory-exists', message: 'exists', details: { path: '/w/alpha/src/old.txt' },
+    }))
+    const moveFailure = workspaces.movePath(wid('alpha'), '/w/alpha/old.txt', '/w/alpha/src')
+    await expect(moveFailure).rejects.toBeInstanceOf(DirectoryBrowseError)
+    await expect(moveFailure).rejects.toMatchObject({ rpcError: { code: 'directory-exists' } })
+
     api.onCreateWorkspaceDirectory = () => Promise.resolve(ok({ path: '/w/alpha/src' }))
     await expect(workspaces.createWorkspaceDirectory(wid('alpha'), '/w/alpha', 'src')).resolves.toEqual({
       path: '/w/alpha/src',

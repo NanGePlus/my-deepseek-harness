@@ -167,6 +167,7 @@ export class FakeApiClient implements IApiClient {
     writeFile: payload => this.record('host.writeFile', payload, Promise.resolve(ok({ path: '' }))),
     deletePath: payload => this.record('host.deletePath', payload, Promise.resolve(ok({ path: '' }))),
     renamePath: payload => this.record('host.renamePath', payload, Promise.resolve(ok({ path: '' }))),
+    movePath: payload => this.record('host.movePath', payload, Promise.resolve(ok({ path: '' }))),
     createWorkspaceDirectory: payload => this.record(
       'host.createWorkspaceDirectory',
       payload,

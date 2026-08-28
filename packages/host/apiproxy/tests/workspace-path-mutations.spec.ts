@@ -3,11 +3,13 @@ import {
   createWorkspaceDirectory,
   deleteWorkspacePath,
   isSinglePathSegment,
+  moveWorkspacePath,
   renameWorkspacePath,
   type WorkspacePathMutationInternals,
   WorkspaceDirectoryCreateFailedError,
   WorkspaceDirectoryExistsError,
   WorkspacePathDeleteFailedError,
+  WorkspacePathMoveFailedError,
   WorkspacePathNotFoundError,
   WorkspacePathRenameFailedError,
 } from '../src/workspace-path-mutations.ts'
@@ -184,6 +186,210 @@ describe('renameWorkspacePath', () => {
     await expect(renameWorkspacePath('/w', '/w/old.txt', 'new.txt', undefined, { stat, rename: renameMissing })).rejects.toBeInstanceOf(
       WorkspacePathNotFoundError,
     )
+  })
+})
+
+describe('moveWorkspacePath', () => {
+  const dirStat = async () => ({ isFile: () => false, isDirectory: () => true }) as never
+
+  function enoent(path: string): never {
+    const error = new Error(`missing ${path}`) as NodeJS.ErrnoException
+    error.code = 'ENOENT'
+    throw error
+  }
+
+  it('rejects out-of-bounds sources and destinations', async () => {
+    await expect(moveWorkspacePath('/w', '/outside/a.txt', '/w')).rejects.toBeInstanceOf(
+      WorkspacePathOutOfBoundsError,
+    )
+    await expect(moveWorkspacePath('/w', '/w/a.txt', '/outside')).rejects.toBeInstanceOf(
+      WorkspacePathOutOfBoundsError,
+    )
+  })
+
+  it('rejects moving the workspace root', async () => {
+    const stat = vi.fn(dirStat) as NonNullable<WorkspacePathMutationInternals['stat']>
+    await expect(moveWorkspacePath('/w', '/w', '/w/src', undefined, { stat })).rejects.toBeInstanceOf(
+      WorkspacePathMoveFailedError,
+    )
+  })
+
+  it('moves a file into another directory when the target is absent', async () => {
+    const stat = vi.fn(async (path: string) => {
+      if (path === '/w/old.txt') return { isFile: () => true, isDirectory: () => false } as never
+      if (path === '/w/src') return { isFile: () => false, isDirectory: () => true } as never
+      enoent(path)
+    }) as NonNullable<WorkspacePathMutationInternals['stat']>
+    const rename = vi.fn(async () => undefined) as NonNullable<WorkspacePathMutationInternals['rename']>
+    await expect(moveWorkspacePath('/w', '/w/old.txt', '/w/src', undefined, { stat, rename })).resolves.toEqual({
+      path: '/w/src/old.txt',
+    })
+    expect(rename).toHaveBeenCalledWith('/w/old.txt', '/w/src/old.txt')
+  })
+
+  it('returns the source path when the file is already in the destination', async () => {
+    const stat = vi.fn(async (path: string) => {
+      if (path === '/w/old.txt') return { isFile: () => true, isDirectory: () => false } as never
+      if (path === '/w') return { isFile: () => false, isDirectory: () => true } as never
+      enoent(path)
+    }) as NonNullable<WorkspacePathMutationInternals['stat']>
+    const rename = vi.fn(async () => undefined) as NonNullable<WorkspacePathMutationInternals['rename']>
+    await expect(moveWorkspacePath('/w', '/w/old.txt', '/w', undefined, { stat, rename })).resolves.toEqual({
+      path: '/w/old.txt',
+    })
+    expect(rename).not.toHaveBeenCalled()
+  })
+
+  it('fails when the destination is a file, missing, or unreadable', async () => {
+    const destIsFile = vi.fn(async (path: string) => {
+      if (path === '/w/old.txt' || path === '/w/target.txt') {
+        return { isFile: () => true, isDirectory: () => false } as never
+      }
+      enoent(path)
+    }) as NonNullable<WorkspacePathMutationInternals['stat']>
+    await expect(moveWorkspacePath('/w', '/w/old.txt', '/w/target.txt', undefined, { stat: destIsFile }))
+      .rejects.toBeInstanceOf(WorkspacePathMoveFailedError)
+
+    const destMissing = vi.fn(async (path: string) => {
+      if (path === '/w/old.txt') return { isFile: () => true, isDirectory: () => false } as never
+      enoent(path)
+    }) as NonNullable<WorkspacePathMutationInternals['stat']>
+    await expect(moveWorkspacePath('/w', '/w/old.txt', '/w/src', undefined, { stat: destMissing }))
+      .rejects.toBeInstanceOf(WorkspacePathNotFoundError)
+
+    const destUnreadable = vi.fn(async (path: string) => {
+      if (path === '/w/old.txt') return { isFile: () => true, isDirectory: () => false } as never
+      throw new Error('dest unreadable')
+    }) as NonNullable<WorkspacePathMutationInternals['stat']>
+    await expect(moveWorkspacePath('/w', '/w/old.txt', '/w/src', undefined, { stat: destUnreadable }))
+      .rejects.toBeInstanceOf(WorkspacePathMoveFailedError)
+  })
+
+  it('fails when the source is missing or unreadable', async () => {
+    const missing = vi.fn(async () => enoent('/w/old.txt')) as NonNullable<WorkspacePathMutationInternals['stat']>
+    await expect(moveWorkspacePath('/w', '/w/old.txt', '/w/src', undefined, { stat: missing }))
+      .rejects.toBeInstanceOf(WorkspacePathNotFoundError)
+
+    const unreadable = vi.fn(async () => {
+      throw new Error('source unreadable')
+    }) as NonNullable<WorkspacePathMutationInternals['stat']>
+    await expect(moveWorkspacePath('/w', '/w/old.txt', '/w/src', undefined, { stat: unreadable }))
+      .rejects.toBeInstanceOf(WorkspacePathMoveFailedError)
+  })
+
+  it('rejects moving a directory into itself or a descendant', async () => {
+    const stat = vi.fn(async (path: string) => {
+      if (path === '/w/src' || path === '/w/src/lib') {
+        return { isFile: () => false, isDirectory: () => true } as never
+      }
+      enoent(path)
+    }) as NonNullable<WorkspacePathMutationInternals['stat']>
+    await expect(moveWorkspacePath('/w', '/w/src', '/w/src', undefined, { stat }))
+      .rejects.toBeInstanceOf(WorkspacePathMoveFailedError)
+    await expect(moveWorkspacePath('/w', '/w/src', '/w/src/lib', undefined, { stat }))
+      .rejects.toBeInstanceOf(WorkspacePathMoveFailedError)
+  })
+
+  it('fails when the destination already has the same name', async () => {
+    const stat = vi.fn(async (path: string) => {
+      if (path === '/w/old.txt' || path === '/w/src/old.txt') {
+        return { isFile: () => true, isDirectory: () => false } as never
+      }
+      if (path === '/w/src') return { isFile: () => false, isDirectory: () => true } as never
+      enoent(path)
+    }) as NonNullable<WorkspacePathMutationInternals['stat']>
+    await expect(moveWorkspacePath('/w', '/w/old.txt', '/w/src', undefined, { stat }))
+      .rejects.toBeInstanceOf(WorkspaceDirectoryExistsError)
+  })
+
+  it('fails when a file and folder would share the destination path', async () => {
+    const stat = vi.fn(async (path: string) => {
+      if (path === '/w/old.txt') return { isFile: () => true, isDirectory: () => false } as never
+      if (path === '/w/src' || path === '/w/src/old.txt') {
+        return { isFile: () => false, isDirectory: () => true } as never
+      }
+      enoent(path)
+    }) as NonNullable<WorkspacePathMutationInternals['stat']>
+    await expect(moveWorkspacePath('/w', '/w/old.txt', '/w/src', undefined, { stat }))
+      .rejects.toMatchObject({ message: expect.stringContaining('cannot share the same path') })
+  })
+
+  it('maps target probe failures after the destination directory exists', async () => {
+    const stat = vi.fn(async (path: string) => {
+      if (path === '/w/old.txt') return { isFile: () => true, isDirectory: () => false } as never
+      if (path === '/w/src') return { isFile: () => false, isDirectory: () => true } as never
+      throw new Error('target probe failed')
+    }) as NonNullable<WorkspacePathMutationInternals['stat']>
+    await expect(moveWorkspacePath('/w', '/w/old.txt', '/w/src', undefined, { stat }))
+      .rejects.toBeInstanceOf(WorkspacePathMoveFailedError)
+  })
+
+  it('maps rename filesystem failures', async () => {
+    const stat = vi.fn(async (path: string) => {
+      if (path === '/w/old.txt') return { isFile: () => true, isDirectory: () => false } as never
+      if (path === '/w/src') return { isFile: () => false, isDirectory: () => true } as never
+      enoent(path)
+    }) as NonNullable<WorkspacePathMutationInternals['stat']>
+    const renameExist = vi.fn(async () => {
+      const error = new Error('exists') as NodeJS.ErrnoException
+      error.code = 'EEXIST'
+      throw error
+    }) as NonNullable<WorkspacePathMutationInternals['rename']>
+    await expect(moveWorkspacePath('/w', '/w/old.txt', '/w/src', undefined, { stat, rename: renameExist }))
+      .rejects.toBeInstanceOf(WorkspaceDirectoryExistsError)
+
+    const renameBusy = vi.fn(async () => {
+      throw new Error('busy')
+    }) as NonNullable<WorkspacePathMutationInternals['rename']>
+    await expect(moveWorkspacePath('/w', '/w/old.txt', '/w/src', undefined, { stat, rename: renameBusy }))
+      .rejects.toBeInstanceOf(WorkspacePathMoveFailedError)
+
+    const renameMissing = vi.fn(async () => {
+      const error = new Error('gone') as NodeJS.ErrnoException
+      error.code = 'ENOENT'
+      throw error
+    }) as NonNullable<WorkspacePathMutationInternals['rename']>
+    await expect(moveWorkspacePath('/w', '/w/old.txt', '/w/src', undefined, { stat, rename: renameMissing }))
+      .rejects.toBeInstanceOf(WorkspacePathNotFoundError)
+  })
+
+  it('throws when the caller aborts after the pre-move probes', async () => {
+    const stat = vi.fn(async (path: string) => {
+      if (path === '/w/old.txt') return { isFile: () => true, isDirectory: () => false } as never
+      if (path === '/w/src') return { isFile: () => false, isDirectory: () => true } as never
+      enoent(path)
+    }) as NonNullable<WorkspacePathMutationInternals['stat']>
+    const rename = vi.fn(async () => undefined) as NonNullable<WorkspacePathMutationInternals['rename']>
+    await expect(moveWorkspacePath(
+      '/w',
+      '/w/old.txt',
+      '/w/src',
+      AbortSignal.abort(),
+      { stat, rename },
+    )).rejects.toThrow()
+    expect(rename).not.toHaveBeenCalled()
+  })
+
+  it('throws when the caller aborts after rename starts', async () => {
+    const controller = new AbortController()
+    const stat = vi.fn(async (path: string) => {
+      if (path === '/w/old.txt') return { isFile: () => true, isDirectory: () => false } as never
+      if (path === '/w/src') return { isFile: () => false, isDirectory: () => true } as never
+      enoent(path)
+    }) as NonNullable<WorkspacePathMutationInternals['stat']>
+    const rename = vi.fn(async () => {
+      controller.abort()
+      const error = new Error('gone') as NodeJS.ErrnoException
+      error.code = 'ENOENT'
+      throw error
+    }) as NonNullable<WorkspacePathMutationInternals['rename']>
+    await expect(moveWorkspacePath(
+      '/w',
+      '/w/old.txt',
+      '/w/src',
+      controller.signal,
+      { stat, rename },
+    )).rejects.toThrow()
   })
 })
 

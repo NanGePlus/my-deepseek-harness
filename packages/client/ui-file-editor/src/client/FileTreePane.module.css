@@ -160,6 +160,16 @@
   flex-direction: column;
 }
 
+.treeScrollDropTarget {
+  outline: 1px dashed var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+
+.moveError {
+  flex: none;
+  padding: 0 8px 4px;
+}
+
 .treeScroll[data-empty='true'] .empty {
   flex: 1;
   min-height: 0;
@@ -192,6 +202,12 @@
 
 .rowSelected {
   background: var(--editor-selected-tint);
+}
+
+.rowDropTarget {
+  background: var(--editor-hover-tint);
+  outline: 1px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
 }
 
 .disclosureSpacer {
