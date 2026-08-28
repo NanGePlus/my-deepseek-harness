@@ -28,7 +28,7 @@ Repositories that already have a remote other than `origin` do not show this ent
 
 ## Testing
 
-`packages/host/apiproxy/tests/api-proxy-git-write.spec.ts` adds origin, refuses empty/control URLs, refuses a second origin, and reports `hasRemote` on inspect.
+`packages/host/apiproxy/tests/api-proxy-git-write.spec.ts` adds origin, refuses empty/control URLs, refuses a second origin, reports `hasRemote` on inspect, and reports `pushAvailable` false when HEAD has no commits.
 
 `packages/client/runtime/tests/workspaces-service.client.spec.ts` forwards `url` on the wire.
 

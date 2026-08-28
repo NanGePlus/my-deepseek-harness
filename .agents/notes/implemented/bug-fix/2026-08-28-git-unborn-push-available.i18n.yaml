@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-28-git-unborn-push-available.md
+2026-08-28-git-unborn-push-available.md: e4cb198d3ade6bc6cd073567195be2016613a9d1
+2026-08-28-git-unborn-push-available.zh.md: 21fdafacb264e928d54ce2ccae11a5597b14f780

@@ -56,7 +56,28 @@ async function git(
 }
 
 /**
+ * True when `HEAD` names a commit (false on an unborn branch).
+ * @param run - command runner.
+ * @param repoRoot - absolute Git repository root.
+ * @param signal - caller lifetime.
+ */
+async function hasHeadCommit(
+  run: NativeCommandRunner,
+  repoRoot: string,
+  signal: AbortSignal,
+): Promise<boolean> {
+  try {
+    await git(run, repoRoot, ['rev-parse', '--verify', 'HEAD'], signal)
+    return true
+  } catch (error: unknown) {
+    if (signal.aborted) throw error
+    return false
+  }
+}
+
+/**
  * Whether the current branch can be pushed and how many commits lead upstream.
+ * Missing @{upstream} is first-time push only when HEAD already names a commit.
  * @param run - command runner.
  * @param repoRoot - absolute Git repository root.
  * @param branch - current branch label from {@link readCurrentBranch}.
@@ -78,7 +99,7 @@ async function readPublishState(
     return ahead > 0 ? { ahead, pushAvailable: true } : { pushAvailable: false }
   } catch (error: unknown) {
     if (signal.aborted) throw error
-    return { pushAvailable: true }
+    return { pushAvailable: await hasHeadCommit(run, repoRoot, signal) }
   }
 }
 
@@ -223,9 +244,20 @@ export class GitCommandFailedError extends Error {
 
 function gitFailureMessage(error: unknown): string {
   if (typeof error === 'object' && error !== null && 'stderr' in error && typeof error.stderr === 'string' && error.stderr.trim() !== '') {
-    return error.stderr.trim()
+    return omitGitPushDestinationLines(error.stderr.trim())
   }
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * Drop Git's `To <url>` destination lines so a failed push's first visible
+ * line is the rejection, not the remote URL.
+ * @param text - captured stderr or Error message.
+ */
+function omitGitPushDestinationLines(text: string): string {
+  const stripped = text.split(/\r?\n/).filter(line => !/^To\s+\S/.test(line)).join('\n').trim()
+  /* v8 ignore next -- a failed push always has a rejection line after `To <url>`. */
+  return stripped === '' ? text : stripped
 }
 
 /**
@@ -440,6 +472,8 @@ function isStagedPair(pair: { index: string; work: string }): boolean {
 
 /**
  * Unstage one staged working-tree change without rewriting disk.
+ * Whole-file unstage uses `git restore --staged` when HEAD exists, otherwise
+ * `git rm --cached -f` (unborn branch).
  * @param workspaceRoot - canonical bound Workspace directory.
  * @param absolutePath - Host-absolute path under the Git repository root.
  * @param signal - caller lifetime.
@@ -464,8 +498,10 @@ export async function unstageGitPath(
       const patch = extractHunkPatch(diff, hunkHeader)
       if (patch === undefined) throw new GitPathNotFoundError(absolutePath)
       await applyPatch(repoRoot, ['--cached', '--reverse', '--whitespace=nowarn'], patch, signal)
-    } else {
+    } else if (await hasHeadCommit(run, repoRoot, signal)) {
       await git(run, repoRoot, ['restore', '--staged', '--', rel], signal)
+    } else {
+      await git(run, repoRoot, ['rm', '--cached', '-f', '--', rel], signal)
     }
     return await inspectGitWorkingTree(workspaceRoot, signal)
   } catch (error: unknown) {

@@ -20,7 +20,7 @@ Host 在任何 push 前用 `git remote` 列出远程。空输出以 `git-failed`
 
 ## Consequences
 
-用户在 `hasRemote` 为 false 时从面板添加 `origin`；见 [Git 面板添加远程地址](../feature/2026-08-27-git-add-remote.md)。其它推送失败仍显示 Git 原文。
+用户在 `hasRemote` 为 false 时从面板添加 `origin`；见 [Git 面板添加远程地址](../feature/2026-08-27-git-add-remote.md)。非快进拒绝见 [Git 推送被拒绝的文案](2026-08-28-git-push-rejected-copy.md)。其它推送失败仍显示 Git 原文。
 
 ## Testing
 

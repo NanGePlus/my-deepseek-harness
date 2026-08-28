@@ -20,7 +20,7 @@ Host lists remotes with `git remote` before any push. Empty output fails with `g
 
 ## Consequences
 
-Users add `origin` from the panel when `hasRemote` is false; see [Git panel add-remote entry](../feature/2026-08-27-git-add-remote.md). Other push failures keep Git's own text.
+Users add `origin` from the panel when `hasRemote` is false; see [Git panel add-remote entry](../feature/2026-08-27-git-add-remote.md). Non-fast-forward rejections are [Git rejected-push copy](2026-08-28-git-push-rejected-copy.md). Other push failures keep Git's own text.
 
 ## Testing
 

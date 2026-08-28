@@ -28,7 +28,7 @@ trim 后为空的 URL 在调用 Git 之前以 `git-failed` `empty remote url` �
 
 ## Testing
 
-`packages/host/apiproxy/tests/api-proxy-git-write.spec.ts` 添加 origin、拒绝空/控制字符 URL、拒绝第二个 origin，并在 inspect 上报告 `hasRemote`。
+`packages/host/apiproxy/tests/api-proxy-git-write.spec.ts` 添加 origin、拒绝空/控制字符 URL、拒绝第二个 origin，并在 inspect 上报告 `hasRemote`；HEAD 尚无 commit 时 `pushAvailable` 为 false。
 
 `packages/client/runtime/tests/workspaces-service.client.spec.ts` 在线上转发 `url`。
 

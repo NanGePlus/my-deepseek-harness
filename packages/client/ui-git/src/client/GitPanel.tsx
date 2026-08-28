@@ -17,7 +17,7 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { changeKindLetter, commitDiffStatusLetter, splitChangePath } from './change-path-label.ts'
-import { isMissingRemoteGitError } from './git-error-copy.ts'
+import { isMissingRemoteGitError, isRejectedPushGitError } from './git-error-copy.ts'
 import { confirmPopoverPosition } from './git-confirm-popover.ts'
 import { fileIconUrlForPath, FILE_ICON_BASE_URL } from './file-icon.ts'
 import { buildDiffPreviewRows, type DiffPreviewRow } from './diff-preview-model.ts'
@@ -194,7 +194,7 @@ interface Selection {
 type PreviewState =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'ready'; preview: GitDiffPreview }
+  | { kind: 'ready'; side: SectionId; path: string; preview: GitDiffPreview }
   | { kind: 'error'; message: string }
 
 type LogViewState =
@@ -295,7 +295,7 @@ function ToolbarFeedbackView({
   const missingRemote = feedback.message === t('git.feedback.noRemote')
   return (
     <span className={css.toolbarFeedbackErr} role="alert">
-      <span className={css.toolbarFeedbackMessage}>{feedback.message}</span>
+      <span className={css.toolbarFeedbackMessage} title={feedback.message}>{feedback.message}</span>
       {missingRemote && onAddRemote !== undefined && (
         <button type="button" className={css.toolbarFeedbackRetry} onClick={onAddRemote}>
           {t('git.remote.add')}
@@ -570,6 +570,11 @@ export function GitPanel({
     setRemotePending(false)
     setRemoteError(null)
     setAddRemoteForced(false)
+    setSelectedCommitHash(null)
+    setSelection(null)
+    setLogView({ kind: 'idle' })
+    setPreview({ kind: 'idle' })
+    setCommitDiff({ kind: 'idle' })
   }, [workspaceId])
 
   useEffect(() => {
@@ -608,7 +613,7 @@ export function GitPanel({
     }
     const ac = new AbortController()
     loadingMoreLockRef.current = false
-    setLogView({ kind: 'loading' })
+    setLogView(current => current.kind === 'ready' ? current : { kind: 'loading' })
     void gitLog(workspaceId, { limit: GIT_GRAPH_PAGE_SIZE }, ac.signal).then((log) => {
       if (ac.signal.aborted) return
       if (log.availability !== 'repository') {
@@ -620,10 +625,6 @@ export function GitPanel({
         commits: log.commits,
         hasMore: log.hasMore,
         loadingMore: false,
-      })
-      setSelectedCommitHash((current) => {
-        if (current !== null && log.commits.some(entry => entry.hash === current)) return current
-        return log.commits[0]?.hash ?? null
       })
     }).catch((error: unknown) => {
       if (isAbortError(error) || ac.signal.aborted) return
@@ -686,10 +687,16 @@ export function GitPanel({
     if (!visible || workspaceId === undefined) return
     const ac = new AbortController()
     const selected = selection
-    setPreview({ kind: 'loading' })
+    setPreview(current => (
+      current.kind === 'ready'
+        && current.side === selected.side
+        && current.path === selected.row.absolutePath
+        ? current
+        : { kind: 'loading' }
+    ))
     void gitDiffPreview(workspaceId, selected.row.absolutePath, selected.side, ac.signal).then((value) => {
       if (ac.signal.aborted) return
-      setPreview({ kind: 'ready', preview: value })
+      setPreview({ kind: 'ready', side: selected.side, path: selected.row.absolutePath, preview: value })
     }).catch((error: unknown) => {
       if (isAbortError(error) || ac.signal.aborted) return
       setPreview({ kind: 'error', message: hostErrorMessage(error) })
@@ -705,7 +712,9 @@ export function GitPanel({
     if (!visible || workspaceId === undefined) return
     const ac = new AbortController()
     const hash = selectedCommitHash
-    setCommitDiff({ kind: 'loading' })
+    setCommitDiff(current => (
+      current.kind === 'ready' && current.result.hash === hash ? current : { kind: 'loading' }
+    ))
     void gitCommitDiff(workspaceId, hash, ac.signal).then((value) => {
       if (ac.signal.aborted) return
       if (value.availability !== 'repository') {
@@ -2243,7 +2252,9 @@ function hostErrorMessage(error: unknown): string {
 
 function toolbarGitErrorMessage(t: GitPanelProps['t'], error: unknown): string {
   const raw = hostErrorMessage(error)
-  return isMissingRemoteGitError(raw) ? t('git.feedback.noRemote') : raw
+  if (isMissingRemoteGitError(raw)) return t('git.feedback.noRemote')
+  if (isRejectedPushGitError(raw)) return t('git.feedback.pushRejected')
+  return raw
 }
 
 function isAbortError(error: unknown): boolean {

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-27-git-missing-remote-push.md
-2026-08-27-git-missing-remote-push.md: 2407c9c041d83bde62471b7e24452b8aa6d38d4e
-2026-08-27-git-missing-remote-push.zh.md: 741bde2f44b12f8d93908b97987970d694b9f554
+2026-08-27-git-missing-remote-push.md: 65390aac39775e2d6e85a6a4b7a2c93b20a91d69
+2026-08-27-git-missing-remote-push.zh.md: 2087f904ff37b4d6d9f5b9ef263d4722d287a449

@@ -90,7 +90,8 @@ export type GitWorkingTreeResult =
     staged: GitWorkingTreeChange[]
     /**
      * True when {@link HostApi.gitPush} can publish local commits on the current
-     * branch (ahead of upstream, or no upstream on a named branch).
+     * branch (ahead of upstream, or a named branch that has a commit and no
+     * upstream). False on an unborn branch even when `origin` exists.
      */
     pushAvailable: boolean
     /**
@@ -435,9 +436,11 @@ export interface HostApi {
   /**
    * Unstage one staged working-tree change. Omit `hunkHeader` to unstage the
    * whole file; when present, only that tracked-text hunk is unstaged. Does not
-   * rewrite the disk working tree. Returns the refreshed working tree. Missing
-   * staged rows or hunks fail with `git-path-not-found`; a missing git binary
-   * with `git-unavailable`; other git invocation failures with `git-failed`.
+   * rewrite the disk working tree. On an unborn branch, whole-file unstage uses
+   * `git rm --cached -f` because `git restore --staged` cannot resolve HEAD.
+   * Returns the refreshed working tree. Missing staged rows or hunks fail with
+   * `git-path-not-found`; a missing git binary with `git-unavailable`; other git
+   * invocation failures with `git-failed`.
    */
   gitUnstage(
     request: RpcRequest<{ workspaceId: WorkspaceId; path: string; hunkHeader?: string }>,

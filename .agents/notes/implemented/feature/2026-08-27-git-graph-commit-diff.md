@@ -12,7 +12,7 @@ The Graph section highlighted a clicked commit but the right column still showed
 
 Add `host.gitCommitDiff({ workspaceId, hash })`. The Host resolves the hash, then lists files with `git diff --find-renames HASH^ HASH` (or `git diff-tree --root` for a commit with no parents). Each name-status row becomes one `GitDiffPreview` (added text uses `untracked-text`; deleted text uses `deleted-text`; tracked edits reuse hunks plus `fileText`). The list is capped at 80 files and sets `truncated`. Git missing and not-a-repository stay product discriminants; an unknown hash is `git-failed`.
 
-The panel treats Graph selection and working-tree file selection as mutually exclusive. A selected commit stacks collapsible, read-only file sections in the right column (no hunk stage/unstage/discard). Clicking a working-tree row clears the commit and restores the existing preview.
+The panel treats Graph selection and working-tree file selection as mutually exclusive. A selected commit stacks collapsible, read-only file sections in the right column (no hunk stage/unstage/discard). Clicking a working-tree row clears the commit and restores the existing preview. `host.gitLog` success does not assign a commit; the right column stays empty until the user clicks a Graph row or a working-tree file. Hiding the Git tab keeps that selection; a full page reload starts empty. Binding a different Workspace clears both selections.
 
 ## Alternatives considered
 
@@ -24,7 +24,9 @@ The panel treats Graph selection and working-tree file selection as mutually exc
 
 ## Consequences
 
-Merge commits show only what changed versus the first parent, so files unique to the merged side appear, not a combined three-way view. Binary and `.DS_Store` paths follow the working-tree preview rules. Very large commits hide files past the cap behind `truncated`.
+Merge commits show only what changed versus the first parent, so files unique to the merged side appear, not a combined three-way view. Binary and `.DS_Store` paths follow the working-tree preview rules. Very large commits hide files past the cap behind `truncated`. Entering the Git tab or re-reading Graph does not open HEAD in the right column.
+
+Without a persisted last-opened hash, a full page reload cannot restore a Graph commit; that is the empty-preview state, not an auto-open of the newest commit.
 
 ## Testing
 
@@ -32,4 +34,4 @@ Merge commits show only what changed versus the first parent, so files unique to
 
 `packages/client/runtime/tests/workspaces-service.client.spec.ts` forwards `hash` on the wire.
 
-`packages/client/ui-git/tests/git-panel.client.spec.tsx` clicks a Graph row, asserts stacked files and read-only diffs, collapse, empty commit, and error copy.
+`packages/client/ui-git/tests/git-panel.client.spec.tsx` clicks a Graph row, asserts stacked files and read-only diffs, collapse, empty commit, and error copy. It also asserts that loading Graph does not call `gitCommitDiff` until a click, that hiding then showing the Git tab keeps the last opened commit, and that a working-tree file preview survives a Graph reload.
