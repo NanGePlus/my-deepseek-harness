@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-27-git-graph-commit-diff.md
-2026-08-27-git-graph-commit-diff.md: a0fee097cc87edc34898a5590d33875bfd6d5d34
-2026-08-27-git-graph-commit-diff.zh.md: a892f5bd212ad7d04ed58d2fe659af2bed6d50d9
+2026-08-27-git-graph-commit-diff.md: 44580c03031d073f66f3b418718d8a8c041487f3
+2026-08-27-git-graph-commit-diff.zh.md: 881a10b79de8897ab5db026a4c3b09503eb04223

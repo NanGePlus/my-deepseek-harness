@@ -639,21 +639,61 @@ describe('GitPanel', () => {
     fireEvent.error(commitGlyph!)
     expect(screen.getByText('extra.py')).toBeTruthy()
     expect(screen.getByText('gone.bin')).toBeTruthy()
-    expect(screen.getByText('brand new')).toBeTruthy()
-    expect(screen.getByText('二进制文件有差异')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '展开 src/app.ts' })).toBeTruthy()
+    expect(screen.queryByText('brand new')).toBeNull()
+    expect(screen.queryByText('二进制文件有差异')).toBeNull()
     expect(screen.getByText('仅显示前 3 个文件')).toBeTruthy()
     const preview = screen.getByRole('region', { name: '差异预览' })
     expect(within(preview).queryByRole('button', { name: '选入提交' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '展开 pkg/extra.py' }))
+    expect(screen.getByText('brand new')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '展开 gone.bin' }))
+    expect(screen.getByText('二进制文件有差异')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '展开 src/app.ts' }))
+    expect(screen.getByRole('button', { name: '收起 src/app.ts' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '收起 src/app.ts' }))
     expect(screen.getByRole('button', { name: '展开 src/app.ts' })).toBeTruthy()
     expect(screen.getByText('brand new')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '展开 src/app.ts' }))
-    expect(screen.getByRole('button', { name: '收起 src/app.ts' })).toBeTruthy()
     fireEvent.click(screen.getByText('README.md'))
     await waitFor(() => {
       expect(screen.queryByText('选择一个文件或 Graph 中的提交以查看差异')).toBeNull()
       expect(within(screen.getByRole('region', { name: '差异预览' })).queryByRole('button', { name: '选入提交' })).not.toBeNull()
     })
+  })
+
+  it('graph: a many-file commit mounts diff rows only after a header expands', async () => {
+    const hash = 'n'.repeat(40)
+    const files = Array.from({ length: 24 }, (_, index) => ({
+      path: `src/f${index}.ts`,
+      status: 'modified' as const,
+      preview: TEXT_PREVIEW,
+    }))
+    mount({
+      tree: DIRTY_REPO,
+      gitLog: vi.fn(async () => ({
+        availability: 'repository' as const,
+        repoRoot: ROOT,
+        commits: [logEntry({ hash, shortHash: 'many01', subject: 'Many files' })],
+        hasMore: false,
+      })),
+      gitCommitDiff: vi.fn(async () => ({
+        availability: 'repository' as const,
+        hash,
+        truncated: false,
+        files,
+      })),
+    })
+    await waitFor(() => { expect(screen.getByText('Many files')).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: '提交 Many files' }))
+    await waitFor(() => { expect(screen.getByText('f0.ts')).toBeTruthy() })
+    expect(document.querySelectorAll('[data-diff-row]').length).toBe(0)
+    expect(screen.getByRole('button', { name: '展开 src/f0.ts' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '展开 src/f23.ts' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '展开 src/f0.ts' }))
+    expect(document.querySelectorAll('[data-diff-row]').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: '展开 src/f1.ts' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '收起 src/f0.ts' }))
+    expect(document.querySelectorAll('[data-diff-row]').length).toBe(0)
   })
 
   it('graph: an empty commit shows the empty-commit copy', async () => {

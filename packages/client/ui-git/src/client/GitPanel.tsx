@@ -1375,10 +1375,10 @@ function renderRepository(
 
 function CommitDiffPane({ body }: { body: RepoBody }): ReactNode {
   const { t, commitDiff, selectedCommitHash } = body
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
+  const [expandedPaths, setExpandedPaths] = useState<ReadonlySet<string>>(new Set())
   const { ref: scrollRevealRef, active: scrollActive } = useScrollRevealScrollbar()
   useEffect(() => {
-    setCollapsed(new Set())
+    setExpandedPaths(new Set())
   }, [selectedCommitHash])
   return (
     <div className={css.preview} role="region" aria-label={t('git.preview.region')}>
@@ -1403,9 +1403,9 @@ function CommitDiffPane({ body }: { body: RepoBody }): ReactNode {
                   <CommitDiffFileBlock
                     key={file.path}
                     file={file}
-                    expanded={!collapsed.has(file.path)}
+                    expanded={expandedPaths.has(file.path)}
                     onToggle={() => {
-                      setCollapsed((current) => {
+                      setExpandedPaths((current) => {
                         const next = new Set(current)
                         if (next.has(file.path)) next.delete(file.path)
                         else next.add(file.path)
