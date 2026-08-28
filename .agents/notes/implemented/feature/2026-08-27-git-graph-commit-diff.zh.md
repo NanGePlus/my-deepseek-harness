@@ -12,7 +12,7 @@ Graph 单击某一提交只会高亮，右栏仍是工作区空态或上一次�
 
 新增 `host.gitCommitDiff({ workspaceId, hash })`。Host 解析 hash，再用 `git diff --find-renames HASH^ HASH` 列出文件（没有父提交时用 `git diff-tree --root`）。每条 name-status 变成一份 `GitDiffPreview`（新增文本走 `untracked-text`，删除文本走 `deleted-text`，已跟踪改动复用 hunks 加 `fileText`）。列表上限 80 个文件并设 `truncated`。Git 不可用与不是仓库仍是产品判别值；未知 hash 为 `git-failed`。
 
-面板里 Graph 选中与工作区文件选中互斥。选中提交后，右栏堆叠可折叠、只读的文件段（没有按块暂存/取消暂存/丢弃）。再点工作区行会清掉提交选中，回到原来的工作区预览。`host.gitLog` 成功不会指定提交；右栏在用户单击 Graph 行或工作区文件之前保持为空。切走 Git Tab 会保留该选中；整页刷新从空预览开始。绑定另一个 Workspace 会清掉两种选中。
+面板里 Graph 选中与工作区文件选中互斥。选中提交后，右栏列出只读文件头（没有按块暂存/取消暂存/丢弃）。文件头默认折叠；展开后才挂载该文件差异预览。切换选中提交会清掉已展开路径。再点工作区行会清掉提交选中，回到原来的工作区预览。`host.gitLog` 成功不会指定提交；右栏在用户单击 Graph 行或工作区文件之前保持为空。切走 Git Tab 会保留该选中；整页刷新从空预览开始。绑定另一个 Workspace 会清掉两种选中。
 
 ## Alternatives considered
 
@@ -20,7 +20,7 @@ Graph 单击某一提交只会高亮，右栏仍是工作区空态或上一次�
 
 **合入提交用无 `--first-parent` 的 `git show`。** 否决：combined diff 混进所有父提交；GitLens 与本 Graph 的第一父提交主干都是相对第一父提交比较。
 
-**用户展开文件头时再拉单个文件。** 第一版否决：常见提交足够小，一次 RPC 就能填满堆叠视图；若 80 个文件上限太粗，以后可以再分页。
+**用户展开文件头时再拉单个文件。** 第一版否决：常见提交足够小，一次 RPC 就能填满文件列表；若 80 个文件上限太粗，以后可以再分页。右栏仍默认折叠，因此这次 RPC 不会立刻画出每一份预览；见 [Git Graph 提交差异默认折叠](../bug-fix/2026-08-28-git-graph-commit-diff-collapsed.md)。
 
 ## Consequences
 
@@ -34,4 +34,4 @@ Graph 单击某一提交只会高亮，右栏仍是工作区空态或上一次�
 
 `packages/client/runtime/tests/workspaces-service.client.spec.ts` 断言线上转发 `hash`。
 
-`packages/client/ui-git/tests/git-panel.client.spec.tsx` 单击 Graph 行，断言堆叠文件与只读差异、折叠、空提交与错误文案。同时断言加载 Graph 在单击前不调用 `gitCommitDiff`、切走再切回 Git Tab 仍保留上次打开的提交、以及工作区文件预览在 Graph 重读后不会被抢走。
+`packages/client/ui-git/tests/git-panel.client.spec.tsx` 单击 Graph 行，断言堆叠文件头，以及展开后的只读差异、折叠、空提交与错误文案。同时断言加载 Graph 在单击前不调用 `gitCommitDiff`、切走再切回 Git Tab 仍保留上次打开的提交、以及工作区文件预览在 Graph 重读后不会被抢走。
