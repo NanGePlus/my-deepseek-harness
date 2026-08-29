@@ -782,6 +782,7 @@ export class WorkspaceRuntime implements IWorkspaces {
    * @param onFrame - invoked once per Host SSE frame.
    * @param signal - aborts the stream and closes the subscription.
    * @param onOpen - invoked once response headers are readable.
+   * @param onError - invoked when the stream fails before `signal` aborts.
    */
   terminalStream(
     workspaceId: WorkspaceId,
@@ -789,6 +790,7 @@ export class WorkspaceRuntime implements IWorkspaces {
     onFrame: (frame: TerminalStreamFrame) => void,
     signal?: AbortSignal,
     onOpen?: () => void,
+    onError?: (message: string) => void,
   ): void {
     const lifetime = signal ?? new AbortController().signal
     void (async () => {
@@ -798,7 +800,16 @@ export class WorkspaceRuntime implements IWorkspaces {
           onFrame(frame.payload)
         }
       } catch (error: unknown) {
-        void error
+        if (lifetime.aborted || onError === undefined) return
+        if (error instanceof DirectoryBrowseError) {
+          onError(error.rpcError.message)
+          return
+        }
+        if (error instanceof Error) {
+          onError(error.message)
+          return
+        }
+        onError(String(error))
       }
     })()
   }

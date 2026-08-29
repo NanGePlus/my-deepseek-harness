@@ -1,0 +1,3 @@
+# Human terminal unavailable and inline errors (#79)
+
+`@deepseek-ai/dsh-client-ui-terminal` distinguishes Host `terminal-unavailable` from other spawn/write/stream failures. An empty tab set shows the DESIGN §5 unavailable card with Host copy and a primary **重试** that clears the block and re-runs auto-spawn. Other failures render a 12px semantic-error row above the xterm body with **重试**; surviving tabs stay mounted. The **+** control disables only while a spawn RPC is in flight (`spawning`), not during SSE connect (`connecting`). `WorkspaceRuntime.terminalStream` forwards optional `onError` so reconnect failures reach the panel.

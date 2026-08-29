@@ -424,6 +424,7 @@ export interface IWorkspaces {
    * @param onFrame - invoked once per Host SSE frame.
    * @param signal - aborts the stream and closes the subscription.
    * @param onOpen - invoked once response headers are readable.
+   * @param onError - invoked when the stream fails before `signal` aborts.
    */
   terminalStream(
     workspaceId: WorkspaceId,
@@ -431,6 +432,7 @@ export interface IWorkspaces {
     onFrame: (frame: TerminalStreamFrame) => void,
     signal?: AbortSignal,
     onOpen?: () => void,
+    onError?: (message: string) => void,
   ): void
   /**
    * Create one child directory through the Host's `browse` capability.

@@ -720,6 +720,7 @@ export class TestWorkspaces implements IWorkspaces {
    * @param onFrame - frame callback.
    * @param signal - optional abort signal forwarded like production.
    * @param onOpen - optional stream-open callback.
+   * @param onError - optional stream failure callback.
    */
   terminalStream(
     workspaceId: WorkspaceId,
@@ -727,10 +728,11 @@ export class TestWorkspaces implements IWorkspaces {
     onFrame: (frame: TerminalStreamFrame) => void,
     signal?: AbortSignal,
     onOpen?: () => void,
+    onError?: (message: string) => void,
   ): void {
-    this.calls.push({ method: 'terminalStream', args: [workspaceId, sessionId, onFrame, signal, onOpen] })
+    this.calls.push({ method: 'terminalStream', args: [workspaceId, sessionId, onFrame, signal, onOpen, onError] })
     const stub = this.stubs.get('terminalStream')
-    if (stub !== undefined) stub(workspaceId, sessionId, onFrame, signal, onOpen)
+    if (stub !== undefined) stub(workspaceId, sessionId, onFrame, signal, onOpen, onError)
     else onOpen?.()
   }
 

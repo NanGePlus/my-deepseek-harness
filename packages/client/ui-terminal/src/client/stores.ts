@@ -16,10 +16,16 @@ export interface TerminalTabRow {
 export interface TerminalWorkspaceState {
   tabs: TerminalTabRow[]
   selectedSessionId: string | undefined
-  /** True while the first spawn or SSE handshake for the active tab is in flight. */
+  /** True while the SSE handshake for the active tab is in flight. */
   connecting: boolean
+  /** True while a Host spawn request is in flight; disables the + control. */
+  spawning: boolean
   /** When true, an empty tab set does not auto-spawn until the Terminal segment is re-entered. */
   deferAutoSpawn: boolean
+  /** Host terminal-unavailable reason shown as the full-page empty card when no tabs exist. */
+  unavailableMessage: string | undefined
+  /** Inline spawn, write, or reconnect failure copy for the active tab body. */
+  inlineError: string | undefined
 }
 
 /** Root store keyed by bound Workspace id. */
@@ -38,6 +44,17 @@ type TerminalPanelActions = {
   upsertTab: (root: TerminalPanelState, workspaceId: WorkspaceId, tab: TerminalTabRow) => void
   setSelectedSession: (root: TerminalPanelState, workspaceId: WorkspaceId, sessionId: string) => void
   setConnecting: (root: TerminalPanelState, workspaceId: WorkspaceId, connecting: boolean) => void
+  setSpawning: (root: TerminalPanelState, workspaceId: WorkspaceId, spawning: boolean) => void
+  setUnavailableMessage: (
+    root: TerminalPanelState,
+    workspaceId: WorkspaceId,
+    unavailableMessage: string | undefined,
+  ) => void
+  setInlineError: (
+    root: TerminalPanelState,
+    workspaceId: WorkspaceId,
+    inlineError: string | undefined,
+  ) => void
   updateTabTitle: (
     root: TerminalPanelState,
     workspaceId: WorkspaceId,
@@ -50,7 +67,15 @@ type TerminalPanelActions = {
 
 /** Empty workspace partition used when a key is first touched. */
 function emptyWorkspaceState(): TerminalWorkspaceState {
-  return { tabs: [], selectedSessionId: undefined, connecting: false, deferAutoSpawn: false }
+  return {
+    tabs: [],
+    selectedSessionId: undefined,
+    connecting: false,
+    spawning: false,
+    deferAutoSpawn: false,
+    unavailableMessage: undefined,
+    inlineError: undefined,
+  }
 }
 
 /** Resolve one workspace partition, creating it when absent. */
@@ -93,6 +118,18 @@ export function createTerminalPanelStore(): EngineStoreHandle<TerminalPanelState
       setConnecting: (root, workspaceId, connecting) => {
         const current = workspaceState(root, workspaceId)
         root.byWorkspace[workspaceId] = { ...current, connecting }
+      },
+      setSpawning: (root, workspaceId, spawning) => {
+        const current = workspaceState(root, workspaceId)
+        root.byWorkspace[workspaceId] = { ...current, spawning }
+      },
+      setUnavailableMessage: (root, workspaceId, unavailableMessage) => {
+        const current = workspaceState(root, workspaceId)
+        root.byWorkspace[workspaceId] = { ...current, unavailableMessage }
+      },
+      setInlineError: (root, workspaceId, inlineError) => {
+        const current = workspaceState(root, workspaceId)
+        root.byWorkspace[workspaceId] = { ...current, inlineError }
       },
       updateTabTitle: (root, workspaceId, sessionId, title) => {
         const current = workspaceState(root, workspaceId)
