@@ -25,6 +25,8 @@ export type {
   FileReadKind, FileTextRead, FileBytesRead, FileReadResult, FileWriteResult, PathMutationResult,
   HostLspDiagnostic, HostLspPosition, HostLspRange, LspSyncDocumentResult, LspCloseDocumentResult,
   HostLspHover, LspHoverDocumentResult,
+  TerminalShellProfile, TerminalProfilesResult, TerminalSpawnResult,
+  TerminalSessionSummary, TerminalListResult, TerminalStreamFrame,
   SkillsApi, SkillEntry,
   ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,
   MessageId, ModelReasoningEffort, ModelSelection, QueueAction, QueuedInboxItem, SessionModels,

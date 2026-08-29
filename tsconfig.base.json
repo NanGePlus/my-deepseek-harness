@@ -197,6 +197,7 @@
       "@deepseek-ai/dsh-client-ui-conversation": ["./packages/client/ui-conversation/src"],
       "@deepseek-ai/dsh-client-ui-file-editor": ["./packages/client/ui-file-editor/src"],
       "@deepseek-ai/dsh-client-ui-git": ["./packages/client/ui-git/src"],
+      "@deepseek-ai/dsh-client-ui-terminal": ["./packages/client/ui-terminal/src"],
       "@deepseek-ai/dsh-client-ui-tool": ["./packages/client/ui-tool/src"],
       "@deepseek-ai/dsh-client-ui-deliverables": ["./packages/client/ui-deliverables/src"],
       "@deepseek-ai/dsh-client-ui-workflow-run": ["./packages/client/ui-workflow-run/src"],

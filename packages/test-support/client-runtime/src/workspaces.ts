@@ -6,6 +6,7 @@ import type {
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
   GitWorkingTreeResult, GitInitResult, GitLogResult, GitCommitDiffResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
+  TerminalProfilesResult, TerminalSpawnResult, TerminalListResult, TerminalStreamFrame,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { workspaceListState } from './fixtures.ts'
 import type { Stabilizer } from './fixtures.ts'
@@ -609,6 +610,111 @@ export class TestWorkspaces implements IWorkspaces {
       return await (stub(workspaceId, path, text, version, line, character, signal) as Promise<LspHoverDocumentResult>)
     }
     return { hover: null }
+  }
+
+  /**
+   * List selectable shell profiles (recorded). The default is one zsh profile.
+   * @param signal - optional abort signal forwarded like production.
+   */
+  async terminalProfiles(signal?: AbortSignal): Promise<TerminalProfilesResult> {
+    this.calls.push({ method: 'terminalProfiles', args: [signal] })
+    const stub = this.stubs.get('terminalProfiles')
+    if (stub !== undefined) return await (stub(signal) as Promise<TerminalProfilesResult>)
+    return { profiles: [{ id: 'zsh', name: 'zsh' }], defaultProfileId: 'zsh' }
+  }
+
+  /**
+   * Spawn one human terminal session (recorded). The default echoes a fixed id.
+   * @param workspaceId - Workspace whose root bounds the default cwd.
+   * @param profileId - optional shell profile.
+   * @param cwd - optional initial cwd.
+   * @param signal - optional abort signal forwarded like production.
+   */
+  async terminalSpawn(
+    workspaceId: WorkspaceId,
+    profileId?: string,
+    cwd?: string,
+    signal?: AbortSignal,
+  ): Promise<TerminalSpawnResult> {
+    this.calls.push({ method: 'terminalSpawn', args: [workspaceId, profileId, cwd, signal] })
+    const stub = this.stubs.get('terminalSpawn')
+    if (stub !== undefined) return await (stub(workspaceId, profileId, cwd, signal) as Promise<TerminalSpawnResult>)
+    return { sessionId: 'test-terminal-1' }
+  }
+
+  /**
+   * Write stdin to one human terminal session (recorded).
+   * @param workspaceId - Workspace that owns the session pool.
+   * @param sessionId - live session id.
+   * @param text - UTF-8 stdin payload.
+   * @param signal - optional abort signal forwarded like production.
+   */
+  async terminalWrite(
+    workspaceId: WorkspaceId,
+    sessionId: string,
+    text: string,
+    signal?: AbortSignal,
+  ): Promise<{ written: true }> {
+    this.calls.push({ method: 'terminalWrite', args: [workspaceId, sessionId, text, signal] })
+    const stub = this.stubs.get('terminalWrite')
+    if (stub !== undefined) return await (stub(workspaceId, sessionId, text, signal) as Promise<{ written: true }>)
+    return { written: true }
+  }
+
+  /**
+   * Resize one human terminal session (recorded).
+   * @param workspaceId - Workspace that owns the session pool.
+   * @param sessionId - live session id.
+   * @param cols - terminal column count.
+   * @param rows - terminal row count.
+   * @param signal - optional abort signal forwarded like production.
+   */
+  async terminalResize(
+    workspaceId: WorkspaceId,
+    sessionId: string,
+    cols: number,
+    rows: number,
+    signal?: AbortSignal,
+  ): Promise<{ resized: true }> {
+    this.calls.push({ method: 'terminalResize', args: [workspaceId, sessionId, cols, rows, signal] })
+    const stub = this.stubs.get('terminalResize')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, sessionId, cols, rows, signal) as Promise<{ resized: true }>)
+    }
+    return { resized: true }
+  }
+
+  /**
+   * List live human terminal sessions (recorded). The default is empty.
+   * @param workspaceId - Workspace whose session pool is queried.
+   * @param signal - optional abort signal forwarded like production.
+   */
+  async terminalList(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<TerminalListResult> {
+    this.calls.push({ method: 'terminalList', args: [workspaceId, signal] })
+    const stub = this.stubs.get('terminalList')
+    if (stub !== undefined) return await (stub(workspaceId, signal) as Promise<TerminalListResult>)
+    return { sessions: [] }
+  }
+
+  /**
+   * Subscribe to one human terminal SSE stream (recorded). The default is a no-op.
+   * @param workspaceId - Workspace that owns the session pool.
+   * @param sessionId - live session id.
+   * @param onFrame - frame callback.
+   * @param signal - optional abort signal forwarded like production.
+   * @param onOpen - optional stream-open callback.
+   */
+  terminalStream(
+    workspaceId: WorkspaceId,
+    sessionId: string,
+    onFrame: (frame: TerminalStreamFrame) => void,
+    signal?: AbortSignal,
+    onOpen?: () => void,
+  ): void {
+    this.calls.push({ method: 'terminalStream', args: [workspaceId, sessionId, onFrame, signal, onOpen] })
+    const stub = this.stubs.get('terminalStream')
+    if (stub !== undefined) stub(workspaceId, sessionId, onFrame, signal, onOpen)
+    else onOpen?.()
   }
 
   /**

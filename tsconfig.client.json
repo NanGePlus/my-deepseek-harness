@@ -67,6 +67,7 @@
     { "path": "./packages/client/ui-conversation" },
     { "path": "./packages/client/ui-file-editor" },
     { "path": "./packages/client/ui-git" },
+    { "path": "./packages/client/ui-terminal" },
     { "path": "./packages/client/ui-tool" },
     { "path": "./packages/client/ui-deliverables" },
     { "path": "./packages/client/ui-workflow-run" },

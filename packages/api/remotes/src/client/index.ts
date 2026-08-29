@@ -48,6 +48,8 @@ export type {
   FileReadKind, FileTextRead, FileBytesRead, FileReadResult, FileWriteResult, PathMutationResult,
   HostLspDiagnostic, HostLspPosition, HostLspRange, LspSyncDocumentResult, LspCloseDocumentResult,
   HostLspHover, LspHoverDocumentResult,
+  TerminalShellProfile, TerminalProfilesResult, TerminalSpawnResult,
+  TerminalSessionSummary, TerminalListResult, TerminalStreamFrame,
 } from '@deepseek-ai/dsh-client-connection/client'
 export type {} from '@deepseek-ai/dsh-api-gateway/client'
 export type {} from '@deepseek-ai/dsh-cordis-host-runner/remote'

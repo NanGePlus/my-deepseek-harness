@@ -266,6 +266,9 @@
     - id: ui-git
       name: '@deepseek-ai/dsh-client-ui-git'
 
+    - id: ui-terminal
+      name: '@deepseek-ai/dsh-client-ui-terminal'
+
     # Tool call tree, generic fallback, and keyed business Tool views.
     - id: ui-tool
       name: '@deepseek-ai/dsh-client-ui-tool'
