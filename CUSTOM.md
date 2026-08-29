@@ -7,7 +7,7 @@
 - 运行方式：从源码 `pnpm install` / `pnpm run build:lib:host` + client bundle + `pnpm run build:web` / `pnpm dsh web`
 - Node：^22.19 或 >=24；pnpm@11.7.0（Corepack）
 - 扩展策略：V1 文件编辑器因需改 Host RPC 与 **工具箱**（details 栏）壳层，**直接改 `packages/`**；长期仍优先树外插件 / 组合包，不改 `vendor/`
-- 领域与决策：`CONTEXT.md`、`docs/adr/0001–0002`（文件编辑器）、`docs/adr/0003–0004`（Git 面板）、`docs/prd/file-editor-v1.md`、`docs/prd/git-panel-v2.md`
+- 领域与决策：`CONTEXT.md`、`docs/adr/0001–0002`（文件编辑器）、`docs/adr/0003–0004`（Git 面板）、`docs/adr/0005–0006`（人类终端 V3）、`docs/prd/file-editor-v1.md`、`docs/prd/git-panel-v2.md`、`docs/prd/terminal-v3.md`
 
 ## 产品
 - 产品名：（待填写）
@@ -15,6 +15,7 @@
 - 模型提供方：DeepSeek / 其它 / 自定义 OpenAI 兼容端点
 - **V1 定制重点**：Web **工具箱**（原 details 栏）内嵌 Workspace 文件编辑器（文件树 + Monaco 多 Tab），与 Agent 对话并列、不占用中栏
 - **V2 定制重点（进行中）**：工具箱增加 **Git 面板**（工作区变更 + 差异预览 + Git 操作守卫）；PRD 见 `docs/prd/git-panel-v2.md` 与 Issue [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)。Host Git 只读 RPC 见 Issue [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53)；写 RPC（暂存 / 取消暂存 / 丢弃 / 提交）见 Issue [#54](https://github.com/NanGePlus/my-deepseek-harness/issues/54)；工具箱三段 Tab 见 Issue [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55)；Git 面板绑定/列表/空态/初始化见 Issue [#56](https://github.com/NanGePlus/my-deepseek-harness/issues/56)；整文件暂存/丢弃/提交见 Issue [#57](https://github.com/NanGePlus/my-deepseek-harness/issues/57)；差异预览与按块操作见 Issue [#58](https://github.com/NanGePlus/my-deepseek-harness/issues/58)；Git 操作守卫见 Issue [#59](https://github.com/NanGePlus/my-deepseek-harness/issues/59)
+- **V3 定制重点（进行中，分支 `feat/v3`）**：工具箱增加 **人类终端**（多 Tab + Shell 选择 + xterm；与 Agent PTY 分离）；PRD 见 `docs/prd/terminal-v3.md` 与 Issue [#73](https://github.com/NanGePlus/my-deepseek-harness/issues/73)。`#D-global` 见 [#74](https://github.com/NanGePlus/my-deepseek-harness/issues/74)；Host `host.terminal.*` RPC 见 [#75](https://github.com/NanGePlus/my-deepseek-harness/issues/75)；工具箱四段 Tab 见 [#76](https://github.com/NanGePlus/my-deepseek-harness/issues/76)；`ui-terminal` 最小通路见 [#77](https://github.com/NanGePlus/my-deepseek-harness/issues/77)；多 Tab / Shell / Kill 见 [#78](https://github.com/NanGePlus/my-deepseek-harness/issues/78)；不可用 / 错误态见 [#79](https://github.com/NanGePlus/my-deepseek-harness/issues/79)；切走持久 / 硬刷新重连见 [#80](https://github.com/NanGePlus/my-deepseek-harness/issues/80)；改盘刷新协调见 [#81](https://github.com/NanGePlus/my-deepseek-harness/issues/81)
 
 ## 已实现定制功能（相对上游 master）
 
@@ -107,6 +108,7 @@
 | `tsconfig.base.json` | 为 `ui-file-editor` / `ui-git` 增加 source-plane `paths`（tsx 启动不依赖 built `lib/`） | 2026-08 |
 | `apps/web/` | Vite 构建含 Monaco workers / material icons 同步 | 2026-08 |
 | `CONTEXT.md`、`docs/adr/0001–0002`、`docs/prd/file-editor-v1.md` | 文件编辑器 V1 领域与 PRD | 2026-08 |
+| `CONTEXT.md`、`docs/adr/0005–0006`、`docs/prd/terminal-v3.md` | 人类终端 V3 领域、PRD 与 ADR（`feat/v3`） | 2026-08-29 |
 | `AGENTS.md`（Agent skills 块） | Issue 跟踪 / triage / domain / wiki 工作流说明 | 2026-08 |
 | `scripts/translation-pairing.manifest.json`、`scripts/build-exe-for-python-sdk.ts`、`scripts/verify-translation-prompt.ts` | 根 README 排除 upstream 双语配对 / 部署文档列表 | 2026-08-22 |
 | `scripts/agent-note-tree.ts` | Agent Note 生命周期根 allowlist 仅保留 `AGENTS.md` | 2026-08-22 |
@@ -143,6 +145,7 @@
 | `issue/57-git-panel-stage-commit` | [#57](https://github.com/NanGePlus/my-deepseek-harness/issues/57) `ui-git`：整文件暂存、丢弃、提交说明与提交 | 已合并入 `custom/main`（PR [#66](https://github.com/NanGePlus/my-deepseek-harness/pull/66)） |
 | `issue/58-git-panel-diff-preview` | [#58](https://github.com/NanGePlus/my-deepseek-harness/issues/58) `ui-git`：差异预览与按块操作 | 已合并入 `custom/main`（PR [#67](https://github.com/NanGePlus/my-deepseek-harness/pull/67)） |
 | `issue/59-git-panel-action-guard` | [#59](https://github.com/NanGePlus/my-deepseek-harness/issues/59) `ui-git`：Git 操作守卫 | 已合并入 `custom/main`（PR [#68](https://github.com/NanGePlus/my-deepseek-harness/pull/68)） |
+| `feat/v3` | V3 人类终端：父 PRD [#73](https://github.com/NanGePlus/my-deepseek-harness/issues/73)；切片 #74–#81 | 进行中；基线 `origin/custom/main` |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
@@ -257,3 +260,6 @@
 | 2026-08-28 | Git 切回 Tab 不闪 Graph/预览 | 已有 Graph 与右栏内容在重读时保持；`loading` 只用于首次加载或换选中项 |
 | 2026-08-28 | 资源管理器空白选根与拖拽移动 | 点击文件树空白取消行选中，工具栏新建回到 Workspace 根；拖拽到目录或空白处走 `host.movePath` |
 | 2026-08-28 | Git Graph 多文件提交默认折叠 | 点提交后右栏只渲染文件头；展开某一头才挂载该文件 `DiffPreviewContent`，避免几十份差异同时高亮卡死页面 |
+| 2026-08-29 | 从最新 `origin/custom/main` 创建分支 `feat/v3` | V3 版本迭代线；基线 `c037bbd`（#72 Graph 提交差异默认折叠） |
+| 2026-08-29 | V3 人类终端规格锁定 | `grill-with-docs` 拷问完成；更新 `CONTEXT.md`；新增 `docs/prd/terminal-v3.md`、`docs/adr/0005-human-terminal-host-rpc.md`、`docs/adr/0006-human-terminal-client-plugin.md` |
+| 2026-08-29 | 发布人类终端 V3 Issue | 父 PRD [#73](https://github.com/NanGePlus/my-deepseek-harness/issues/73)；#74 `#D-global`；#75 Host terminal RPC；#76 app-shell 四段 Tab；#77–#80 `human-terminal` 四刀；#81 改盘刷新协调 |
