@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   IconCodeOutline16, IconLoadingOutline16, IconPlusOutline16, IconTrashOutline16, Menu,
+  Button,
   type MenuEntry,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
@@ -97,6 +98,7 @@ export interface TerminalPanelInjected {
     onFrame: (frame: TerminalStreamFrame) => void,
     signal?: AbortSignal,
     onOpen?: () => void,
+    onError?: (message: string) => void,
   ) => void
 }
 
@@ -106,6 +108,41 @@ export type TerminalPanelProps =
   & PropsLocale<'terminalPanel'>
   & PropsStore<ReturnType<typeof createTerminalPanelStore>>
   & TerminalPanelInjected
+
+/** Return a user-visible Host failure message when one exists. */
+function browseErrorMessage(error: unknown): string | undefined {
+  if (error instanceof DirectoryBrowseError) return error.rpcError.message
+  if (error instanceof Error) return error.message
+  return undefined
+}
+
+/** Ignore workspace lookup failures during background handshakes. */
+function isIgnorableBrowseError(error: DirectoryBrowseError): boolean {
+  return error.rpcError.code === 'workspace-not-found'
+}
+
+/** Map a Host failure to the unavailable card or inline error surface. */
+function reportTerminalFailure(
+  actions: TerminalPanelProps['actions'],
+  workspaceId: WorkspaceId,
+  error: unknown,
+  hasTabs: boolean,
+): void {
+  if (error instanceof DirectoryBrowseError && isIgnorableBrowseError(error)) return
+  const message = browseErrorMessage(error)
+  if (message === undefined) return
+  actions.setInlineError(workspaceId, undefined)
+  if (
+    !hasTabs
+    && error instanceof DirectoryBrowseError
+    && error.rpcError.code === 'terminal-unavailable'
+  ) {
+    actions.setUnavailableMessage(workspaceId, message)
+    return
+  }
+  actions.setUnavailableMessage(workspaceId, undefined)
+  actions.setInlineError(workspaceId, message)
+}
 
 /** Map Host list rows into store tab rows. */
 function rowsFromList(sessions: TerminalListResult['sessions']): TerminalTabRow[] {
@@ -141,6 +178,15 @@ export function TerminalPanel({
   const connecting = useStore(state => workspaceId === undefined
     ? false
     : terminalWorkspaceState(state, workspaceId).connecting)
+  const spawning = useStore(state => workspaceId === undefined
+    ? false
+    : terminalWorkspaceState(state, workspaceId).spawning)
+  const unavailableMessage = useStore(state => workspaceId === undefined
+    ? undefined
+    : terminalWorkspaceState(state, workspaceId).unavailableMessage)
+  const inlineError = useStore(state => workspaceId === undefined
+    ? undefined
+    : terminalWorkspaceState(state, workspaceId).inlineError)
   const deferAutoSpawn = useStore(state => workspaceId === undefined
     ? false
     : terminalWorkspaceState(state, workspaceId).deferAutoSpawn)
@@ -150,11 +196,13 @@ export function TerminalPanel({
   const streamAbortRef = useRef<AbortController | null>(null)
   const profilesRef = useRef<TerminalProfilesResult | null>(null)
   const addMenuTriggerRef = useRef<HTMLButtonElement>(null)
+  const pendingSpawnProfileRef = useRef<string | undefined>(undefined)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [profileMenuItems, setProfileMenuItems] = useState<readonly MenuEntry[]>([])
+  const [streamAttempt, setStreamAttempt] = useState(0)
 
   const openAddMenu = useCallback(async () => {
-    if (workspaceId === undefined || connecting) return
+    if (workspaceId === undefined || spawning) return
     const ac = new AbortController()
     try {
       const profiles = profilesRef.current ?? await terminalProfiles(ac.signal)
@@ -169,14 +217,18 @@ export function TerminalPanel({
       if (error instanceof DirectoryBrowseError || ac.signal.aborted) return
       throw error
     }
-  }, [connecting, terminalProfiles, workspaceId])
+  }, [spawning, terminalProfiles, workspaceId])
 
   const spawnTab = useCallback(async (profileId: string) => {
-    if (workspaceId === undefined || connecting) return
+    if (workspaceId === undefined || spawning) return
     setAddMenuOpen(false)
+    pendingSpawnProfileRef.current = profileId
     const ac = new AbortController()
+    const hadTabs = tabs.length > 0
     try {
-      actions.setConnecting(workspaceId, true)
+      actions.setSpawning(workspaceId, true)
+      actions.setInlineError(workspaceId, undefined)
+      actions.setUnavailableMessage(workspaceId, undefined)
       const profiles = profilesRef.current ?? await terminalProfiles(ac.signal)
       if (ac.signal.aborted) return
       profilesRef.current = profiles
@@ -190,12 +242,12 @@ export function TerminalPanel({
       })
       actions.setSelectedSession(workspaceId, spawned.sessionId)
     } catch (error: unknown) {
-      if (error instanceof DirectoryBrowseError || ac.signal.aborted) return
-      throw error
+      if (ac.signal.aborted) return
+      reportTerminalFailure(actions, workspaceId, error, hadTabs)
     } finally {
-      if (!ac.signal.aborted) actions.setConnecting(workspaceId, false)
+      if (!ac.signal.aborted) actions.setSpawning(workspaceId, false)
     }
-  }, [actions, connecting, terminalProfiles, terminalSpawn, workspace?.path, workspaceId])
+  }, [actions, spawning, tabs.length, terminalProfiles, terminalSpawn, workspace?.path, workspaceId])
 
   const killTab = useCallback(async (sessionId: string) => {
     if (workspaceId === undefined) return
@@ -222,13 +274,37 @@ export function TerminalPanel({
     const sessionId = selectedSessionId
     const viewport = createXtermViewport({
       dark,
-      onInput: (text) => { void terminalWrite(wid, sessionId, text) },
+      onInput: (text) => {
+        void terminalWrite(wid, sessionId, text).then(() => {
+          actions.setInlineError(wid, undefined)
+        }).catch((error: unknown) => {
+          reportTerminalFailure(actions, wid, error, true)
+        })
+      },
       onResize: (cols, rows) => { void terminalResize(wid, sessionId, cols, rows) },
     })
     viewport.attach(host)
     viewportRef.current = viewport
     return viewport
-  }, [dark, selectedSessionId, terminalResize, terminalWrite, workspaceId])
+  }, [actions, dark, selectedSessionId, terminalResize, terminalWrite, workspaceId])
+
+  const retryUnavailable = useCallback(() => {
+    if (workspaceId === undefined) return
+    actions.setUnavailableMessage(workspaceId, undefined)
+    actions.setInlineError(workspaceId, undefined)
+    actions.setDeferAutoSpawn(workspaceId, false)
+  }, [actions, workspaceId])
+
+  const retryInline = useCallback(() => {
+    if (workspaceId === undefined) return
+    actions.setInlineError(workspaceId, undefined)
+    const pendingProfile = pendingSpawnProfileRef.current
+    if (pendingProfile !== undefined) {
+      void spawnTab(pendingProfile)
+      return
+    }
+    setStreamAttempt(attempt => attempt + 1)
+  }, [actions, spawnTab, workspaceId])
 
   useEffect(() => {
     if (!visible) return
@@ -245,6 +321,7 @@ export function TerminalPanel({
     if (reentered) actions.setDeferAutoSpawn(workspaceId, false)
     if (tabs.length > 0) return
     if (!reentered && deferAutoSpawn) return
+    if (unavailableMessage !== undefined) return
     const ac = new AbortController()
     void (async () => {
       try {
@@ -258,10 +335,13 @@ export function TerminalPanel({
           )
           return
         }
-        actions.setConnecting(workspaceId, true)
+        actions.setSpawning(workspaceId, true)
+        actions.setInlineError(workspaceId, undefined)
+        actions.setUnavailableMessage(workspaceId, undefined)
         const profiles = await terminalProfiles(ac.signal)
         if (ac.signal.aborted) return
         profilesRef.current = profiles
+        pendingSpawnProfileRef.current = profiles.defaultProfileId
         const spawned = await terminalSpawn(
           workspaceId,
           profiles.defaultProfileId,
@@ -276,15 +356,16 @@ export function TerminalPanel({
           profileId: profiles.defaultProfileId,
         })
       } catch (error: unknown) {
-        if (error instanceof DirectoryBrowseError || ac.signal.aborted) return
-        throw error
+        if (ac.signal.aborted) return
+        reportTerminalFailure(actions, workspaceId, error, false)
       } finally {
-        if (!ac.signal.aborted) actions.setConnecting(workspaceId, false)
+        if (!ac.signal.aborted) actions.setSpawning(workspaceId, false)
       }
     })()
     return () => { ac.abort() }
   }, [
-    actions, deferAutoSpawn, tabs.length, terminalList, terminalProfiles, terminalSpawn, visible, workspace?.path, workspaceId,
+    actions, deferAutoSpawn, tabs.length, terminalList, terminalProfiles, terminalSpawn,
+    unavailableMessage, visible, workspace?.path, workspaceId,
   ])
 
   useEffect(() => {
@@ -302,10 +383,14 @@ export function TerminalPanel({
       }
     }, ac.signal, () => {
       actions.setConnecting(workspaceId, false)
+      actions.setInlineError(workspaceId, undefined)
+    }, (message) => {
+      actions.setConnecting(workspaceId, false)
+      actions.setInlineError(workspaceId, message)
     })
     return () => { ac.abort() }
   }, [
-    actions, ensureViewport, selectedSessionId, terminalStream, visible, workspaceId,
+    actions, ensureViewport, selectedSessionId, streamAttempt, terminalStream, visible, workspaceId,
   ])
 
   useEffect(() => {
@@ -335,7 +420,7 @@ export function TerminalPanel({
     () => tabs.find(tab => tab.sessionId === selectedSessionId),
     [selectedSessionId, tabs],
   )
-  const addMenuDisabled = connecting
+  const addMenuDisabled = spawning
 
   if (workspaceId === undefined) {
     return (
@@ -406,25 +491,57 @@ export function TerminalPanel({
           />
         </div>
       </div>
-      <div className={css.body}>
-        <div
-          ref={viewportHostRef}
-          className={css.viewportHost}
-          role="tabpanel"
-          aria-label={t('terminal.viewport.aria')}
-          aria-busy={connecting}
-        />
-        {connecting
-          ? (
-            <div className={css.loadingOverlay}>
-              <span className={css.spinner} aria-hidden="true">
-                <IconLoadingOutline16 size={24} />
+      {unavailableMessage !== undefined && tabs.length === 0
+        ? (
+          <div className={css.bodyUnavailable}>
+            <div className={css.emptyCard}>
+              <span className={css.emptyIcon} aria-hidden="true">
+                <IconCodeOutline16 size={48} />
               </span>
-              <div className={css.loadingCopy}>{t('terminal.loading.connecting')}</div>
+              <div className={css.emptyTitle}>{t('terminal.empty.unavailable.title')}</div>
+              <div className={css.emptyBody}>{unavailableMessage}</div>
+              <Button
+                variant="primary"
+                size="sm"
+                className={css.emptyRetry}
+                onClick={retryUnavailable}
+              >
+                {t('terminal.error.retry')}
+              </Button>
             </div>
-          )
-          : null}
-      </div>
+          </div>
+        )
+        : (
+          <>
+            {inlineError !== undefined && (
+              <div className={css.inlineError} role="alert">
+                <span className={css.inlineErrorMessage}>{inlineError}</span>
+                <button type="button" className={css.inlineErrorRetry} onClick={retryInline}>
+                  {t('terminal.error.retry')}
+                </button>
+              </div>
+            )}
+            <div className={css.body}>
+              <div
+                ref={viewportHostRef}
+                className={css.viewportHost}
+                role="tabpanel"
+                aria-label={t('terminal.viewport.aria')}
+                aria-busy={connecting}
+              />
+              {connecting
+                ? (
+                  <div className={css.loadingOverlay}>
+                    <span className={css.spinner} aria-hidden="true">
+                      <IconLoadingOutline16 size={24} />
+                    </span>
+                    <div className={css.loadingCopy}>{t('terminal.loading.connecting')}</div>
+                  </div>
+                )
+                : null}
+            </div>
+          </>
+        )}
       <span className={css.hidden}>{activeTab?.title ?? ''}</span>
     </div>
   )

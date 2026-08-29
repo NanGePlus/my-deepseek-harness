@@ -44,8 +44,8 @@ export function apply(ctx: ClientContext): void {
         ctx.workspaces.terminalResize(workspaceId, sessionId, cols, rows, signal),
       terminalKill: (workspaceId, sessionId, signal) =>
         ctx.workspaces.terminalKill(workspaceId, sessionId, signal),
-      terminalStream: (workspaceId, sessionId, onFrame, signal, onOpen) => {
-        ctx.workspaces.terminalStream(workspaceId, sessionId, onFrame, signal, onOpen)
+      terminalStream: (workspaceId, sessionId, onFrame, signal, onOpen, onError) => {
+        ctx.workspaces.terminalStream(workspaceId, sessionId, onFrame, signal, onOpen, onError)
       },
     }),
   }, TerminalPanel))

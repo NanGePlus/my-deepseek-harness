@@ -294,14 +294,11 @@ describe('TerminalPanel', () => {
     expect(screen.queryByRole('tab')).toBeNull()
   })
 
-  it('rethrows unexpected Host errors from auto-spawn', async () => {
+  it('surfaces unexpected Host auto-spawn failures as inline error instead of rejecting', async () => {
     const terminalSpawn = vi.fn(async () => { throw new Error('boom') })
-    const onRejection = vi.fn()
-    process.on('unhandledRejection', onRejection)
     mount({ terminalSpawn })
     await waitFor(() => { expect(terminalSpawn).toHaveBeenCalled() })
-    await waitFor(() => { expect(onRejection).toHaveBeenCalled() })
-    process.off('unhandledRejection', onRejection)
+    await waitFor(() => { expect(screen.getByText('boom')).toBeTruthy() })
   })
 
   it('aborts the spawn handshake when the panel unmounts', async () => {
@@ -454,6 +451,108 @@ describe('TerminalPanel', () => {
     })
     await waitFor(() => { expect(screen.getByRole('tab', { name: 'bash' })).toBeTruthy() })
     expect(screen.getAllByRole('tab')).toHaveLength(2)
+  })
+
+  it('empty-unavailable: shows 终端不可用 with Host reason, retry, and tab chrome when spawn fails', async () => {
+    const terminalSpawn = vi.fn(async () => {
+      throw new DirectoryBrowseError({
+        code: 'terminal-unavailable',
+        message: 'pty backend missing',
+        details: { workspaceId: WID },
+      })
+    })
+    mount({ terminalSpawn })
+    await waitFor(() => { expect(terminalSpawn).toHaveBeenCalled() })
+    expect(screen.getByText('终端不可用')).toBeTruthy()
+    expect(screen.getByText('pty backend missing')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
+    expect(screen.getByRole('tablist')).toBeTruthy()
+    expect(screen.queryByRole('tab')).toBeNull()
+  })
+
+  it('empty-unavailable: retry clears the card and calls Host spawn again', async () => {
+    let spawnAttempts = 0
+    const terminalSpawn = vi.fn(async () => {
+      spawnAttempts += 1
+      if (spawnAttempts === 1) {
+        throw new DirectoryBrowseError({
+          code: 'terminal-unavailable',
+          message: 'pty backend missing',
+          details: { workspaceId: WID },
+        })
+      }
+      return { sessionId: 'term-recovered' }
+    })
+    mount({ terminalSpawn })
+    await waitFor(() => { expect(screen.getByText('终端不可用')).toBeTruthy() })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '重试' })) })
+    await waitFor(() => { expect(terminalSpawn).toHaveBeenCalledTimes(2) })
+    await waitFor(() => { expect(screen.queryByText('终端不可用')).toBeNull() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'zsh' })).toBeTruthy() })
+  })
+
+  it('error-inline: dropdown spawn failure keeps other tabs and shows inline 重试', async () => {
+    const terminalList = vi.fn(async () => ({
+      sessions: [{ sessionId: 'live-1', title: 'first', profileId: 'zsh' }],
+    }))
+    const terminalProfiles = vi.fn(async () => ({
+      profiles: [
+        { id: 'zsh', name: 'zsh' },
+        { id: 'bash', name: 'bash' },
+      ],
+      defaultProfileId: 'zsh',
+    }))
+    const terminalSpawn = vi.fn(async (_wid, profileId) => {
+      if (profileId === 'bash') {
+        throw new DirectoryBrowseError({
+          code: 'internal',
+          message: 'spawn rejected',
+          details: {},
+        })
+      }
+      return { sessionId: 'live-1' }
+    })
+    mount({ terminalList, terminalProfiles, terminalSpawn })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'first' })).toBeTruthy() })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '新建终端' })) })
+    await waitFor(() => { expect(screen.getByRole('menuitem', { name: 'bash' })).toBeTruthy() })
+    await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: 'bash' })) })
+    await waitFor(() => { expect(screen.getByText('spawn rejected')).toBeTruthy() })
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'first' })).toBeTruthy()
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
+  })
+
+  it('error-inline: stream reconnect failure surfaces inline error with 重试', async () => {
+    const terminalStream = vi.fn<TerminalPanelProps['terminalStream']>((
+      _workspaceId,
+      _sessionId,
+      _onFrame,
+      _signal,
+      onOpen,
+      onError,
+    ) => {
+      onOpen?.()
+      onError?.('stream dropped')
+    })
+    mount({ terminalStream })
+    await waitFor(() => { expect(screen.getByText('stream dropped')).toBeTruthy() })
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
+  })
+
+  it('disabled-spawning: disables + while Host spawn is in flight', async () => {
+    let resolveSpawn: ((value: { sessionId: string }) => void) | undefined
+    const terminalList = vi.fn(async () => ({ sessions: [] }))
+    const terminalSpawn = vi.fn(async () => new Promise<{ sessionId: string }>((resolve) => {
+      resolveSpawn = resolve
+    }))
+    mount({ terminalList, terminalSpawn })
+    await waitFor(() => { expect(terminalSpawn).toHaveBeenCalled() })
+    expect(screen.getByRole('button', { name: '新建终端' }).hasAttribute('disabled')).toBe(true)
+    await act(async () => { resolveSpawn?.({ sessionId: 'term-1' }) })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '新建终端' }).hasAttribute('disabled')).toBe(false)
+    })
   })
 
   it('restores another Workspace tab set from the store without re-spawning', async () => {

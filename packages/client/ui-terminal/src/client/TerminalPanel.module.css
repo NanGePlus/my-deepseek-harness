@@ -50,6 +50,57 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+.emptyRetry {
+  margin-top: 4px;
+}
+
+.inlineError {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 40%, transparent);
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.inlineErrorMessage {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inlineErrorRetry {
+  flex: none;
+  border: none;
+  border-radius: 4px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--dsw-alias-state-error-primary);
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.inlineErrorRetry:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.bodyUnavailable {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
 .tabBar {
   display: flex;
   flex: none;
