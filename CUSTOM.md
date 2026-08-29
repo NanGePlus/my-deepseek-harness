@@ -154,7 +154,7 @@
 | `issue/58-git-panel-diff-preview` | [#58](https://github.com/NanGePlus/my-deepseek-harness/issues/58) `ui-git`：差异预览与按块操作 | 已合并入 `custom/main`（PR [#67](https://github.com/NanGePlus/my-deepseek-harness/pull/67)） |
 | `issue/59-git-panel-action-guard` | [#59](https://github.com/NanGePlus/my-deepseek-harness/issues/59) `ui-git`：Git 操作守卫 | 已合并入 `custom/main`（PR [#68](https://github.com/NanGePlus/my-deepseek-harness/pull/68)） |
 | `feat/issue-80-terminal-persist-reconnect` | [#80](https://github.com/NanGePlus/my-deepseek-harness/issues/80) 切走持久 / 硬刷新重连 | 已合并入 `custom/main` |
-| `feat/issue-81-terminal-disk-refresh` | [#81](https://github.com/NanGePlus/my-deepseek-harness/issues/81) 改盘刷新协调 | 待合并 PR |
+| `feat/issue-81-terminal-disk-refresh` | [#81](https://github.com/NanGePlus/my-deepseek-harness/issues/81) 改盘刷新协调 | 已合并入 `custom/main`（PR [#90](https://github.com/NanGePlus/my-deepseek-harness/pull/90)） |
 | `feat/v3` | V3 人类终端：父 PRD [#73](https://github.com/NanGePlus/my-deepseek-harness/issues/73)；切片 #74–#81 | 进行中；基线 `origin/custom/main` |
 | `issue/74-d-global-human-terminal-design-close` | [#74](https://github.com/NanGePlus/my-deepseek-harness/issues/74) `#D-global`：验收关闭人类终端 DESIGN.md | 进行中 |
 
@@ -280,5 +280,5 @@
 | 2026-08-29 | Issue #77 人类终端最小通路 | 分支 `issue/77-ui-terminal`：新包 `@deepseek-ai/dsh-client-ui-terminal`；`WorkspaceRuntime` 转发 `host.terminal*`；自动 spawn + xterm + 未绑定空态；浏览器快照 `terminal-default.expected.md`；`subprocess-local` 去除构造函数参数属性以修复 web e2e 源码加载 |
 | 2026-08-29 | Issue #79 人类终端不可用 / 错误态 | 分支 `feat/issue-79-terminal-unavailable-errors`：终端不可用卡片 + 重试、inline 错误、spawn 中禁用 `+` |
 | 2026-08-29 | Issue #80 切走持久 / 硬刷新重连 | 分支 `feat/issue-80-terminal-persist-reconnect`：切走 **终端** 段保持 SSE 不 Kill；硬刷新 `list` 恢复 Tab + scrollback 回放；Workspace 切换展示对应 Tab 集 |
-| 2026-08-29 | Issue #81 改盘刷新协调 | 分支 `feat/issue-81-terminal-disk-refresh`：`DetailsPanel` 离开 **终端** / 进入 **资源管理器 | Git** 时 bump `segmentDiskRefreshEpoch`；Explorer 重读 Git 徽章与打开 Tab；Git occupant 重读工作树 |
+| 2026-08-29 | Issue #81 改盘刷新协调 | 分支 `feat/issue-81-terminal-disk-refresh` 已合并 PR [#90](https://github.com/NanGePlus/my-deepseek-harness/pull/90)；`DetailsPanel` `segmentDiskRefreshEpoch` 协调 Explorer / Git 重读 |
 | 2026-08-29 | 从最新 `origin/custom/main` 创建分支 `issue/74-d-global-human-terminal-design-close` | Issue [#74](https://github.com/NanGePlus/my-deepseek-harness/issues/74) `#D-global` 验收关闭；人类终端消费既有品牌板，不新增 §5 原语 |
