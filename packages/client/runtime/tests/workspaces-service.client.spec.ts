@@ -620,6 +620,45 @@ describe('WorkspaceRuntime', () => {
     await vi.waitFor(() => { expect(aborted).toBe(true) })
   })
 
+  it('forwards human terminal RPC and SSE frames through the workspaces face', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const workspaces = new WorkspaceRuntime(ctx, api, new SessionRuntime(ctx, api, fakeRemote()))
+    const frames: string[] = []
+    api.host.terminalStream = vi.fn((_payload, _signal, onOpen) => {
+      onOpen?.()
+      return (async function* () {
+        yield {
+          rpcId: 'term-1' as never,
+          payload: { type: 'host/terminal-output' as const, text: 'ok' },
+        }
+      })()
+    })
+    await expect(workspaces.terminalProfiles()).resolves.toEqual({
+      profiles: [{ id: 'zsh', name: 'zsh' }],
+      defaultProfileId: 'zsh',
+    })
+    await expect(workspaces.terminalSpawn(wid('alpha'), 'zsh', '/w/alpha')).resolves.toEqual({
+      sessionId: 'fake-terminal-1',
+    })
+    await expect(workspaces.terminalList(wid('alpha'))).resolves.toEqual({ sessions: [] })
+    await expect(workspaces.terminalWrite(wid('alpha'), 'fake-terminal-1', 'ls\n')).resolves.toEqual({
+      written: true,
+    })
+    await expect(workspaces.terminalResize(wid('alpha'), 'fake-terminal-1', 80, 24)).resolves.toEqual({
+      resized: true,
+    })
+    workspaces.terminalStream(wid('alpha'), 'fake-terminal-1', (frame) => {
+      if (frame.type === 'host/terminal-output') frames.push(frame.text)
+    })
+    await vi.waitFor(() => { expect(frames).toEqual(['ok']) })
+    expect(api.callsOf('host.terminalSpawn')).toEqual([{
+      workspaceId: 'alpha',
+      profileId: 'zsh',
+      cwd: '/w/alpha',
+    }])
+  })
+
   it('passes workspace path mutations through the host wire', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()

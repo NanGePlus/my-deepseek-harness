@@ -16,7 +16,19 @@ const uncoveredLocationsReporter = fileURLToPath(new URL('./scripts/coverage-unc
 const monacoEditorStub = fileURLToPath(
   new URL('./packages/client/ui-file-editor/tests/monaco-editor.stub.ts', import.meta.url),
 )
+const xtermStub = fileURLToPath(
+  new URL('./packages/client/ui-terminal/tests/xterm.stub.ts', import.meta.url),
+)
+const xtermCssStub = fileURLToPath(
+  new URL('./packages/client/ui-terminal/tests/xterm-css.stub.ts', import.meta.url),
+)
 const monacoEditorAlias = { 'monaco-editor': monacoEditorStub } as const
+const xtermAlias = {
+  '@xterm/xterm': xtermStub,
+  '@xterm/addon-fit': xtermStub,
+  '@xterm/xterm/css/xterm.css': xtermCssStub,
+} as const
+const browserTestAlias = { ...monacoEditorAlias, ...xtermAlias } as const
 
 // Resolution facade shared by every plugin instance below: tsconfig.base.json
 // has no include, which vite-tsconfig-paths treats as match-all, so its paths
@@ -122,7 +134,7 @@ const processBoundTests = [
 
 export default defineConfig({
   plugins: [pathsPlugin(), standardDecoratorPlugin()],
-  resolve: { alias: monacoEditorAlias },
+  resolve: { alias: browserTestAlias },
   test: {
     setupFiles: ['./scripts/test-invariants.ts'],
     // .tsx: client component specs (jsdom via per-file @vitest-environment pragma).
@@ -133,7 +145,7 @@ export default defineConfig({
     projects: [
       {
         plugins: [pathsPlugin(), standardDecoratorPlugin()],
-        resolve: { alias: monacoEditorAlias },
+        resolve: { alias: browserTestAlias },
         test: {
           name: 'thread-safe',
           execArgv: vitestExecArgv,

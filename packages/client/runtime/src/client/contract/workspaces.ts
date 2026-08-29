@@ -11,6 +11,7 @@ import type {
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
   GitWorkingTreeResult, GitInitResult, GitLogResult, GitCommitDiffResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
+  TerminalProfilesResult, TerminalSpawnResult, TerminalListResult, TerminalStreamFrame,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceListState } from '../workspaces/service.ts'
 import type { ObservableSnapshot } from './store.ts'
@@ -352,6 +353,74 @@ export interface IWorkspaces {
     character: number,
     signal?: AbortSignal,
   ): Promise<LspHoverDocumentResult>
+  /**
+   * List selectable interactive shell profiles for human terminals.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  terminalProfiles(signal?: AbortSignal): Promise<TerminalProfilesResult>
+  /**
+   * Spawn one interactive human terminal session in a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the default cwd.
+   * @param profileId - optional shell profile; omitted uses the Host login shell.
+   * @param cwd - optional initial cwd; omitted uses the Workspace root.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  terminalSpawn(
+    workspaceId: WorkspaceId,
+    profileId?: string,
+    cwd?: string,
+    signal?: AbortSignal,
+  ): Promise<TerminalSpawnResult>
+  /**
+   * Write stdin bytes to one live human terminal session.
+   * @param workspaceId - Workspace that owns the session pool.
+   * @param sessionId - live session id from spawn or list.
+   * @param text - UTF-8 stdin payload.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  terminalWrite(
+    workspaceId: WorkspaceId,
+    sessionId: string,
+    text: string,
+    signal?: AbortSignal,
+  ): Promise<{ written: true }>
+  /**
+   * Resize one live human terminal session.
+   * @param workspaceId - Workspace that owns the session pool.
+   * @param sessionId - live session id from spawn or list.
+   * @param cols - terminal column count.
+   * @param rows - terminal row count.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  terminalResize(
+    workspaceId: WorkspaceId,
+    sessionId: string,
+    cols: number,
+    rows: number,
+    signal?: AbortSignal,
+  ): Promise<{ resized: true }>
+  /**
+   * List live human terminal sessions for one Workspace.
+   * @param workspaceId - Workspace whose session pool is queried.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  terminalList(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<TerminalListResult>
+  /**
+   * Subscribe to scrollback, incremental output, and title metadata for one
+   * human terminal session until `signal` aborts.
+   * @param workspaceId - Workspace that owns the session pool.
+   * @param sessionId - live session id from spawn or list.
+   * @param onFrame - invoked once per Host SSE frame.
+   * @param signal - aborts the stream and closes the subscription.
+   * @param onOpen - invoked once response headers are readable.
+   */
+  terminalStream(
+    workspaceId: WorkspaceId,
+    sessionId: string,
+    onFrame: (frame: TerminalStreamFrame) => void,
+    signal?: AbortSignal,
+    onOpen?: () => void,
+  ): void
   /**
    * Create one child directory through the Host's `browse` capability.
    * @param path - absolute existing parent directory.

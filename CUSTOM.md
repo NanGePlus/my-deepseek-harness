@@ -22,7 +22,7 @@
 ### 工具箱与壳层（details 栏，PR #28–29 及后续）
 - 产品文案：**详情栏 / 详情面板** 统一表述为 **工具箱**（`packages/client/ui-conversation` locales；Tab 内「工具详情」仍指 Tool 输出内容）
 - 会话头入口：**图标 +「工具箱」** capsule 按钮（与 Session log 同高 32px）；tooltip / `aria-label` 仍为「打开 / 收起工具箱」
-- 工具箱 segmented Tab：**资源管理器 | Git | 终端 | 工具详情**；Tab 条样式与对话区 **对话 / 轨迹** 一致（左对齐、13px、`state-business-primary` 选中下划线）；Git 段槽位 `conversation.details.git` 供 `ui-git` 注入；**终端** 段槽位 `conversation.details.terminal` 供 `ui-terminal` 注入（#77 起）；切走 Git / 终端 只隐藏不卸载；资源管理器段传入 `visible`，切回后重读文件树 Git 状态标记；`ui-conversation` 持有 dirty 路径只读集合（Explorer `setDirtyPaths` 写入，Git `dirtyPaths` 读取，不进 runtime 对象层）
+- 工具箱 segmented Tab：**资源管理器 | Git | 终端 | 工具详情**；Tab 条样式与对话区 **对话 / 轨迹** 一致（左对齐、13px、`state-business-primary` 选中下划线）；Git 段槽位 `conversation.details.git` 供 `ui-git` 注入；**终端** 段槽位 `conversation.details.terminal` 供 `@deepseek-ai/dsh-client-ui-terminal` 注入（#77 起）：按 **workspaceId** 持久 Tab 与选中项（不进 Session 日志）；首次进入且无 Tab 时自动 spawn 默认 Shell；xterm 键盘输入 / resize / Harness light/dark 主题；未绑定 Workspace 时整页空态「无法使用终端」且不可 spawn；切走 **终端** 段只隐藏、不 Kill Host PTY
 - **Git 面板变更列表**：段标题可收起/展开（左侧 chevron）；右侧显示文件数量；段头「全部选入/全部移出」与单行操作不变；未暂存按内容高度撑开，「待提交」跟在其后，在 Changes body 内滚动
 - **Git 面板 Graph**：待提交下方可折叠提交历史（主干 + 合入弧、分页 50）；每一行说明紧挨该行最右侧的点或线；引用胶囊 14px、长名省略，有引用时放在说明下一行靠右；悬停固定定位详情卡（完整引用、作者、相对/绝对时间、说明、正文、短 hash）；Changes 打开时钉在操作列底部；**单击某一提交在右栏列出该提交相对第一父提交的文件**（只读文件头默认折叠，展开后才渲染该文件差异；最多 80 个文件）；进入面板或重读 Graph 不自动打开最新提交，右栏只保留用户上次点开的工作区文件或 Graph 提交（切走 Git Tab 因 occupant 仍挂载而恢复；整页刷新从空预览开始）；切回 Git Tab 时 Graph 与右栏保持已展示内容，后台重读不换成 loading
 - **Git 面板 Changes / Graph**：操作列两个同级可折叠组；**CHANGES** / **GRAPH** 段头 13px 加粗全大写；**CHANGES** 标题右侧显示未暂存加待提交行数（干净仓库为 0），与 GRAPH 已加载提交数同一套灰色数字；Changes 打开时 Graph 钉在底部（上限约半高）；Changes body（分支、提交区、两段变更列表）与 Graph 列表相对文件夹标题缩进 14px
@@ -91,6 +91,7 @@
 |------|------|------|------|
 | `@deepseek-ai/dsh-client-ui-file-editor` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-file-editor` | 工具箱内文件编辑器 surface | 2026-08 |
 | `@deepseek-ai/dsh-client-ui-git` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-git` | 工具箱 Git 面板：仓库绑定、两段列表、空态、刷新与初始化；整文件暂存 / 取消暂存 / 丢弃（须确认）/ 提交；提交说明草稿按 Session；单击行在面板内差异预览；单击 Graph 提交在右栏只读多文件差异（文件头默认折叠；不自动打开最新提交）；已跟踪文本可按块暂存 / 取消暂存 / 丢弃；Git 操作守卫拦住 dirty 路径的暂存 / 丢弃 / 提交，取消暂存不受限；无 remote 时可添加 `origin` | 2026-08 |
+| `@deepseek-ai/dsh-client-ui-terminal` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-terminal` | 工具箱 **终端** 段：Workspace 级 Tab store、自动 spawn、xterm 画布、未绑定空态、SSE 连接 loading；多 Tab / Shell 下拉 / Kill 留给 #78 | 2026-08 |
 | `@deepseek-ai/dsh-lsp-editor` | Host 面新包 + apiproxy 接线 | 编辑器 LSP 文档 sync / hover / close | 2026-08 |
 
 ## 我改过的官方文件（尽量为空）
@@ -100,17 +101,19 @@
 | `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat；**2026-08-23** 保存/外部变更后文件树自动刷新；**2026-08-25** 资源管理器 `visible` 切回后重读 Git 徽章；**2026-08-25** 经 `setDirtyPaths` 发布 dirty Tab 路径供 Git 操作守卫；**2026-08-26** 编辑区 scroll-reveal 滚动条对齐会话区；**2026-08-26** Git 徽章上卷到未跟踪目录的祖先文件夹；**2026-08-26** 非 Markdown 编辑画布与 Markdown 同用 `bg-base`；**2026-08-26** listing 超时显示 **!** 而非卡住 spinner；**2026-08-28** 树空白点击回到根、拖拽移动 | 2026-08 |
 | `packages/client/connection/` | **2026-08-26** `host.watchPath` 浏览器下行改 WebSocket，避免 HTTP/1.1 六连接占满后文件树 listing 排队超时 | 2026-08 |
 | `packages/client/ui-git/` | **新包**：工具箱 Git 面板 occupant（绑定 Workspace、两段变更列表、四种空态、初始化）；**2026-08-25** 整文件暂存 / 取消暂存 / 丢弃确认 / 提交与按 Session 草稿；**2026-08-25** 单击行差异预览与按块暂存 / 取消暂存 / 丢弃；**2026-08-25** Git 操作守卫；**2026-08-25** 左侧操作区与差异预览分栏；**2026-08-25** 差异预览 VS Code 化；**2026-08-26** 提交区 UX（单行自动增高、可空说明、split 提交按钮）；**2026-08-26** 图标 tooltip / discard 尺寸；**2026-08-27** 未暂存长列表不再与「待提交」叠层；**2026-08-27** 未推送文案与 **推送** 放在分支名下一行，无未推送时隐藏；**2026-08-27** 选入/移出/撤销不再闪提交按钮；**2026-08-27** 待提交下方 Graph（主干 + 节点到节点合入弧、侧道换色、`origin/` 橙色胶囊）；**2026-08-27** Graph 每页 50 条，列表滚到底部继续加载直至全部；**2026-08-27** Graph 引用胶囊收窄省略，有引用时放在说明下一行靠右，悬停打开提交详情卡；**2026-08-27** Changes 与 Graph 同级可折叠，Changes 包住分支/提交/两段列表；**2026-08-27** CHANGES/GRAPH 全大写加粗，Graph 钉底，Changes body 与 Graph 列表缩进 14px；**2026-08-27** Graph 每行说明紧挨该行点或线；**2026-08-27** 单击 Graph 提交在右栏只读多文件差异；**2026-08-28** Graph 提交文件头默认折叠，展开后才渲染该文件预览；**2026-08-28** 进入面板 / 重读 Graph 不自动打开最新提交；**2026-08-28** 切回 Git Tab 时 Graph 与右栏不闪 loading；**2026-08-27** 提交/推送确认框贴触发按钮右下角并加描边阴影；**2026-08-27** CHANGES 段头右侧显示未暂存加待提交行数；**2026-08-27** 无 remote 时提交/推送显示「没有配置远程仓库地址」；**2026-08-27** 无 remote 时分支下行 **添加远程地址**；已有 `origin` 时显示 URL 与 **删除远程地址**；**2026-08-28** 无 HEAD 时添加 origin 不显示尚未推送到远程；**2026-08-28** 推送非快进拒绝显示「远程已有提交，无法快进推送」 | 2026-08 |
+| `packages/subprocess/subprocess-local/` | **2026-08-29** `LocalTerminalHandle` / `LinuxProcessInspector` / `PosixProcessInspector` 构造函数改为显式字段赋值，兼容 Node strip-only 加载 terminal 依赖链（web e2e） | 2026-08 |
+| `packages/client/ui-terminal/` | **新包**（#77）：`conversation.details.terminal` occupant；Workspace 级 Tab store；`host.terminal*` 经 `WorkspaceRuntime` 转发；xterm.js 画布 + 自动 spawn + 未绑定空态 + loading | 2026-08 |
 | `packages/client/ui-primitives/` | **2026-08-25** 导出 `highlightLines` / `subscribeGrammarLoaded` / `HighlightSpan` 供 Git 差异预览复用 shiki 高亮；**2026-08-26** 新增 `IconDiscardOutline16`（撤销工作区更改，非 refresh） | 2026-08 |
 | `packages/client/web/` | **2026-08-25** seed 显式 pin `highlightLines` / `grammarLoadCount` / `subscribeGrammarLoaded`，供 Git 差异预览等平台插件消费 | 2026-08 |
-| `packages/client/runtime/` | `WorkspaceRuntime` 转发新 Host RPC；**2026-08-25** 转发 Git 面板只读 RPC；**2026-08-25** 转发 Git 面板写 RPC；**2026-08-27** `gitLog` 转发 `limit`/`skip` 与 `hasMore`；**2026-08-27** `gitCommitDiff`；**2026-08-27** `gitAddRemote`；**2026-08-27** `gitRemoveRemote`；**2026-08-28** `movePath` | 2026-08 |
+| `packages/client/runtime/` | `WorkspaceRuntime` 转发新 Host RPC；**2026-08-25** 转发 Git 面板只读 RPC；**2026-08-25** 转发 Git 面板写 RPC；**2026-08-27** `gitLog` 转发 `limit`/`skip` 与 `hasMore`；**2026-08-27** `gitCommitDiff`；**2026-08-27** `gitAddRemote`；**2026-08-27** `gitRemoveRemote`；**2026-08-28** `movePath`；**2026-08-29** 转发 `host.terminal*`（profiles/spawn/write/resize/list/stream） | 2026-08 |
 | `packages/client/ui-primitives/` | Mermaid 块、ZoomPanLightbox、Markdown 图片 | 2026-08 |
 | `packages/client/ui-tool/` | Tool 行 selection → details 跳转 | 2026-08 |
 | `packages/client/ui-layout/` | 工具箱栏宽度 / AppFrame 微调 | 2026-08 |
 | `packages/lsp/lsp-editor/` | **新包**：编辑器 LSP 类型与接线 | 2026-08 |
 | `packages/lsp/lsp-stdio/` | 编辑器实例诊断推送 | 2026-08 |
-| `packages/bundle/web-app/cordis.patch.yml` | 注册 ui-file-editor、ui-git 与 LSP 相关插件 | 2026-08 |
-| `tsconfig.base.json` | 为 `ui-file-editor` / `ui-git` 增加 source-plane `paths`（tsx 启动不依赖 built `lib/`） | 2026-08 |
-| `apps/web/` | Vite 构建含 Monaco workers / material icons 同步 | 2026-08 |
+| `packages/bundle/web-app/cordis.patch.yml` | 注册 ui-file-editor、ui-git、ui-terminal 与 LSP 相关插件 | 2026-08 |
+| `tsconfig.base.json` | 为 `ui-file-editor` / `ui-git` / `ui-terminal` 增加 source-plane `paths`（tsx 启动不依赖 built `lib/`） | 2026-08 |
+| `apps/web/` | Vite 构建含 Monaco workers / material icons 同步；**2026-08-29** 浏览器快照 `terminal-default.expected.md` 与 shell profile 名 `{{shell-profile}}` 归一化 | 2026-08 |
 | `CONTEXT.md`、`docs/adr/0001–0002`、`docs/prd/file-editor-v1.md` | 文件编辑器 V1 领域与 PRD | 2026-08 |
 | `CONTEXT.md`、`docs/adr/0005–0006`、`docs/prd/terminal-v3.md` | 人类终端 V3 领域、PRD 与 ADR（`feat/v3`） | 2026-08-29 |
 | `AGENTS.md`（Agent skills 块） | Issue 跟踪 / triage / domain / wiki 工作流说明 | 2026-08 |
@@ -270,4 +273,5 @@
 | 2026-08-29 | 发布人类终端 V3 Issue | 父 PRD [#73](https://github.com/NanGePlus/my-deepseek-harness/issues/73)；#74 `#D-global`；#75 Host terminal RPC；#76 app-shell 四段 Tab；#77–#80 `human-terminal` 四刀；#81 改盘刷新协调 |
 | 2026-08-29 | Issue #75 Host terminal RPC | 分支 `issue/75-host-terminal-rpc`：`host.terminalProfiles/Spawn/Write/Resize/Kill/List/Stream`；Workspace 级 PTY 池 + SSE scrollback/title；集成测试 `api-proxy-terminal.spec.ts` |
 | 2026-08-29 | Issue #76 工具箱四段 Tab | 分支 `issue/76-app-shell-terminal-tab`：`DetailsPanel` 扩为 **资源管理器 | Git | 终端 | 工具详情**；声明 `conversation.details.terminal` 槽位；Git Tab 文案对齐 PRD 为「Git」；浏览器快照 `tabs.expected.md` 更新 |
+| 2026-08-29 | Issue #77 人类终端最小通路 | 分支 `issue/77-ui-terminal`：新包 `@deepseek-ai/dsh-client-ui-terminal`；`WorkspaceRuntime` 转发 `host.terminal*`；自动 spawn + xterm + 未绑定空态；浏览器快照 `terminal-default.expected.md`；`subprocess-local` 去除构造函数参数属性以修复 web e2e 源码加载 |
 | 2026-08-29 | 从最新 `origin/custom/main` 创建分支 `issue/74-d-global-human-terminal-design-close` | Issue [#74](https://github.com/NanGePlus/my-deepseek-harness/issues/74) `#D-global` 验收关闭；人类终端消费既有品牌板，不新增 §5 原语 |

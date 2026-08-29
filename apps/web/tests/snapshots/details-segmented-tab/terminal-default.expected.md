@@ -1,0 +1,4 @@
+- tablist "Terminal tab":
+  - tab "{{shell-profile}}" [selected]
+- tabpanel "Terminal output":
+  - textbox "Terminal input"

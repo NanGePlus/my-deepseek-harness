@@ -71,6 +71,8 @@ export type {
   WorkspaceEntry, WorkspaceEntriesListing, WorkspaceId, WorkspaceView,
   FileReadKind, FileTextRead, FileBytesRead, FileReadResult, FileWriteResult, PathMutationResult,
   HostLspDiagnostic, LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult, HostLspHover,
+  TerminalShellProfile, TerminalProfilesResult, TerminalSpawnResult,
+  TerminalSessionSummary, TerminalListResult, TerminalStreamFrame,
 } from '@deepseek-ai/dsh-client-connection/client'
 // Runtime owns the snapshot store; web-react only binds it to React.
 export { createSnapshotStore, defineStore, shallowEqual } from './contract/store.ts'

@@ -17,6 +17,8 @@ export type {
   HostLspDiagnostic, HostLspPosition, HostLspRange, LspSyncDocumentResult, LspCloseDocumentResult,
   HostLspHover, LspHoverDocumentResult,
   WatchPathFrame,
+  TerminalShellProfile, TerminalProfilesResult, TerminalSpawnResult,
+  TerminalSessionSummary, TerminalListResult, TerminalStreamFrame,
   ResponseValue, WorkspaceApi, WorkspaceId, WorkspaceView,
   SkillsApi, SkillEntry,
   ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,

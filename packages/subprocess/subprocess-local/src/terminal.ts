@@ -37,6 +37,9 @@ export class LocalTerminalHandle implements SubprocessTerminalHandle {
   readonly output = new PassThrough()
   readonly done: Promise<SubprocessOutcome>
 
+  private readonly terminal: IPty
+  private readonly inspector: ProcessInspector
+  private readonly graceMs: number
   private readonly outcome = Promise.withResolvers<SubprocessOutcome>()
   private readonly dataDisposable: IDisposable
   private readonly exitDisposable: IDisposable
@@ -52,10 +55,13 @@ export class LocalTerminalHandle implements SubprocessTerminalHandle {
    * @param graceMs - TERM-to-KILL and exit-wait grace.
    */
   constructor(
-    private readonly terminal: IPty,
-    private readonly inspector: ProcessInspector,
-    private readonly graceMs: number,
+    terminal: IPty,
+    inspector: ProcessInspector,
+    graceMs: number,
   ) {
+    this.terminal = terminal
+    this.inspector = inspector
+    this.graceMs = graceMs
     this.pid = terminal.pid
     this.rootIdentity = inspector.processTree(this.pid).find(member => member.pid === this.pid)
     this.done = this.outcome.promise

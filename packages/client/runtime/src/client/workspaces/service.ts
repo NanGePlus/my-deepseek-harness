@@ -7,6 +7,7 @@ import type {
   FileReadKind, FileReadResult, FileWriteResult, PathMutationResult,
   GitWorkingTreeResult, GitInitResult, GitLogResult, GitCommitDiffResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
+  TerminalProfilesResult, TerminalSpawnResult, TerminalListResult, TerminalStreamFrame,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '../contract/store.ts'
 import { createSnapshotStore } from '../contract/store.ts'
@@ -670,6 +671,120 @@ export class WorkspaceRuntime implements IWorkspaces {
     }, signal)
     if (!response.result.ok) throw new Error(`LSP hover failed: ${response.result.error.message}`)
     return response.result.value
+  }
+
+  /**
+   * List selectable interactive shell profiles for human terminals.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  async terminalProfiles(signal?: AbortSignal): Promise<TerminalProfilesResult> {
+    const response = await this.api.host.terminalProfiles({}, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Spawn one interactive human terminal session in a registered Workspace.
+   * @param workspaceId - Workspace whose root bounds the default cwd.
+   * @param profileId - optional shell profile; omitted uses the Host login shell.
+   * @param cwd - optional initial cwd; omitted uses the Workspace root.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  async terminalSpawn(
+    workspaceId: WorkspaceId,
+    profileId?: string,
+    cwd?: string,
+    signal?: AbortSignal,
+  ): Promise<TerminalSpawnResult> {
+    const payload = {
+      workspaceId,
+      ...(profileId !== undefined ? { profileId } : {}),
+      ...(cwd !== undefined ? { cwd } : {}),
+    }
+    const response = await this.api.host.terminalSpawn(payload, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Write stdin bytes to one live human terminal session.
+   * @param workspaceId - Workspace that owns the session pool.
+   * @param sessionId - live session id from spawn or list.
+   * @param text - UTF-8 stdin payload.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  async terminalWrite(
+    workspaceId: WorkspaceId,
+    sessionId: string,
+    text: string,
+    signal?: AbortSignal,
+  ): Promise<{ written: true }> {
+    const response = await this.api.host.terminalWrite({ workspaceId, sessionId, text }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Resize one live human terminal session.
+   * @param workspaceId - Workspace that owns the session pool.
+   * @param sessionId - live session id from spawn or list.
+   * @param cols - terminal column count.
+   * @param rows - terminal row count.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  async terminalResize(
+    workspaceId: WorkspaceId,
+    sessionId: string,
+    cols: number,
+    rows: number,
+    signal?: AbortSignal,
+  ): Promise<{ resized: true }> {
+    const response = await this.api.host.terminalResize({ workspaceId, sessionId, cols, rows }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * List live human terminal sessions for one Workspace.
+   * @param workspaceId - Workspace whose session pool is queried.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  async terminalList(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<TerminalListResult> {
+    const response = await this.api.host.terminalList({ workspaceId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
+   * Subscribe to scrollback, incremental output, and title metadata for one
+   * human terminal session until `signal` aborts.
+   * @param workspaceId - Workspace that owns the session pool.
+   * @param sessionId - live session id from spawn or list.
+   * @param onFrame - invoked once per Host SSE frame.
+   * @param signal - aborts the stream and closes the subscription.
+   * @param onOpen - invoked once response headers are readable.
+   */
+  terminalStream(
+    workspaceId: WorkspaceId,
+    sessionId: string,
+    onFrame: (frame: TerminalStreamFrame) => void,
+    signal?: AbortSignal,
+    onOpen?: () => void,
+  ): void {
+    const lifetime = signal ?? new AbortController().signal
+    void (async () => {
+      try {
+        for await (const frame of this.api.host.terminalStream({ workspaceId, sessionId }, lifetime, onOpen)) {
+          if (lifetime.aborted) return
+          onFrame(frame.payload)
+        }
+      } catch (error: unknown) {
+        void error
+      }
+    })()
   }
 
   /**

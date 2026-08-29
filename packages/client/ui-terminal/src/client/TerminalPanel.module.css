@@ -1,0 +1,150 @@
+.root {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-base);
+}
+
+.overlay {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.emptyCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 240px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-overlay);
+  text-align: center;
+}
+
+.emptyIcon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  color: var(--dsw-alias-label-caption);
+}
+
+.emptyTitle {
+  font-family: var(--dsw-font-family);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.emptyBody {
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.tabBar {
+  display: flex;
+  flex: none;
+  height: 32px;
+  min-width: 0;
+  align-items: stretch;
+  border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 40%, transparent);
+}
+
+.tablist {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tablist::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  flex: none;
+  max-width: 180px;
+  height: 32px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tabActive {
+  border-bottom-color: var(--editor-tab-active-line);
+}
+
+.tabTitle {
+  overflow: hidden;
+  font-family: var(--dsw-font-family);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.viewportHost {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  background: var(--dsw-alias-markdown-code-block);
+}
+
+.loadingOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--dsw-alias-markdown-code-block) 88%, transparent);
+}
+
+.spinner {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  color: var(--dsw-alias-label-caption);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loadingCopy {
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.hidden {
+  display: none;
+}

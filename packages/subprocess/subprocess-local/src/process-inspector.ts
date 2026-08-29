@@ -227,7 +227,11 @@ function syscallWaitsOnStdin(
 }
 
 abstract class PosixProcessInspector implements ProcessInspector {
-  constructor(protected readonly internals: ProcessInspectorInternals) {}
+  protected readonly internals: ProcessInspectorInternals
+
+  constructor(internals: ProcessInspectorInternals) {
+    this.internals = internals
+  }
 
   abstract foregroundPgid(shellPid: number): number | undefined
   abstract isStdinWaiting(pgid: number): boolean
@@ -271,11 +275,14 @@ function processTree(entries: ProcessTreeEntry[], rootPid: number): ProcessIdent
 }
 
 class LinuxProcessInspector extends PosixProcessInspector {
+  private readonly arch: NodeJS.Architecture
+
   constructor(
-    private readonly arch: NodeJS.Architecture,
+    arch: NodeJS.Architecture,
     internals: ProcessInspectorInternals,
   ) {
     super(internals)
+    this.arch = arch
   }
 
   foregroundPgid(shellPid: number): number | undefined {
