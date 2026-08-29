@@ -103,6 +103,9 @@
     },
     {
       "path": "../../util/native-command"
+    },
+    {
+      "path": "../../subprocess/subprocess-local"
     }
   ]
 }

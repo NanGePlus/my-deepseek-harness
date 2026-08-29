@@ -47,7 +47,7 @@ export type {
   ModelReasoningEffort, ModelSelection, PromptContentPart, QueueAction, SessionModels,
   SessionListMetadata, SessionProjectionsBlock, SessionSearchItem, SessionsApi, SessionSummary,
 } from './sessions.ts'
-export type { DirectoryEntry, DirectoryListing, GitStatusEntry, GitStatusListing, GitWorkingTreeChange, GitWorkingTreeChangeKind, GitWorkingTreeResult, GitInitResult, GitLogEntry, GitLogResult, GitCommitDiffFile, GitCommitDiffFileStatus, GitCommitDiffResult, GitDiffSide, GitDiffLine, GitDiffHunk, GitDiffPreview, HostApi, WorkspaceEntry, WorkspaceEntriesListing, FileReadKind, FileTextRead, FileBytesRead, FileReadResult, FileWriteResult, PathMutationResult, WatchPathFrame, HostLspDiagnostic, HostLspPosition, HostLspRange, LspSyncDocumentResult, LspCloseDocumentResult, HostLspHover, LspHoverDocumentResult } from './host.ts'
+export type { DirectoryEntry, DirectoryListing, GitStatusEntry, GitStatusListing, GitWorkingTreeChange, GitWorkingTreeChangeKind, GitWorkingTreeResult, GitInitResult, GitLogEntry, GitLogResult, GitCommitDiffFile, GitCommitDiffFileStatus, GitCommitDiffResult, GitDiffSide, GitDiffLine, GitDiffHunk, GitDiffPreview, HostApi, WorkspaceEntry, WorkspaceEntriesListing, FileReadKind, FileTextRead, FileBytesRead, FileReadResult, FileWriteResult, PathMutationResult, WatchPathFrame, TerminalShellProfile, TerminalProfilesResult, TerminalSpawnResult, TerminalSessionSummary, TerminalListResult, TerminalStreamFrame, HostLspDiagnostic, HostLspPosition, HostLspRange, LspSyncDocumentResult, LspCloseDocumentResult, HostLspHover, LspHoverDocumentResult } from './host.ts'
 export type {
   SubagentAddress, SubagentCatalog, SubagentInterruptReceipt, SubagentListEntry,
   SubagentPromptReceipt, SubagentsApi,

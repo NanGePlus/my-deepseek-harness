@@ -110,6 +110,10 @@ export interface RpcErrorDetailsMap {
   'subagent-delivery-unavailable': { childSessionId: SessionId }
   'lsp-unavailable': {}
   'lsp-error': { lspCode: string }
+  /** The host cannot spawn an interactive human terminal PTY. */
+  'terminal-unavailable': { workspaceId?: string }
+  /** The requested human terminal session id is absent for the Workspace. */
+  'terminal-session-not-found': { workspaceId: string; sessionId: string }
   /** The host has no git executable on PATH. */
   'git-unavailable': {}
   /** Git is available and an ancestor of the bound Workspace is already a repository. */

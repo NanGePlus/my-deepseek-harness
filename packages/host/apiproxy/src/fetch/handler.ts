@@ -8,7 +8,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { z } from 'zod'
-import type { ApiProxy, MuxFrame, HostFrame, WatchPathFrame } from '../api/index.ts'
+import type { ApiProxy, MuxFrame, HostFrame, WatchPathFrame, TerminalStreamFrame } from '../api/index.ts'
 import { sessionLogQuerySchema } from '../api/downloads.schema.ts'
 import type { RequestPayload, ResponseValue, RpcMethodMap } from '../api/rpc-map.ts'
 import type { ClientRequest, RpcError, RpcRequest, RpcResponse, ServerRequest, ServerResponse } from '../api/rpc.ts'
@@ -57,6 +57,13 @@ import {
   hostMovePathRequestSchema,
   hostCreateWorkspaceDirectoryRequestSchema,
   hostWatchPathQuerySchema,
+  hostTerminalProfilesRequestSchema,
+  hostTerminalSpawnRequestSchema,
+  hostTerminalWriteRequestSchema,
+  hostTerminalResizeRequestSchema,
+  hostTerminalKillRequestSchema,
+  hostTerminalListRequestSchema,
+  hostTerminalStreamQuerySchema,
 } from '../api/host.schema.ts'
 import {
   workspaceArchiveSessionRequestSchema,
@@ -156,6 +163,12 @@ const UNARY_ROUTES: UnaryRoutes = {
   'host.lspSyncDocument': { schema: hostLspSyncDocumentRequestSchema, invoke: (api, r, signal) => api.host.lspSyncDocument(r, signal) },
   'host.lspCloseDocument': { schema: hostLspCloseDocumentRequestSchema, invoke: (api, r, signal) => api.host.lspCloseDocument(r, signal) },
   'host.lspHoverDocument': { schema: hostLspHoverDocumentRequestSchema, invoke: (api, r, signal) => api.host.lspHoverDocument(r, signal) },
+  'host.terminalProfiles': { schema: hostTerminalProfilesRequestSchema, invoke: (api, r, signal) => api.host.terminalProfiles(r, signal) },
+  'host.terminalSpawn': { schema: hostTerminalSpawnRequestSchema, invoke: (api, r, signal) => api.host.terminalSpawn(r, signal) },
+  'host.terminalWrite': { schema: hostTerminalWriteRequestSchema, invoke: (api, r, signal) => api.host.terminalWrite(r, signal) },
+  'host.terminalResize': { schema: hostTerminalResizeRequestSchema, invoke: (api, r, signal) => api.host.terminalResize(r, signal) },
+  'host.terminalKill': { schema: hostTerminalKillRequestSchema, invoke: (api, r, signal) => api.host.terminalKill(r, signal) },
+  'host.terminalList': { schema: hostTerminalListRequestSchema, invoke: (api, r, signal) => api.host.terminalList(r, signal) },
   'workspace.list': { schema: workspaceListRequestSchema, invoke: (api, r) => api.workspace.list(r) },
   'workspace.create': { schema: workspaceCreateRequestSchema, invoke: (api, r) => api.workspace.create(r) },
   'workspace.rename': { schema: workspaceRenameRequestSchema, invoke: (api, r) => api.workspace.rename(r) },
@@ -238,7 +251,7 @@ async function handleUnary<K extends keyof RpcMethodMap>(
 }
 
 /** SSE frame: complete the narrow RpcRequest<frame> into a ServerRequest full form (method = frame type). */
-function fullFrame(narrow: RpcRequest<MuxFrame | HostFrame | WatchPathFrame>): ServerRequest {
+function fullFrame(narrow: RpcRequest<MuxFrame | HostFrame | WatchPathFrame | TerminalStreamFrame>): ServerRequest {
   return { type: 'server-request', rpcId: narrow.rpcId, method: narrow.payload.type, payload: narrow.payload }
 }
 
@@ -246,7 +259,7 @@ function fullFrame(narrow: RpcRequest<MuxFrame | HostFrame | WatchPathFrame>): S
  * Wrap a frame stream as an SSE Response; stops when req.signal aborts. An
  * impl throw mid-stream emits one stream/error frame and then closes.
  */
-function sseResponse(frames: AsyncIterable<RpcRequest<MuxFrame | HostFrame | WatchPathFrame>>): Response {
+function sseResponse(frames: AsyncIterable<RpcRequest<MuxFrame | HostFrame | WatchPathFrame | TerminalStreamFrame>>): Response {
   const encoder = new TextEncoder()
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -262,7 +275,7 @@ function sseResponse(frames: AsyncIterable<RpcRequest<MuxFrame | HostFrame | Wat
         // Mid-stream impl failure → one stream/error frame, then close: the client must see
         // the failure instead of a silent end (which reads as a normal disconnect). A fresh
         // rpcId is minted — this is a server-initiated push like any other frame.
-        const failure: MuxFrame | HostFrame | WatchPathFrame = { type: 'stream/error', error: { code: 'internal', message: String(error), details: {} } }
+        const failure: MuxFrame | HostFrame | WatchPathFrame | TerminalStreamFrame = { type: 'stream/error', error: { code: 'internal', message: String(error), details: {} } }
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(fullFrame({ rpcId: RpcId(randomUUID()), payload: failure }))}\n\n`))
         } catch {
@@ -309,6 +322,13 @@ export function toFetchHandler(api: ApiProxy): { fetch: typeof fetch } {
           return new Response('missing or invalid workspaceId or path query parameter', { status: 400 })
         }
         return sseResponse(api.host.watchPath({ rpcId: RpcId(randomUUID()), payload: parsed.data }, req.signal))
+      }
+      if (path === '/api/host.terminalStream' && req.method === 'GET') {
+        const parsed = hostTerminalStreamQuerySchema.safeParse(Object.fromEntries(url.searchParams))
+        if (!parsed.success) {
+          return new Response('missing or invalid workspaceId or sessionId query parameter', { status: 400 })
+        }
+        return sseResponse(api.host.terminalStream({ rpcId: RpcId(randomUUID()), payload: parsed.data }, req.signal))
       }
       if (path === '/api/session.export' && (req.method === 'GET' || req.method === 'HEAD')) {
         // Query params are a different boundary from the POST envelope, but

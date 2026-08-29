@@ -104,6 +104,13 @@ function scriptedApi(overrides: {
       lspSyncDocument: r => ok(r, { diagnostics: [] }),
       lspCloseDocument: r => ok(r, { closed: true as const }),
       lspHoverDocument: r => ok(r, { hover: null }),
+      terminalProfiles: r => ok(r, { profiles: [{ id: 'zsh', name: 'zsh' }], defaultProfileId: 'zsh' }),
+      terminalSpawn: r => ok(r, { sessionId: 'term-1' }),
+      terminalWrite: r => ok(r, { written: true as const }),
+      terminalResize: r => ok(r, { resized: true as const }),
+      terminalKill: r => ok(r, { killed: true as const }),
+      terminalList: r => ok(r, { sessions: [] }),
+      terminalStream: () => (async function* () {})(),
       ...overrides.host,
     },
     workspace: {
