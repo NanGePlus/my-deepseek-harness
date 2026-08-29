@@ -470,7 +470,8 @@ function CommitSplitButton({ t, disabled, onAskCommit }: {
  * @returns the Git panel surface.
  */
 export function GitPanel({
-  t, visible, dirtyPaths, notifyDiskPathsChanged, useSessions, useWorkspaces, useStore, actions,
+  t, visible, dirtyPaths, notifyDiskPathsChanged, segmentDiskRefreshEpoch = 0,
+  useSessions, useWorkspaces, useStore, actions,
   gitWorkingTree, gitInit, gitDiffPreview, gitStage, gitUnstage, gitDiscard, gitCommit, gitPush,
   gitAddRemote, gitRemoveRemote, gitLog, gitCommitDiff,
 }: GitPanelProps) {
@@ -576,6 +577,11 @@ export function GitPanel({
     setPreview({ kind: 'idle' })
     setCommitDiff({ kind: 'idle' })
   }, [workspaceId])
+
+  useEffect(() => {
+    if (segmentDiskRefreshEpoch === 0) return
+    setReloadEpoch(epoch => epoch + 1)
+  }, [segmentDiskRefreshEpoch])
 
   useEffect(() => {
     if (!visible || workspaceId === undefined) return

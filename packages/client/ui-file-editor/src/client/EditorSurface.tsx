@@ -214,7 +214,7 @@ const DARK_ATTRIBUTE = 'data-ds-dark-theme'
  */
 export function EditorSurface({
   t, visible = true, setDirtyPaths, diskPathsChangedEpoch = 0, diskPathsChanged = [],
-  diskPathsChangedReload = true,
+  diskPathsChangedReload = true, segmentDiskRefreshEpoch = 0,
   useSessions, useWorkspaces, useStore, actions, dirtyGuard,
   listWorkspaceEntries, gitStatus, readFile, writeFile,
   deletePath, renamePath, movePath, createWorkspaceDirectory, watchPath,
@@ -644,6 +644,14 @@ export function EditorSurface({
       for (const path of paths) gitReloadingPathsRef.current.delete(path)
     }
   }, [workspace, readFile, editorActions])
+
+  useEffect(() => {
+    if (segmentDiskRefreshEpoch === 0) return
+    bumpGitRefresh()
+    for (const tab of tabsRef.current) {
+      if (tab.kind === 'text') void syncOpenTabFromDisk(tab.path)
+    }
+  }, [segmentDiskRefreshEpoch, bumpGitRefresh, syncOpenTabFromDisk])
 
   useEffect(() => {
     if (workspace === undefined) return
