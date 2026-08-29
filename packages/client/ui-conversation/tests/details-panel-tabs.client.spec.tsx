@@ -8,7 +8,9 @@ import {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ConversationSnapshot, SessionId, SessionListState, WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionProviderComponent } from '@deepseek-ai/dsh-client-ui-slots'
-import type { DetailsEditorOwnerProps, DetailsGitOwnerProps, DetailsSlotProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {
+  DetailsEditorOwnerProps, DetailsGitOwnerProps, DetailsSlotProps, DetailsTerminalOwnerProps,
+} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import {
@@ -83,6 +85,12 @@ function bench(overrides?: Partial<Pick<DetailsSlotProps, 'renderSlot'>>) {
         </div>
       )
     }
+    if (key === 'conversation.details.terminal') {
+      const terminalOwner = owner as unknown as DetailsTerminalOwnerProps
+      return (
+        <div data-testid="terminal-seat" data-visible={String(terminalOwner.visible)} />
+      )
+    }
     return null
   })
   const view = render(
@@ -126,14 +134,16 @@ describe('DetailsPanel segmented tabs', () => {
     expect(openDetails).not.toHaveBeenCalled()
   })
 
-  it('default: shows 资源管理器 | Git | 工具详情 with the editor selected', () => {
+  it('default: shows 资源管理器 | Git | 终端 | 工具详情 with the editor selected', () => {
     const { view } = bench()
-    expect(tabLabels(view)).toEqual(['资源管理器', 'Git面板', '工具详情'])
+    expect(tabLabels(view)).toEqual(['资源管理器', 'Git', '终端', '工具详情'])
     expect(selectedTab(view)).toBe('资源管理器')
     expect(view.getByTestId('editor-surface-seat').getAttribute('data-visible')).toBe('true')
     expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('false')
+    expect(view.getByTestId('terminal-seat').getAttribute('data-visible')).toBe('false')
     expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('true')
     expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('true')
+    expect(panels(view)[3]!.getAttribute('aria-hidden')).toBe('true')
   })
 
   it('tab-selected: selecting 资源管理器 keeps the editor surface visible', () => {
@@ -150,15 +160,39 @@ describe('DetailsPanel segmented tabs', () => {
   it('tab-selected: selecting Git shows only the Git panel and opens the toolbox', () => {
     const { view, chat, openDetails } = bench()
     expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('false')
-    fireEvent.click(view.getByRole('tab', { name: 'Git面板' }))
+    fireEvent.click(view.getByRole('tab', { name: 'Git' }))
     expect(chat.store.getSnapshot().detailsTab).toBe('git')
     expect(openDetails).toHaveBeenCalledTimes(1)
-    expect(selectedTab(view)).toBe('Git面板')
+    expect(selectedTab(view)).toBe('Git')
     expect(view.getByTestId('git-panel-seat')).toBeTruthy()
     expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('true')
     expect(view.getByTestId('editor-surface-seat').getAttribute('data-visible')).toBe('false')
+    expect(view.getByTestId('terminal-seat').getAttribute('data-visible')).toBe('false')
     expect(panels(view)[0]!.getAttribute('aria-hidden')).toBe('true')
     expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('false')
+    expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('true')
+    expect(panels(view)[3]!.getAttribute('aria-hidden')).toBe('true')
+  })
+
+  it('tab-selected-terminal: selecting 终端 renders the human-terminal seat', () => {
+    const { view, chat, openDetails } = bench()
+    fireEvent.click(view.getByRole('tab', { name: '终端' }))
+    expect(chat.store.getSnapshot().detailsTab).toBe('terminal')
+    expect(openDetails).toHaveBeenCalledTimes(1)
+    expect(selectedTab(view)).toBe('终端')
+    expect(view.getByTestId('terminal-seat').getAttribute('data-visible')).toBe('true')
+    expect(view.getByTestId('editor-surface-seat').getAttribute('data-visible')).toBe('false')
+    expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('false')
+    expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('false')
+  })
+
+  it('tab-leave-terminal: leaving 终端 hides the seat without unmounting it', () => {
+    const { view, chat } = bench()
+    fireEvent.click(view.getByRole('tab', { name: '终端' }))
+    fireEvent.click(view.getByRole('tab', { name: '资源管理器' }))
+    expect(chat.store.getSnapshot().detailsTab).toBe('editor')
+    expect(view.getByTestId('terminal-seat')).toBeTruthy()
+    expect(view.getByTestId('terminal-seat').getAttribute('data-visible')).toBe('false')
     expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('true')
   })
 
@@ -177,7 +211,7 @@ describe('DetailsPanel segmented tabs', () => {
 
   it('tab-leave-git: leaving Git hides the panel and keeps the injected occupant and draft', () => {
     const { view, chat } = bench()
-    fireEvent.click(view.getByRole('tab', { name: 'Git面板' }))
+    fireEvent.click(view.getByRole('tab', { name: 'Git' }))
     expect((view.getByTestId('git-commit-draft') as HTMLTextAreaElement).value).toBe('wip message')
     fireEvent.click(view.getByRole('tab', { name: '资源管理器' }))
     expect(chat.store.getSnapshot().detailsTab).toBe('editor')

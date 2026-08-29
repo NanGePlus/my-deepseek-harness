@@ -7,7 +7,7 @@ export type CallId = string
 export interface SelectionTarget { turnSeq: number; stepSeq?: number; callId?: CallId; toolName?: string }
 
 /** Active segment of the details column tab bar. */
-export type DetailsTab = 'tool' | 'editor' | 'git'
+export type DetailsTab = 'tool' | 'editor' | 'git' | 'terminal'
 
 /**
  * One conversation view tab, projected from a 'conversation.view' slot

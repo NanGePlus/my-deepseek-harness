@@ -1,4 +1,4 @@
-// DetailsPanel: segmented 资源管理器 | Git | 工具详情 tabs over the details
+// DetailsPanel: segmented 资源管理器 | Git | 终端 | 工具详情 tabs over the details
 // column content seats. Reads selection and tab state from the current
 // session chat store. Leaving a tab hides its panel and does not unmount it.
 
@@ -14,6 +14,7 @@ export type DetailsPanelProps = DetailsSlotProps
 const SEGMENTS = [
   { id: 'editor', label: 'details.tab.editor', opens: true },
   { id: 'git', label: 'details.tab.git', opens: true },
+  { id: 'terminal', label: 'details.tab.terminal', opens: true },
   { id: 'tool', label: 'details.tab.tool', opens: false },
 ] as const
 
@@ -27,7 +28,7 @@ export function DetailsPanel({
   const boundSessionId = useChat(binding => binding.sessionId)
   const currentSessionId = useSessions(list => list.current)
   const sessionId = boundSessionId ?? currentSessionId
-  const flushBody = detailsTab === 'editor' || detailsTab === 'git'
+  const flushBody = detailsTab === 'editor' || detailsTab === 'git' || detailsTab === 'terminal'
   const [dirtyPaths, setDirtyPathsState] = useState<readonly string[]>([])
   const [diskPathsChanged, setDiskPathsChanged] = useState<{
     epoch: number
@@ -96,6 +97,15 @@ export function DetailsPanel({
             visible: detailsTab === 'git',
             dirtyPaths,
             notifyDiskPathsChanged,
+          })}
+        </div>
+        <div
+          className={clsx(css.tabPanel, detailsTab !== 'terminal' && css.tabPanelHidden)}
+          role="tabpanel"
+          aria-hidden={detailsTab !== 'terminal'}
+        >
+          {renderSlot('conversation.details.terminal', {
+            visible: detailsTab === 'terminal',
           })}
         </div>
         <div

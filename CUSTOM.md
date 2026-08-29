@@ -22,7 +22,7 @@
 ### 工具箱与壳层（details 栏，PR #28–29 及后续）
 - 产品文案：**详情栏 / 详情面板** 统一表述为 **工具箱**（`packages/client/ui-conversation` locales；Tab 内「工具详情」仍指 Tool 输出内容）
 - 会话头入口：**图标 +「工具箱」** capsule 按钮（与 Session log 同高 32px）；tooltip / `aria-label` 仍为「打开 / 收起工具箱」
-- 工具箱 segmented Tab：**资源管理器 | Git面板 | 工具详情**；Tab 条样式与对话区 **对话 / 轨迹** 一致（左对齐、13px、`state-business-primary` 选中下划线）；Git 段槽位 `conversation.details.git` 供 `ui-git` 注入，切走只隐藏不卸载；资源管理器段传入 `visible`，切回后重读文件树 Git 状态标记；`ui-conversation` 持有 dirty 路径只读集合（Explorer `setDirtyPaths` 写入，Git `dirtyPaths` 读取，不进 runtime 对象层）
+- 工具箱 segmented Tab：**资源管理器 | Git | 终端 | 工具详情**；Tab 条样式与对话区 **对话 / 轨迹** 一致（左对齐、13px、`state-business-primary` 选中下划线）；Git 段槽位 `conversation.details.git` 供 `ui-git` 注入；**终端** 段槽位 `conversation.details.terminal` 供 `ui-terminal` 注入（#77 起）；切走 Git / 终端 只隐藏不卸载；资源管理器段传入 `visible`，切回后重读文件树 Git 状态标记；`ui-conversation` 持有 dirty 路径只读集合（Explorer `setDirtyPaths` 写入，Git `dirtyPaths` 读取，不进 runtime 对象层）
 - **Git 面板变更列表**：段标题可收起/展开（左侧 chevron）；右侧显示文件数量；段头「全部选入/全部移出」与单行操作不变；未暂存按内容高度撑开，「待提交」跟在其后，在 Changes body 内滚动
 - **Git 面板 Graph**：待提交下方可折叠提交历史（主干 + 合入弧、分页 50）；每一行说明紧挨该行最右侧的点或线；引用胶囊 14px、长名省略，有引用时放在说明下一行靠右；悬停固定定位详情卡（完整引用、作者、相对/绝对时间、说明、正文、短 hash）；Changes 打开时钉在操作列底部；**单击某一提交在右栏列出该提交相对第一父提交的文件**（只读文件头默认折叠，展开后才渲染该文件差异；最多 80 个文件）；进入面板或重读 Graph 不自动打开最新提交，右栏只保留用户上次点开的工作区文件或 Graph 提交（切走 Git Tab 因 occupant 仍挂载而恢复；整页刷新从空预览开始）；切回 Git Tab 时 Graph 与右栏保持已展示内容，后台重读不换成 loading
 - **Git 面板 Changes / Graph**：操作列两个同级可折叠组；**CHANGES** / **GRAPH** 段头 13px 加粗全大写；**CHANGES** 标题右侧显示未暂存加待提交行数（干净仓库为 0），与 GRAPH 已加载提交数同一套灰色数字；Changes 打开时 Graph 钉在底部（上限约半高）；Changes body（分支、提交区、两段变更列表）与 Graph 列表相对文件夹标题缩进 14px
@@ -269,4 +269,5 @@
 | 2026-08-29 | V3 人类终端规格锁定 | `grill-with-docs` 拷问完成；更新 `CONTEXT.md`；新增 `docs/prd/terminal-v3.md`、`docs/adr/0005-human-terminal-host-rpc.md`、`docs/adr/0006-human-terminal-client-plugin.md` |
 | 2026-08-29 | 发布人类终端 V3 Issue | 父 PRD [#73](https://github.com/NanGePlus/my-deepseek-harness/issues/73)；#74 `#D-global`；#75 Host terminal RPC；#76 app-shell 四段 Tab；#77–#80 `human-terminal` 四刀；#81 改盘刷新协调 |
 | 2026-08-29 | Issue #75 Host terminal RPC | 分支 `issue/75-host-terminal-rpc`：`host.terminalProfiles/Spawn/Write/Resize/Kill/List/Stream`；Workspace 级 PTY 池 + SSE scrollback/title；集成测试 `api-proxy-terminal.spec.ts` |
+| 2026-08-29 | Issue #76 工具箱四段 Tab | 分支 `issue/76-app-shell-terminal-tab`：`DetailsPanel` 扩为 **资源管理器 | Git | 终端 | 工具详情**；声明 `conversation.details.terminal` 槽位；Git Tab 文案对齐 PRD 为「Git」；浏览器快照 `tabs.expected.md` 更新 |
 | 2026-08-29 | 从最新 `origin/custom/main` 创建分支 `issue/74-d-global-human-terminal-design-close` | Issue [#74](https://github.com/NanGePlus/my-deepseek-harness/issues/74) `#D-global` 验收关闭；人类终端消费既有品牌板，不新增 §5 原语 |

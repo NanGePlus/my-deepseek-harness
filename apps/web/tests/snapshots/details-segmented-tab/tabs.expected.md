@@ -1,4 +1,5 @@
 - tablist "Toolbox":
   - tab "File editor" [selected]
-  - tab "Git panel"
+  - tab "Git"
+  - tab "Terminal"
   - tab "Tool details"
