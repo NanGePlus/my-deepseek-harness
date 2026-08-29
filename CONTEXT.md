@@ -1,6 +1,6 @@
-# 文件编辑器与 Git 面板
+# 文件编辑器、Git 面板与人类终端
 
-DeepSeek Harness Web 端面向人类的工具箱插件。V1 在绑定 Workspace 内提供文件树浏览与内容编辑；V2 在同一绑定 Workspace 上增加 Git 面板，与文件树的只读 Git 状态标记职责分离。
+DeepSeek Harness Web 端面向人类的工具箱插件。V1 在绑定 Workspace 内提供文件树浏览与内容编辑；V2 在同一绑定 Workspace 上增加 Git 面板，与文件树的只读 Git 状态标记职责分离；V3 在工具箱增加人类终端，与 Agent 侧 PTY 工具完全分离。
 
 ## 领域语言
 
@@ -59,7 +59,7 @@ V1 仅覆盖常见图片格式（如 `.png`、`.jpg`、`.gif`、`.webp`、`.svg`
 *避免使用*: 冲突 (Conflict)（作术语时易泛化；本语境专指缓冲与磁盘不一致）
 
 **Session 切换守卫 (Session Switch Guard)**：
-用户切换当前 Session 时，若存在 dirty 的编辑器标签页，须先逐文件保存、丢弃或取消切换；不允许静默丢失未保存编辑缓冲。不因非空提交说明草稿而阻断切换。
+用户切换当前 Session 时，若存在 dirty 的编辑器标签页，须先逐文件保存、丢弃或取消切换；不允许静默丢失未保存编辑缓冲。不因非空提交说明草稿而阻断切换。**不因运行中的人类终端 PTY 而阻断切换**；切换至绑定 Workspace 不同的 Session 时，原 Workspace 的 PTY 继续在后台运行。
 *避免使用*: 未保存提示 (Unsaved Prompt)
 
 **Git 状态标记 (Git Status Badge)**：
@@ -136,12 +136,24 @@ Git 面板内、选中一条工作区变更后展示的差异；不是编辑器�
 
 **文件名过滤 (Filename Filter)**： 文件树顶部的搜索框；按文件名实时收窄可见树节点。V1 仅过滤文件名，不含按文件内容搜索。*避免使用*: 全局搜索 (Global Search)、Quick Openha h
 
+**人类终端 (Human Terminal)**：
+工具箱「终端」段内、面向人类开发者的交互式 Shell 视图；与 Agent 侧 `terminal_*` 工具 PTY **完全分离**——独立会话池、独立 Host 通路，不共享 session id，默认不进 Session 日志与 Agent 工具面。启用前提与资源管理器相同：须有 Session 且已 **绑定 Workspace**；未满足时 **终端** 段可见但仅展示说明空态，不可 spawn。终端 Tab 与 PTY 进程按 **绑定 Workspace** 归属：同一绑定 Workspace 下的多个 dsh Session 共用一套终端 Tab；切换到绑定 Workspace 不同的 Session 时，切换到该 Workspace 的终端状态（进程可仍在后台运行）。新建终端 Tab 的初始 cwd 为绑定 Workspace 根目录；之后用户可在 Host 可访问范围内自由 `cd`（V3 不做人工 chroot）。切走 **终端** 段（至资源管理器 / Git / 工具详情）只隐藏视图，不终止 PTY；切回时恢复 Tab 集合、滚动位置与实时输出。某 Workspace 尚无终端 Tab（或已全部 Kill）时，**首次进入终端段**自动 spawn 一个默认 Shell Tab（默认 Shell 为 Host login shell；`+` 下拉可显式选 bash / zsh 等 Host 可用 profile）。V3 支持多 Tab、`+` 下拉选择 Shell（如 bash / zsh）、Tab 级 Kill；**不含** Split、Debug Terminal 与底部面板类能力（Problems / Output 等）。终端内改盘后：**离开终端段**或**进入资源管理器 / Git 段**时按磁盘重读 Git 徽章与 Git 列表；已打开文件的编辑缓冲走**外部变更**；停在终端段期间不保证资源管理器 / Git 实时刷新。
+*避免使用*: PTY（单独指 Agent 终端时）、Agent 终端、集成终端（作与 Agent PTY 混称时）、Session 终端（本语境指按 dsh Session 隔离时）
+
+**终端 Tab (Terminal Tab)**：
+人类终端段内的一个 Shell 会话视图，对应一个 Host PTY。Tab 栏可并存多个；用户通过 Kill 显式终止。Tab 标题：能检测到前台进程时显示其短名（如 `node`）；否则显示 spawn 用的 Shell 名（如 `bash` / `zsh`）。不是编辑器标签页，也不是 Git 差异预览。
+*避免使用*: 终端窗口 (Terminal Window)、Shell 面板（作 Tab 代称时）
+
+**终端不可用 (Terminal Unavailable)**：
+Host 无法 spawn 交互式 PTY（如无可用 Shell、PTY 创建失败、权限不足）。**终端** 段仍可见；内容区展示 Host 返回的原因与可选「重试」；不隐藏 Tab、不降级为非交互输出。
+*避免使用*: Shell 不可用（作与缺 Workspace 空态混淆时）
+
 **工具箱 (Toolbox)**：
-Web 右侧可收起栏。V2 三段为 **资源管理器 | Git | 工具详情**，同时只显示一段。
+Web 右侧可收起栏。V3 四段为 **资源管理器 | Git | 终端 | 工具详情**，同时只显示一段。
 *避免使用*: 详情栏、详情面板、侧栏 (Sidebar)
 
 **编辑界面 (Editor Surface)**：
-资源管理器一段的界面组成：文件树（含文件名过滤、文件类型图标、Git 状态标记）+ 多 Tab 编辑区（语法高亮、显式保存）。切到 Git 或工具详情即隐藏该视图。不含 Terminal；不含 Git 操作（Git 操作在 Git 面板）。
+资源管理器一段的界面组成：文件树（含文件名过滤、文件类型图标、Git 状态标记）+ 多 Tab 编辑区（语法高亮、显式保存）。切到 Git、终端或工具详情即隐藏该视图。不含 Git 操作（Git 操作在 Git 面板）；人类终端在独立的 **终端** 段。
 *避免使用*: IDE 布局 (IDE Layout)、工作区面板 (Workspace Panel)
 
 **文件编辑器抽屉 (File Editor Drawer)**：
