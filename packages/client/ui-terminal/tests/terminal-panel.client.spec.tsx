@@ -278,7 +278,9 @@ describe('TerminalPanel', () => {
   })
 
   it('ignores DirectoryBrowseError from the initial list/spawn handshake', async () => {
-    const terminalList = vi.fn(async () => { throw new DirectoryBrowseError('missing workspace') })
+    const terminalList = vi.fn(async () => {
+      throw new DirectoryBrowseError({ code: 'workspace-not-found', message: 'missing workspace', details: {} })
+    })
     mount({ terminalList })
     await act(async () => { await Promise.resolve() })
     expect(screen.queryByRole('tab')).toBeNull()
