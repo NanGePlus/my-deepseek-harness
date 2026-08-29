@@ -1,8 +1,11 @@
 /** Human-terminal occupant of the details column Terminal tab. */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { IconCodeOutline16, IconLoadingOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  IconCodeOutline16, IconLoadingOutline16, IconPlusOutline16, IconTrashOutline16, Menu,
+  type MenuEntry,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
@@ -70,6 +73,17 @@ export interface TerminalPanelInjected {
     signal?: AbortSignal,
   ) => Promise<{ resized: true }>
   /**
+   * Kill one live human terminal session and release its PTY.
+   * @param workspaceId - Workspace that owns the session pool.
+   * @param sessionId - live session id.
+   * @param signal - aborts a superseded kill.
+   */
+  terminalKill: (
+    workspaceId: WorkspaceId,
+    sessionId: string,
+    signal?: AbortSignal,
+  ) => Promise<{ killed: true }>
+  /**
    * Subscribe to scrollback, incremental output, and title metadata.
    * @param workspaceId - Workspace that owns the session pool.
    * @param sessionId - live session id.
@@ -109,7 +123,8 @@ function rowsFromList(sessions: TerminalListResult['sessions']): TerminalTabRow[
  */
 export function TerminalPanel({
   t, visible, useSessions, useWorkspaces, useStore, actions,
-  terminalProfiles, terminalList, terminalSpawn, terminalWrite, terminalResize, terminalStream,
+  terminalProfiles, terminalList, terminalSpawn, terminalWrite, terminalResize, terminalKill,
+  terminalStream,
 }: TerminalPanelProps) {
   const dark = useHarnessDark()
   const currentSessionId = useSessions(state => state.current)
@@ -126,9 +141,74 @@ export function TerminalPanel({
   const connecting = useStore(state => workspaceId === undefined
     ? false
     : terminalWorkspaceState(state, workspaceId).connecting)
+  const deferAutoSpawn = useStore(state => workspaceId === undefined
+    ? false
+    : terminalWorkspaceState(state, workspaceId).deferAutoSpawn)
+  const wasVisibleRef = useRef(false)
   const viewportHostRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<XtermViewportHandle | null>(null)
   const streamAbortRef = useRef<AbortController | null>(null)
+  const profilesRef = useRef<TerminalProfilesResult | null>(null)
+  const addMenuTriggerRef = useRef<HTMLButtonElement>(null)
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
+  const [profileMenuItems, setProfileMenuItems] = useState<readonly MenuEntry[]>([])
+
+  const openAddMenu = useCallback(async () => {
+    if (workspaceId === undefined || connecting) return
+    const ac = new AbortController()
+    try {
+      const profiles = profilesRef.current ?? await terminalProfiles(ac.signal)
+      if (ac.signal.aborted) return
+      profilesRef.current = profiles
+      setProfileMenuItems(profiles.profiles.map(profile => ({
+        id: profile.id,
+        label: profile.name,
+      })))
+      setAddMenuOpen(true)
+    } catch (error: unknown) {
+      if (error instanceof DirectoryBrowseError || ac.signal.aborted) return
+      throw error
+    }
+  }, [connecting, terminalProfiles, workspaceId])
+
+  const spawnTab = useCallback(async (profileId: string) => {
+    if (workspaceId === undefined || connecting) return
+    setAddMenuOpen(false)
+    const ac = new AbortController()
+    try {
+      actions.setConnecting(workspaceId, true)
+      const profiles = profilesRef.current ?? await terminalProfiles(ac.signal)
+      if (ac.signal.aborted) return
+      profilesRef.current = profiles
+      const spawned = await terminalSpawn(workspaceId, profileId, workspace?.path, ac.signal)
+      if (ac.signal.aborted) return
+      const profile = profiles.profiles.find(row => row.id === profileId)
+      actions.upsertTab(workspaceId, {
+        sessionId: spawned.sessionId,
+        title: profile?.name ?? profileId,
+        profileId,
+      })
+      actions.setSelectedSession(workspaceId, spawned.sessionId)
+    } catch (error: unknown) {
+      if (error instanceof DirectoryBrowseError || ac.signal.aborted) return
+      throw error
+    } finally {
+      if (!ac.signal.aborted) actions.setConnecting(workspaceId, false)
+    }
+  }, [actions, connecting, terminalProfiles, terminalSpawn, workspace?.path, workspaceId])
+
+  const killTab = useCallback(async (sessionId: string) => {
+    if (workspaceId === undefined) return
+    const ac = new AbortController()
+    try {
+      await terminalKill(workspaceId, sessionId, ac.signal)
+      if (ac.signal.aborted) return
+      actions.removeTab(workspaceId, sessionId)
+    } catch (error: unknown) {
+      if (error instanceof DirectoryBrowseError || ac.signal.aborted) return
+      throw error
+    }
+  }, [actions, terminalKill, workspaceId])
 
   const ensureViewport = useCallback((): XtermViewportHandle | null => {
     if (workspaceId === undefined || selectedSessionId === undefined) return null
@@ -156,8 +236,15 @@ export function TerminalPanel({
   }, [dark, ensureViewport, visible])
 
   useEffect(() => {
-    if (!visible || workspaceId === undefined) return
+    if (!visible || workspaceId === undefined) {
+      wasVisibleRef.current = visible
+      return
+    }
+    const reentered = !wasVisibleRef.current
+    wasVisibleRef.current = visible
+    if (reentered) actions.setDeferAutoSpawn(workspaceId, false)
     if (tabs.length > 0) return
+    if (!reentered && deferAutoSpawn) return
     const ac = new AbortController()
     void (async () => {
       try {
@@ -174,6 +261,7 @@ export function TerminalPanel({
         actions.setConnecting(workspaceId, true)
         const profiles = await terminalProfiles(ac.signal)
         if (ac.signal.aborted) return
+        profilesRef.current = profiles
         const spawned = await terminalSpawn(
           workspaceId,
           profiles.defaultProfileId,
@@ -196,7 +284,7 @@ export function TerminalPanel({
     })()
     return () => { ac.abort() }
   }, [
-    actions, tabs.length, terminalList, terminalProfiles, terminalSpawn, visible, workspace?.path, workspaceId,
+    actions, deferAutoSpawn, tabs.length, terminalList, terminalProfiles, terminalSpawn, visible, workspace?.path, workspaceId,
   ])
 
   useEffect(() => {
@@ -247,6 +335,7 @@ export function TerminalPanel({
     () => tabs.find(tab => tab.sessionId === selectedSessionId),
     [selectedSessionId, tabs],
   )
+  const addMenuDisabled = connecting
 
   if (workspaceId === undefined) {
     return (
@@ -269,17 +358,52 @@ export function TerminalPanel({
       <div className={css.tabBar}>
         <div className={css.tablist} role="tablist" aria-label={t('terminal.tab.aria')}>
           {tabs.map(tab => (
-            <button
+            <div
               key={tab.sessionId}
-              type="button"
               role="tab"
               aria-selected={tab.sessionId === selectedSessionId}
               className={clsx(css.tab, tab.sessionId === selectedSessionId && css.tabActive)}
               onClick={() => { actions.setSelectedSession(workspaceId, tab.sessionId) }}
             >
               <span className={css.tabTitle}>{tab.title}</span>
-            </button>
+              <button
+                type="button"
+                className={css.tabKill}
+                aria-label={t('terminal.tab.kill')}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void killTab(tab.sessionId)
+                }}
+              >
+                <IconTrashOutline16 size={14} />
+              </button>
+            </div>
           ))}
+        </div>
+        <div className={css.tabBarActions}>
+          <Menu
+            open={addMenuOpen}
+            onClose={() => { setAddMenuOpen(false) }}
+            align="end"
+            compact
+            portal
+            items={profileMenuItems}
+            onSelect={(id) => { void spawnTab(id) }}
+            anchor={(
+              <button
+                ref={addMenuTriggerRef}
+                type="button"
+                className={css.addButton}
+                aria-label={t('terminal.tab.new')}
+                aria-haspopup="menu"
+                aria-expanded={addMenuOpen}
+                disabled={addMenuDisabled}
+                onClick={() => { void openAddMenu() }}
+              >
+                <IconPlusOutline16 size={14} />
+              </button>
+            )}
+          />
         </div>
       </div>
       <div className={css.body}>

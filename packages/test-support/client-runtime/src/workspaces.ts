@@ -685,6 +685,23 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
+   * Kill one human terminal session (recorded).
+   * @param workspaceId - Workspace that owns the session pool.
+   * @param sessionId - live session id.
+   * @param signal - optional abort signal forwarded like production.
+   */
+  async terminalKill(
+    workspaceId: WorkspaceId,
+    sessionId: string,
+    signal?: AbortSignal,
+  ): Promise<{ killed: true }> {
+    this.calls.push({ method: 'terminalKill', args: [workspaceId, sessionId, signal] })
+    const stub = this.stubs.get('terminalKill')
+    if (stub !== undefined) return await (stub(workspaceId, sessionId, signal) as Promise<{ killed: true }>)
+    return { killed: true }
+  }
+
+  /**
    * List live human terminal sessions (recorded). The default is empty.
    * @param workspaceId - Workspace whose session pool is queried.
    * @param signal - optional abort signal forwarded like production.

@@ -16,6 +16,21 @@ describe('terminal panel store', () => {
     expect(terminalWorkspaceState(store.getSnapshot(), WID).tabs[0]?.title).toBe('renamed')
   })
 
+  it('removeTab drops a session and selects an adjacent tab', () => {
+    const store = createTerminalPanelStore().create()
+    store.actions.setWorkspaceTabs(WID, [
+      { sessionId: 'a', title: 'A', profileId: 'zsh' },
+      { sessionId: 'b', title: 'B', profileId: 'bash' },
+      { sessionId: 'c', title: 'C', profileId: 'zsh' },
+    ], 'b')
+    store.actions.removeTab(WID, 'b')
+    expect(terminalWorkspaceState(store.getSnapshot(), WID).tabs.map(row => row.sessionId)).toEqual(['a', 'c'])
+    expect(terminalWorkspaceState(store.getSnapshot(), WID).selectedSessionId).toBe('c')
+    store.actions.removeTab(WID, 'a')
+    store.actions.removeTab(WID, 'c')
+    expect(terminalWorkspaceState(store.getSnapshot(), WID).deferAutoSpawn).toBe(true)
+  })
+
   it('upserts tabs and preserves an explicit selection', () => {
     const store = createTerminalPanelStore().create()
     store.actions.upsertTab(WID, { sessionId: 'one', title: 'one', profileId: 'zsh' })

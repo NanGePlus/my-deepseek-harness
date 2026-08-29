@@ -18,6 +18,8 @@ export interface TerminalWorkspaceState {
   selectedSessionId: string | undefined
   /** True while the first spawn or SSE handshake for the active tab is in flight. */
   connecting: boolean
+  /** When true, an empty tab set does not auto-spawn until the Terminal segment is re-entered. */
+  deferAutoSpawn: boolean
 }
 
 /** Root store keyed by bound Workspace id. */
@@ -42,11 +44,13 @@ type TerminalPanelActions = {
     sessionId: string,
     title: string,
   ) => void
+  removeTab: (root: TerminalPanelState, workspaceId: WorkspaceId, sessionId: string) => void
+  setDeferAutoSpawn: (root: TerminalPanelState, workspaceId: WorkspaceId, deferAutoSpawn: boolean) => void
 }
 
 /** Empty workspace partition used when a key is first touched. */
 function emptyWorkspaceState(): TerminalWorkspaceState {
-  return { tabs: [], selectedSessionId: undefined, connecting: false }
+  return { tabs: [], selectedSessionId: undefined, connecting: false, deferAutoSpawn: false }
 }
 
 /** Resolve one workspace partition, creating it when absent. */
@@ -96,6 +100,26 @@ export function createTerminalPanelStore(): EngineStoreHandle<TerminalPanelState
           ...current,
           tabs: current.tabs.map(row => (row.sessionId === sessionId ? { ...row, title } : row)),
         }
+      },
+      removeTab: (root, workspaceId, sessionId) => {
+        const current = workspaceState(root, workspaceId)
+        const index = current.tabs.findIndex(row => row.sessionId === sessionId)
+        if (index === -1) return
+        const tabs = current.tabs.filter(row => row.sessionId !== sessionId)
+        let selectedSessionId = current.selectedSessionId
+        if (current.selectedSessionId === sessionId) {
+          selectedSessionId = tabs[index]?.sessionId ?? tabs[index - 1]?.sessionId
+        }
+        root.byWorkspace[workspaceId] = {
+          ...current,
+          tabs,
+          selectedSessionId,
+          deferAutoSpawn: tabs.length === 0 ? true : current.deferAutoSpawn,
+        }
+      },
+      setDeferAutoSpawn: (root, workspaceId, deferAutoSpawn) => {
+        const current = workspaceState(root, workspaceId)
+        root.byWorkspace[workspaceId] = { ...current, deferAutoSpawn }
       },
     },
   })

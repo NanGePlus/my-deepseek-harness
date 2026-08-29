@@ -4,6 +4,8 @@ export type TerminalPanelKey =
   | 'terminal.empty.unbound.body'
   | 'terminal.loading.connecting'
   | 'terminal.tab.aria'
+  | 'terminal.tab.new'
+  | 'terminal.tab.kill'
   | 'terminal.viewport.aria'
 
 /** Simplified Chinese copy for the human terminal panel. */
@@ -12,6 +14,8 @@ export const zh: Record<TerminalPanelKey, string> = {
   'terminal.empty.unbound.body': '请先选择 Workspace 并开始会话。',
   'terminal.loading.connecting': '连接中…',
   'terminal.tab.aria': '终端标签页',
+  'terminal.tab.new': '新建终端',
+  'terminal.tab.kill': '终止终端',
   'terminal.viewport.aria': '终端输出',
 }
 
@@ -21,5 +25,7 @@ export const en: Record<TerminalPanelKey, string> = {
   'terminal.empty.unbound.body': 'Select a Workspace and start a session first.',
   'terminal.loading.connecting': 'Connecting…',
   'terminal.tab.aria': 'Terminal tab',
+  'terminal.tab.new': 'New terminal',
+  'terminal.tab.kill': 'Kill terminal',
   'terminal.viewport.aria': 'Terminal output',
 }

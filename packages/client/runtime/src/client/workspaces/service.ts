@@ -745,6 +745,22 @@ export class WorkspaceRuntime implements IWorkspaces {
   }
 
   /**
+   * Kill one live human terminal session and release its PTY.
+   * @param workspaceId - Workspace that owns the session pool.
+   * @param sessionId - live session id from spawn or list.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  async terminalKill(
+    workspaceId: WorkspaceId,
+    sessionId: string,
+    signal?: AbortSignal,
+  ): Promise<{ killed: true }> {
+    const response = await this.api.host.terminalKill({ workspaceId, sessionId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  /**
    * List live human terminal sessions for one Workspace.
    * @param workspaceId - Workspace whose session pool is queried.
    * @param signal - aborts the wire request when the caller supersedes it.

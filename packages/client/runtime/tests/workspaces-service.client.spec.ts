@@ -648,6 +648,9 @@ describe('WorkspaceRuntime', () => {
     await expect(workspaces.terminalResize(wid('alpha'), 'fake-terminal-1', 80, 24)).resolves.toEqual({
       resized: true,
     })
+    await expect(workspaces.terminalKill(wid('alpha'), 'fake-terminal-1')).resolves.toEqual({
+      killed: true,
+    })
     workspaces.terminalStream(wid('alpha'), 'fake-terminal-1', (frame) => {
       if (frame.type === 'host/terminal-output') frames.push(frame.text)
     })
