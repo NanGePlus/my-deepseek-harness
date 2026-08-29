@@ -6,7 +6,7 @@
  */
 
 import type { z } from 'zod'
-import type { ApiProxy, HostFrame, MuxFrame, WatchPathFrame } from '../api/index.ts'
+import type { ApiProxy, HostFrame, MuxFrame, WatchPathFrame, TerminalStreamFrame } from '../api/index.ts'
 import type { RequestPayload, ResponseValue, RpcMethodMap } from '../api/rpc-map.ts'
 import type { ClientRequest, ClientResponse, RpcMessage, RpcReceipt, RpcRequest, RpcResponse, ServerRequest } from '../api/rpc.ts'
 import { RpcId } from '../api/rpc.ts'
@@ -40,6 +40,13 @@ import {
   hostLspCloseDocumentValueSchema,
   hostLspHoverDocumentValueSchema,
   watchPathFrameSchema,
+  hostTerminalProfilesValueSchema,
+  hostTerminalSpawnValueSchema,
+  hostTerminalWriteValueSchema,
+  hostTerminalResizeValueSchema,
+  hostTerminalKillValueSchema,
+  hostTerminalListValueSchema,
+  terminalStreamFrameSchema,
 } from '../api/host.schema.ts'
 import {
   sessionCancelValueSchema,
@@ -158,11 +165,22 @@ export interface IApiClient {
     lspSyncDocument(payload: RequestPayload<'host.lspSyncDocument'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.lspSyncDocument'>>>
     lspCloseDocument(payload: RequestPayload<'host.lspCloseDocument'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.lspCloseDocument'>>>
     lspHoverDocument(payload: RequestPayload<'host.lspHoverDocument'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.lspHoverDocument'>>>
+    terminalProfiles(payload: RequestPayload<'host.terminalProfiles'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.terminalProfiles'>>>
+    terminalSpawn(payload: RequestPayload<'host.terminalSpawn'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.terminalSpawn'>>>
+    terminalWrite(payload: RequestPayload<'host.terminalWrite'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.terminalWrite'>>>
+    terminalResize(payload: RequestPayload<'host.terminalResize'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.terminalResize'>>>
+    terminalKill(payload: RequestPayload<'host.terminalKill'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.terminalKill'>>>
+    terminalList(payload: RequestPayload<'host.terminalList'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.terminalList'>>>
     watchPath(
       payload: { workspaceId: RequestPayload<'host.readFile'>['workspaceId']; path: string },
       signal: AbortSignal,
       onOpen?: () => void,
     ): AsyncIterable<RpcRequest<WatchPathFrame>>
+    terminalStream(
+      payload: { workspaceId: RequestPayload<'host.terminalList'>['workspaceId']; sessionId: string },
+      signal: AbortSignal,
+      onOpen?: () => void,
+    ): AsyncIterable<RpcRequest<TerminalStreamFrame>>
   }
   workspace: {
     list(payload: RequestPayload<'workspace.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.list'>>>
@@ -266,6 +284,12 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'host.lspSyncDocument': hostLspSyncDocumentValueSchema,
   'host.lspCloseDocument': hostLspCloseDocumentValueSchema,
   'host.lspHoverDocument': hostLspHoverDocumentValueSchema,
+  'host.terminalProfiles': hostTerminalProfilesValueSchema,
+  'host.terminalSpawn': hostTerminalSpawnValueSchema,
+  'host.terminalWrite': hostTerminalWriteValueSchema,
+  'host.terminalResize': hostTerminalResizeValueSchema,
+  'host.terminalKill': hostTerminalKillValueSchema,
+  'host.terminalList': hostTerminalListValueSchema,
   'workspace.list': workspaceListValueSchema,
   'workspace.create': workspaceCreateValueSchema,
   'workspace.rename': workspaceRenameValueSchema,
@@ -444,6 +468,16 @@ export abstract class AbstractApiClient implements IApiClient {
     return this.readSse(`/api/host.watchPath?${query}`, signal, watchPathFrameSchema, onOpen)
   }
 
+  /** host.terminalStream opener; virtual. */
+  protected openTerminalStream(
+    payload: { workspaceId: RequestPayload<'host.terminalList'>['workspaceId']; sessionId: string },
+    signal: AbortSignal,
+    onOpen?: () => void,
+  ): AsyncIterable<RpcRequest<TerminalStreamFrame>> {
+    const query = new URLSearchParams({ workspaceId: payload.workspaceId, sessionId: payload.sessionId })
+    return this.readSse(`/api/host.terminalStream?${query}`, signal, terminalStreamFrameSchema, onOpen)
+  }
+
   /**
    * SSE protocol path: streaming fetch (not EventSource), '\n\n' framing, ServerRequest envelope +
    * frame-schema parse, tap, narrow yield. onOpen fires once the response headers are in and the
@@ -451,7 +485,7 @@ export abstract class AbstractApiClient implements IApiClient {
    * either parse level is reported and skipped (one corrupt frame must not kill the stream; the
    * client's gap detection covers whatever the frame carried).
    */
-  protected async *readSse<F extends MuxFrame | HostFrame | WatchPathFrame>(
+  protected async *readSse<F extends MuxFrame | HostFrame | WatchPathFrame | TerminalStreamFrame>(
     path: string,
     signal: AbortSignal,
     frameSchema: z.ZodType<F>,
@@ -559,7 +593,14 @@ export abstract class AbstractApiClient implements IApiClient {
     lspSyncDocument: (payload, signal) => this.callUnary('host.lspSyncDocument', payload, signal),
     lspCloseDocument: (payload, signal) => this.callUnary('host.lspCloseDocument', payload, signal),
     lspHoverDocument: (payload, signal) => this.callUnary('host.lspHoverDocument', payload, signal),
+    terminalProfiles: (payload, signal) => this.callUnary('host.terminalProfiles', payload, signal),
+    terminalSpawn: (payload, signal) => this.callUnary('host.terminalSpawn', payload, signal),
+    terminalWrite: (payload, signal) => this.callUnary('host.terminalWrite', payload, signal),
+    terminalResize: (payload, signal) => this.callUnary('host.terminalResize', payload, signal),
+    terminalKill: (payload, signal) => this.callUnary('host.terminalKill', payload, signal),
+    terminalList: (payload, signal) => this.callUnary('host.terminalList', payload, signal),
     watchPath: (payload, signal, onOpen) => this.openWatchPath(payload, signal, onOpen),
+    terminalStream: (payload, signal, onOpen) => this.openTerminalStream(payload, signal, onOpen),
   }
 
   readonly workspace: IApiClient['workspace'] = {

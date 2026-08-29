@@ -5,12 +5,12 @@ import type { IncomingMessage } from 'node:http'
 import type { Duplex } from 'node:stream'
 import WebSocket, { WebSocketServer } from 'ws'
 import type {
-  ApiProxy, HostFrame, MuxFrame, RpcRequest, ServerRequest, WatchPathFrame,
+  ApiProxy, HostFrame, MuxFrame, RpcRequest, ServerRequest, WatchPathFrame, TerminalStreamFrame,
 } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { hostWatchPathQuerySchema } from '@deepseek-ai/dsh-host-apiproxy/api/host.schema'
 
-type Frame = MuxFrame | HostFrame | WatchPathFrame
+type Frame = MuxFrame | HostFrame | WatchPathFrame | TerminalStreamFrame
 
 function serverRequest(frame: RpcRequest<Frame>): ServerRequest {
   return {

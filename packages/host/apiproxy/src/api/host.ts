@@ -254,6 +254,44 @@ export type WatchPathFrame =
   | { type: 'host/path-changed'; path: string }
   | { type: 'stream/error'; error: RpcError }
 
+/** One selectable interactive shell profile of host.terminalProfiles. */
+export interface TerminalShellProfile {
+  /** Stable profile id (for example `zsh`). */
+  id: string
+  /** Human label shown in the Shell picker. */
+  name: string
+}
+
+/** host.terminalProfiles response value. */
+export interface TerminalProfilesResult {
+  profiles: TerminalShellProfile[]
+  defaultProfileId: string
+}
+
+/** host.terminalSpawn response value. */
+export interface TerminalSpawnResult {
+  sessionId: string
+}
+
+/** One live session row of host.terminalList. */
+export interface TerminalSessionSummary {
+  sessionId: string
+  title: string
+  profileId: string
+}
+
+/** host.terminalList response value. */
+export interface TerminalListResult {
+  sessions: TerminalSessionSummary[]
+}
+
+/** host.terminalStream SSE frame union. */
+export type TerminalStreamFrame =
+  | { type: 'host/terminal-scrollback'; text: string; truncated: boolean }
+  | { type: 'host/terminal-output'; text: string }
+  | { type: 'host/terminal-title'; title: string }
+  | { type: 'stream/error'; error: RpcError }
+
 /** Zero-based UTF-16 position in an editor buffer. */
 export interface HostLspPosition {
   line: number
@@ -636,4 +674,69 @@ export interface HostApi {
     request: RpcRequest<{ workspaceId: WorkspaceId; path: string; text: string; version: number; line: number; character: number }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<LspHoverDocumentResult>>
+
+  /**
+   * List interactive shell profiles available on the host and the login-shell
+   * default. Fails with `terminal-unavailable` when no shell can be resolved.
+   */
+  terminalProfiles(
+    request: RpcRequest<{}>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<TerminalProfilesResult>>
+
+  /**
+   * Spawn one human terminal PTY for a registered Workspace. Initial cwd defaults
+   * to the Workspace root. Fails with `terminal-unavailable` when PTY allocation
+   * fails and `workspace-not-found` when the Workspace id is unknown.
+   */
+  terminalSpawn(
+    request: RpcRequest<{ workspaceId: WorkspaceId; profileId?: string; cwd?: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<TerminalSpawnResult>>
+
+  /**
+   * Write UTF-8 stdin to one live human terminal session. Fails with
+   * `terminal-session-not-found` when the session id is absent for the Workspace.
+   */
+  terminalWrite(
+    request: RpcRequest<{ workspaceId: WorkspaceId; sessionId: string; text: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ written: true }>>
+
+  /**
+   * Resize one live human terminal session. Fails with
+   * `terminal-session-not-found` when the session id is absent for the Workspace.
+   */
+  terminalResize(
+    request: RpcRequest<{ workspaceId: WorkspaceId; sessionId: string; cols: number; rows: number }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ resized: true }>>
+
+  /**
+   * Terminate one human terminal session and remove it from the Workspace pool.
+   * Fails with `terminal-session-not-found` when the session id is absent.
+   */
+  terminalKill(
+    request: RpcRequest<{ workspaceId: WorkspaceId; sessionId: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ killed: true }>>
+
+  /**
+   * List live human terminal sessions for one Workspace. Unknown Workspace ids
+   * fail with `workspace-not-found`.
+   */
+  terminalList(
+    request: RpcRequest<{ workspaceId: WorkspaceId }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<TerminalListResult>>
+
+  /**
+   * Stream scrollback, incremental output, and title metadata for one human
+   * terminal session until the caller aborts. Disconnecting the stream does not
+   * kill the PTY. Fails before streaming when the Workspace or session is unknown.
+   */
+  terminalStream(
+    request: RpcRequest<{ workspaceId: WorkspaceId; sessionId: string }>,
+    signal: AbortSignal,
+  ): AsyncIterable<RpcRequest<TerminalStreamFrame>>
 }

@@ -242,6 +242,27 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async lspHoverDocument(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { hover: null } } }
       },
+      async terminalProfiles(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { profiles: [{ id: 'zsh', name: 'zsh' }], defaultProfileId: 'zsh' } } }
+      },
+      async terminalSpawn(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { sessionId: 'term-1' } } }
+      },
+      async terminalWrite(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { written: true as const } } }
+      },
+      async terminalResize(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { resized: true as const } } }
+      },
+      async terminalKill(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { killed: true as const } } }
+      },
+      async terminalList(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { sessions: [] } } }
+      },
+      terminalStream() {
+        return (async function* () {})()
+      },
     },
     workspace: {
       async list(request) {

@@ -2627,6 +2627,13 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       lspSyncDocument: request => ok(request, { diagnostics: [] }),
       lspCloseDocument: request => ok(request, { closed: true as const }),
       lspHoverDocument: request => ok(request, { hover: null }),
+      terminalProfiles: request => ok(request, { profiles: [{ id: 'zsh', name: 'zsh' }], defaultProfileId: 'zsh' }),
+      terminalSpawn: request => ok(request, { sessionId: 'fixture-terminal-1' }),
+      terminalWrite: request => ok(request, { written: true as const }),
+      terminalResize: request => ok(request, { resized: true as const }),
+      terminalKill: request => ok(request, { killed: true as const }),
+      terminalList: request => ok(request, { sessions: [] }),
+      terminalStream: () => (async function* () {})(),
       watchPath: () => (async function* () {})(),
     },
     workspace: {
@@ -3187,6 +3194,12 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'host.lspSyncDocument': return this.api.host.lspSyncDocument(request, signal)
       case 'host.lspCloseDocument': return this.api.host.lspCloseDocument(request, signal)
       case 'host.lspHoverDocument': return this.api.host.lspHoverDocument(request, signal)
+      case 'host.terminalProfiles': return this.api.host.terminalProfiles(request, signal)
+      case 'host.terminalSpawn': return this.api.host.terminalSpawn(request, signal)
+      case 'host.terminalWrite': return this.api.host.terminalWrite(request, signal)
+      case 'host.terminalResize': return this.api.host.terminalResize(request, signal)
+      case 'host.terminalKill': return this.api.host.terminalKill(request, signal)
+      case 'host.terminalList': return this.api.host.terminalList(request, signal)
       case 'workspace.list': return this.api.workspace.list(request)
       case 'workspace.create': return this.api.workspace.create(request)
       case 'workspace.rename': return this.api.workspace.rename(request)

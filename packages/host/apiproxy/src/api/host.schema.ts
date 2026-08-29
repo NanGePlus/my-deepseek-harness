@@ -470,3 +470,95 @@ const hostLspHoverSchema = z.object({
 export const hostLspHoverDocumentValueSchema = z.object({
   hover: hostLspHoverSchema.nullable(),
 }) satisfies z.ZodType<Wire<ResponseValue<'host.lspHoverDocument'>>>
+
+const terminalShellProfileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+})
+
+/** host.terminalProfiles request payload. */
+export const hostTerminalProfilesRequestSchema = z.object({}) satisfies z.ZodType<Wire<RequestPayload<'host.terminalProfiles'>>>
+
+/** host.terminalProfiles response value. */
+export const hostTerminalProfilesValueSchema = z.object({
+  profiles: z.array(terminalShellProfileSchema),
+  defaultProfileId: z.string(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.terminalProfiles'>>>
+
+/** host.terminalSpawn request payload. */
+export const hostTerminalSpawnRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  profileId: z.string().optional(),
+  cwd: z.string().optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.terminalSpawn'>>>
+
+/** host.terminalSpawn response value. */
+export const hostTerminalSpawnValueSchema = z.object({
+  sessionId: z.string(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.terminalSpawn'>>>
+
+/** host.terminalWrite request payload. */
+export const hostTerminalWriteRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  sessionId: z.string().min(1),
+  text: z.string(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.terminalWrite'>>>
+
+/** host.terminalWrite response value. */
+export const hostTerminalWriteValueSchema = z.object({
+  written: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.terminalWrite'>>>
+
+/** host.terminalResize request payload. */
+export const hostTerminalResizeRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  sessionId: z.string().min(1),
+  cols: z.number().int().min(1),
+  rows: z.number().int().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.terminalResize'>>>
+
+/** host.terminalResize response value. */
+export const hostTerminalResizeValueSchema = z.object({
+  resized: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.terminalResize'>>>
+
+/** host.terminalKill request payload. */
+export const hostTerminalKillRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  sessionId: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.terminalKill'>>>
+
+/** host.terminalKill response value. */
+export const hostTerminalKillValueSchema = z.object({
+  killed: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.terminalKill'>>>
+
+const terminalSessionSummarySchema = z.object({
+  sessionId: z.string(),
+  title: z.string(),
+  profileId: z.string(),
+})
+
+/** host.terminalList request payload. */
+export const hostTerminalListRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'host.terminalList'>>>
+
+/** host.terminalList response value. */
+export const hostTerminalListValueSchema = z.object({
+  sessions: z.array(terminalSessionSummarySchema),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.terminalList'>>>
+
+/** host.terminalStream GET query: workspace-bound session id. */
+export const hostTerminalStreamQuerySchema = z.object({
+  workspaceId: workspaceIdSchema,
+  sessionId: z.string().min(1),
+})
+
+/** host.terminalStream SSE frame union. */
+export const terminalStreamFrameSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('host/terminal-scrollback'), text: z.string(), truncated: z.boolean() }),
+  z.object({ type: z.literal('host/terminal-output'), text: z.string() }),
+  z.object({ type: z.literal('host/terminal-title'), title: z.string() }),
+  z.object({ type: z.literal('stream/error'), error: rpcErrorSchema }),
+])

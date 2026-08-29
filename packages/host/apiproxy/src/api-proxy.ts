@@ -122,7 +122,13 @@ import { inspectGitWorkingTree, initGitRepository, readGitDiffPreview, stageGitP
 import { GIT_LOG_DEFAULT_LIMIT, readGitLog } from './git-log.ts'
 import { readGitCommitDiff } from './git-commit-diff.ts'
 import { watchWorkspacePath } from './watch-path.ts'
-import type { WatchPathFrame } from './api/host.ts'
+import type { WatchPathFrame, TerminalStreamFrame } from './api/host.ts'
+import {
+  HumanTerminalRegistry,
+  TerminalSessionNotFoundError,
+  TerminalUnavailableError,
+  type HumanTerminalInternals,
+} from './human-terminal.ts'
 import {
   readWorkspaceFile,
   writeWorkspaceFile,
@@ -741,6 +747,8 @@ export interface ApiProxyDefaults {
    * falls back to platform detection ({@link canOpenNativePath}).
    */
   canOpenPath?: () => boolean
+  /** Injectable human-terminal hooks for host integration tests. */
+  humanTerminal?: HumanTerminalInternals
 }
 
 /** The tool/call payload fields the presenter path reads. */
@@ -1205,6 +1213,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   const pendingApprovals = new Map<RpcId, PendingApproval>()
   const muxQueues = new Set<FrameQueue<RpcRequest<MuxFrame>>>()
   const imageAdmissionChains = new WeakMap<Agent, Promise<void>>()
+  const humanTerminal = new HumanTerminalRegistry(defaults.humanTerminal)
 
   /** Serialize image admission with model selection for one agent. */
   function serializeImageAdmission<T>(agent: Agent, operation: () => Promise<T>): Promise<T> {
@@ -3800,6 +3809,163 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: {},
           })
         }
+      },
+
+      async terminalProfiles(request, signal) {
+        signal.throwIfAborted()
+        try {
+          return ok(request, humanTerminal.profiles())
+        } catch (error: unknown) {
+          if (error instanceof TerminalUnavailableError) {
+            return err(request, {
+              code: 'terminal-unavailable',
+              message: error.message,
+              details: {},
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async terminalSpawn(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, profileId, cwd } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, humanTerminal.spawn(workspaceId, workspace.path, profileId, cwd))
+        } catch (error: unknown) {
+          if (error instanceof TerminalUnavailableError) {
+            return err(request, {
+              code: 'terminal-unavailable',
+              message: error.message,
+              details: { workspaceId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async terminalWrite(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, sessionId, text } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await humanTerminal.write(workspaceId, sessionId, text))
+        } catch (error: unknown) {
+          if (error instanceof TerminalSessionNotFoundError) {
+            return err(request, {
+              code: 'terminal-session-not-found',
+              message: error.message,
+              details: { workspaceId, sessionId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async terminalResize(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, sessionId, cols, rows } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, humanTerminal.resize(workspaceId, sessionId, cols, rows))
+        } catch (error: unknown) {
+          if (error instanceof TerminalSessionNotFoundError) {
+            return err(request, {
+              code: 'terminal-session-not-found',
+              message: error.message,
+              details: { workspaceId, sessionId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async terminalKill(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, sessionId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await humanTerminal.kill(workspaceId, sessionId))
+        } catch (error: unknown) {
+          if (error instanceof TerminalSessionNotFoundError) {
+            return err(request, {
+              code: 'terminal-session-not-found',
+              message: error.message,
+              details: { workspaceId, sessionId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async terminalList(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        return ok(request, humanTerminal.list(workspaceId))
+      },
+
+      terminalStream(request, signal) {
+        const { workspaceId, sessionId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return (async function* () {
+            yield frame<TerminalStreamFrame>({
+              type: 'stream/error',
+              error: {
+                code: 'workspace-not-found',
+                message: `workspace not found: ${workspaceId}`,
+                details: { workspaceId },
+              },
+            })
+          })()
+        }
+        return (async function* () {
+          try {
+            for await (const payload of humanTerminal.stream(workspaceId, sessionId, signal)) {
+              yield frame(payload)
+            }
+          } catch (error: unknown) {
+            if (error instanceof TerminalSessionNotFoundError) {
+              yield frame<TerminalStreamFrame>({
+                type: 'stream/error',
+                error: {
+                  code: 'terminal-session-not-found',
+                  message: error.message,
+                  details: { workspaceId, sessionId },
+                },
+              })
+              return
+            }
+            throw error
+          }
+        })()
       },
     },
 
