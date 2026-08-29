@@ -4,7 +4,7 @@
 
 > UI 模式：`spec-driven`（规范驱动 UI）
 >
-> 全局 Token、色板与字号仅由 Design Issue 变更；UI 实现 PR 不得修改。页面布局与业务文案以 PRD 为准。运行时 `--dsw-*` 值由 [`ui-theme`](../../packages/client/ui-theme/README.md) 样式表拥有；本文件是品牌板映射。同一工具箱栏内的 Git 面板消费本品牌板，不另定义色板、字号或 §5 原语。见 [web-styling.md](../web-styling.md)、[文件编辑器设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-20-file-editor-design-system.md) 与 [Git 面板设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-25-git-panel-design-system.md)。
+> 全局 Token、色板与字号仅由 Design Issue 变更；UI 实现 PR 不得修改。页面布局与业务文案以 PRD 为准。运行时 `--dsw-*` 值由 [`ui-theme`](../../packages/client/ui-theme/README.md) 样式表拥有；本文件是品牌板映射。同一工具箱栏内的 Git 面板与人类终端消费本品牌板，不另定义色板、字号或 §5 原语。见 [web-styling.md](../web-styling.md)、[文件编辑器设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-20-file-editor-design-system.md)、[Git 面板设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-25-git-panel-design-system.md) 与 [人类终端设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-29-human-terminal-design-system.md)。
 
 ## 1. 概览与创意北极星
 
@@ -54,7 +54,7 @@ light 模式下 `--dsw-alias-brand-primary` 为 `--dsw-static-neutral-bluish-100
 |------|-------|-----------|------|
 | 底层 | `--dsw-alias-bg-base` | `#FFFFFF` | details 栏背景 |
 | 文件树区 | `--dsw-alias-bg-overlay` | `#E9ECF2` | 叠色列表列（文件树或其他操作列表） |
-| 编辑区 | `--dsw-alias-markdown-code-block` | `#F9FAFB` | 代码/预览区（Monaco 或行级差异） |
+| 编辑区 | `--dsw-alias-markdown-code-block` | `#F9FAFB` | 代码/预览区（Monaco、行级差异或 xterm 画布） |
 | 提示/空状态卡片 | `--dsw-alias-bg-overlay` | `#E9ECF2` | 分组容器，圆角 8px |
 | 对话框/确认 | `--dsw-alias-bg-layer-3` | `#FFFFFF` | 复用 Harness 浮层（若有） |
 
@@ -68,7 +68,7 @@ Dark 模式：`bg-base` `#151517`，`bg-overlay` `#61666B`，`markdown-code-bloc
 
 ## 3. 字体：Harness 继承版式
 
-UI 文案使用 `--dsw-font-family`（含 PingFang SC 等系统栈）；Monaco 代码区与行级差异使用 `--ds-font-family-code`（SF Mono / JetBrains Mono 栈）。配对理由：与对话区代码块一致，可编辑与预览的代码共用同一套字体。
+UI 文案使用 `--dsw-font-family`（含 PingFang SC 等系统栈）；Monaco 代码区、行级差异与 xterm 画布使用 `--ds-font-family-code`（SF Mono / JetBrains Mono 栈）。配对理由：与对话区代码块一致，可编辑、预览与终端代码共用同一套字体。
 
 ### 字号阶梯（品牌板须可视化）
 
@@ -77,11 +77,11 @@ UI 文案使用 `--dsw-font-family`（含 PingFang SC 等系统栈）；Monaco �
 | 标题 | `--dsw-font-family` | details 分段 Tab 标签、对话框标题 | 14px/20px semibold |
 | 正文 | `--dsw-font-family` | 文件树文件名、空状态说明 | 13px/18px regular |
 | 标签 | `--dsw-font-family` | 微徽章、搜索框 placeholder、caption | 10–12px/12–16px regular |
-| 代码 | `--ds-font-family-code` | Monaco 编辑区与行级差异 | 13px/20px regular |
+| 代码 | `--ds-font-family-code` | Monaco 编辑区、行级差异与 xterm 画布 | 13px/20px regular |
 
 ### 信息层级
 
-标题（Tab、对话框）用 `label-primary`；树节点、列表路径与 Tab 标题用 13px `label-primary`；辅助说明与徽章用 `label-secondary` / `label-caption`。Monaco 与行级差异用 13px/20px 保持紧凑 IDE 密度；列表行高 22px，与 13px 正文形成 tight 对比而非拉大字号。
+标题（Tab、对话框）用 `label-primary`；树节点、列表路径与 Tab 标题用 13px `label-primary`；辅助说明与徽章用 `label-secondary` / `label-caption`。Monaco、行级差异与 xterm 用 13px/20px 保持紧凑 IDE 密度；列表行高 22px，与 13px 正文形成 tight 对比而非拉大字号。
 
 ### 字体实现约束（受限运行时须填写）
 
@@ -196,5 +196,5 @@ Dark 模式下 `editor-hover-tint` 为 `rgba(255,255,255,0.08)` 叠于 `#151517`
 * **禁止** 在工具箱 UI 内引入第二套主题色或 Tailwind/组件库。
 * **禁止** 用 1px 实线边框做主要分区（除输入框聚焦与 Tab 底边强调外）。
 * **禁止** 全屏遮罩 blocking 整个 dsh Web（异步反馈仅工具箱栏内）。
-* **禁止** Monaco 区或行级差异使用 UI sans-serif 字体。
+* **禁止** Monaco 区、行级差异或 xterm 画布使用 UI sans-serif 字体。
 * **禁止** 在本设计系统文档中写 Session、Workspace、Agent 等领域术语作视觉标签。

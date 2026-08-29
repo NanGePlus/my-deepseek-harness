@@ -4,7 +4,7 @@ English | [中文](DESIGN.zh.md)
 
 > UI mode: `spec-driven` (spec-driven UI)
 >
-> Global tokens, palettes, and type scale change only through a Design Issue; UI implementation PRs must not edit them. Page layout and product copy live in the PRD. Runtime `--dsw-*` values are owned by [`ui-theme`](../../packages/client/ui-theme/README.md) sheets; this file is the brand-board mapping. The Git panel in the same toolbox column consumes this board and does not define a second palette, type scale, or §5 primitive. See [web-styling.md](../web-styling.md), the [file-editor design-system Agent Note](../../.agents/notes/implemented/process/2026-08-20-file-editor-design-system.md), and the [Git panel design-system Agent Note](../../.agents/notes/implemented/process/2026-08-25-git-panel-design-system.md).
+> Global tokens, palettes, and type scale change only through a Design Issue; UI implementation PRs must not edit them. Page layout and product copy live in the PRD. Runtime `--dsw-*` values are owned by [`ui-theme`](../../packages/client/ui-theme/README.md) sheets; this file is the brand-board mapping. The Git panel and human terminal in the same toolbox column consume this board and do not define a second palette, type scale, or §5 primitive. See [web-styling.md](../web-styling.md), the [file-editor design-system Agent Note](../../.agents/notes/implemented/process/2026-08-20-file-editor-design-system.md), the [Git panel design-system Agent Note](../../.agents/notes/implemented/process/2026-08-25-git-panel-design-system.md), and the [human-terminal design-system Agent Note](../../.agents/notes/implemented/process/2026-08-29-human-terminal-design-system.md).
 
 ## 1. Overview and creative north star
 
@@ -54,7 +54,7 @@ In light mode `--dsw-alias-brand-primary` is `--dsw-static-neutral-bluish-1000` 
 |-------|-------|-----------|-----|
 | Base | `--dsw-alias-bg-base` | `#FFFFFF` | details column background |
 | File-tree pane | `--dsw-alias-bg-overlay` | `#E9ECF2` | overlay list column (file tree or other operation lists) |
-| Editor pane | `--dsw-alias-markdown-code-block` | `#F9FAFB` | code/preview pane (Monaco or line-level diffs) |
+| Editor pane | `--dsw-alias-markdown-code-block` | `#F9FAFB` | code/preview pane (Monaco, line-level diffs, or xterm canvas) |
 | Hint / empty-state card | `--dsw-alias-bg-overlay` | `#E9ECF2` | grouping container, 8px radius |
 | Dialog / confirm | `--dsw-alias-bg-layer-3` | `#FFFFFF` | reuse the Harness overlay when present |
 
@@ -68,7 +68,7 @@ Not applicable; skip. The file editor does not use frosted glass or a signature 
 
 ## 3. Type: Harness-inherited type
 
-UI copy uses `--dsw-font-family` (including PingFang SC and the system stack). The Monaco code pane and line-level diffs use `--ds-font-family-code` (SF Mono / JetBrains Mono stack). Pairing reason: it matches conversation code blocks, so editable and previewed code share one face.
+UI copy uses `--dsw-font-family` (including PingFang SC and the system stack). The Monaco code pane, line-level diffs, and xterm canvas use `--ds-font-family-code` (SF Mono / JetBrains Mono stack). Pairing reason: it matches conversation code blocks, so editable, previewed, and terminal code share one face.
 
 ### Type scale (must be visualizable on a brand board)
 
@@ -77,11 +77,11 @@ UI copy uses `--dsw-font-family` (including PingFang SC and the system stack). T
 | Heading | `--dsw-font-family` | details segmented Tab labels, dialog titles | 14px/20px semibold |
 | Body | `--dsw-font-family` | file-tree names, empty-state body | 13px/18px regular |
 | Label | `--dsw-font-family` | micro badges, search placeholder, caption | 10–12px/12–16px regular |
-| Code | `--ds-font-family-code` | Monaco pane and line-level diffs | 13px/20px regular |
+| Code | `--ds-font-family-code` | Monaco pane, line-level diffs, and xterm canvas | 13px/20px regular |
 
 ### Information hierarchy
 
-Titles (tabs, dialogs) use `label-primary`. Tree nodes, list paths, and tab titles use 13px `label-primary`. Supporting copy and badges use `label-secondary` / `label-caption`. Monaco and line-level diffs use 13px/20px to keep IDE density; list row height 22px against 13px body is a tight contrast, not a larger type size.
+Titles (tabs, dialogs) use `label-primary`. Tree nodes, list paths, and tab titles use 13px `label-primary`. Supporting copy and badges use `label-secondary` / `label-caption`. Monaco, line-level diffs, and xterm use 13px/20px to keep IDE density; list row height 22px against 13px body is a tight contrast, not a larger type size.
 
 ### Font implementation constraints (required for constrained runtimes)
 
@@ -196,5 +196,5 @@ Every component is a generic UI primitive for toolbox UIs to consume. Colors ref
 * **Don't** introduce a second theme palette or a Tailwind/component library inside toolbox UIs.
 * **Don't** use a 1px solid border as the primary partition (except input focus and the tab bottom-edge emphasis).
 * **Don't** full-screen-mask the entire dsh Web (async feedback stays inside the toolbox column).
-* **Don't** use UI sans-serif in the Monaco pane or in line-level diffs.
+* **Don't** use UI sans-serif in the Monaco pane, in line-level diffs, or in the xterm canvas.
 * **Don't** use Session, Workspace, or Agent as visual labels in this design-system document.

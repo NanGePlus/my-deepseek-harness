@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-20-file-editor-design-system.md
-2026-08-20-file-editor-design-system.md: c009c3e648f4c526e56f54dc6d07b9dfad1134fe
-2026-08-20-file-editor-design-system.zh.md: 38acd2b66e4f98f7917cee787ade90e3bf1c9f1c
+2026-08-20-file-editor-design-system.md: 4af9e927cfad3be86b95e748eea5afebf39688ce
+2026-08-20-file-editor-design-system.zh.md: 389100b229906533b5164fc394bb418a6c708a0d

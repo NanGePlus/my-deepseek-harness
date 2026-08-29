@@ -146,6 +146,7 @@
 | `issue/58-git-panel-diff-preview` | [#58](https://github.com/NanGePlus/my-deepseek-harness/issues/58) `ui-git`：差异预览与按块操作 | 已合并入 `custom/main`（PR [#67](https://github.com/NanGePlus/my-deepseek-harness/pull/67)） |
 | `issue/59-git-panel-action-guard` | [#59](https://github.com/NanGePlus/my-deepseek-harness/issues/59) `ui-git`：Git 操作守卫 | 已合并入 `custom/main`（PR [#68](https://github.com/NanGePlus/my-deepseek-harness/pull/68)） |
 | `feat/v3` | V3 人类终端：父 PRD [#73](https://github.com/NanGePlus/my-deepseek-harness/issues/73)；切片 #74–#81 | 进行中；基线 `origin/custom/main` |
+| `issue/74-d-global-human-terminal-design-close` | [#74](https://github.com/NanGePlus/my-deepseek-harness/issues/74) `#D-global`：验收关闭人类终端 DESIGN.md | 进行中 |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
@@ -263,3 +264,4 @@
 | 2026-08-29 | 从最新 `origin/custom/main` 创建分支 `feat/v3` | V3 版本迭代线；基线 `c037bbd`（#72 Graph 提交差异默认折叠） |
 | 2026-08-29 | V3 人类终端规格锁定 | `grill-with-docs` 拷问完成；更新 `CONTEXT.md`；新增 `docs/prd/terminal-v3.md`、`docs/adr/0005-human-terminal-host-rpc.md`、`docs/adr/0006-human-terminal-client-plugin.md` |
 | 2026-08-29 | 发布人类终端 V3 Issue | 父 PRD [#73](https://github.com/NanGePlus/my-deepseek-harness/issues/73)；#74 `#D-global`；#75 Host terminal RPC；#76 app-shell 四段 Tab；#77–#80 `human-terminal` 四刀；#81 改盘刷新协调 |
+| 2026-08-29 | 从最新 `origin/custom/main` 创建分支 `issue/74-d-global-human-terminal-design-close` | Issue [#74](https://github.com/NanGePlus/my-deepseek-harness/issues/74) `#D-global` 验收关闭；人类终端消费既有品牌板，不新增 §5 原语 |

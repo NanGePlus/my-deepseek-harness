@@ -10,7 +10,7 @@ Git 面板 V2 是 spec-driven：页面布局与业务文案在 PRD，但 UI 实�
 
 ## Decision
 
-[`docs/design/DESIGN.md`](../../../../docs/design/DESIGN.md) 同时是 Git 面板与文件编辑器的品牌板。[文件编辑器设计系统 Agent Note](2026-08-20-file-editor-design-system.md) 仍拥有叠色 Token 名、light 模式下 `--dsw-alias-brand-primary`，以及 UI 实现 PR 不得改全局 Token 的规则。
+[`docs/design/DESIGN.md`](../../../../docs/design/DESIGN.md) 同时是 Git 面板、人类终端与文件编辑器的品牌板。[文件编辑器设计系统 Agent Note](2026-08-20-file-editor-design-system.md) 仍拥有叠色 Token 名、light 模式下 `--dsw-alias-brand-primary`，以及 UI 实现 PR 不得改全局 Token 的规则。
 
 §5 已提供列表行、多行输入、按钮、图标按钮、空状态、Loading（行内 / 内容区居中 / 列表顶条）、状态徽章、卡片容器与 details 分段 Tab。行级差异用 `semantic-success` / `semantic-error` 配 `--ds-font-family-code` 的 13px/20px，不是新原语。破坏性对话框确认使用主按钮几何，hover 用 `editor-danger-hover-tint`，说明文案用 `semantic-error`。禁用图标按钮用 `label-caption` 与 cursor not-allowed。叠色列表列用 `--dsw-alias-bg-overlay`；代码/预览区用 `--dsw-alias-markdown-code-block`。
 
@@ -25,4 +25,4 @@ Git 面板 PRD「待扩展 DESIGN §5」保持为空。页面布局、空状态�
 
 ## Consequences
 
-app-shell 与 git-panel 的 UI 实现者引用 `DESIGN.md` §5/§6 与 PRD 页面清单。不得把 HEX 拷进功能 CSS，不得新增差异行原语，也不得为了落地某一页去改品牌板。若要新增 PRD 尚未复用的通用原语，应走 Design Issue 并写入 PRD「待扩展 DESIGN §5」。
+app-shell、git-panel 与 human-terminal 的 UI 实现者引用 `DESIGN.md` §5/§6 与 PRD 页面清单。不得把 HEX 拷进功能 CSS，不得新增差异行原语，也不得为了落地某一页去改品牌板。若要新增 PRD 尚未复用的通用原语，应走 Design Issue 并写入 PRD「待扩展 DESIGN §5」。
