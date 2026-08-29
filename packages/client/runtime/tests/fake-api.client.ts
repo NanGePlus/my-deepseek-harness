@@ -301,6 +301,16 @@ export class FakeApiClient implements IApiClient {
     lspSyncDocument: (payload: unknown) => this.record('host.lspSyncDocument', payload, Promise.resolve(ok({ diagnostics: [] }))),
     lspCloseDocument: (payload: unknown) => this.record('host.lspCloseDocument', payload, Promise.resolve(ok({ closed: true as const }))),
     lspHoverDocument: (payload: unknown) => this.record('host.lspHoverDocument', payload, Promise.resolve(ok({ hover: null }))),
+    terminalProfiles: (payload: unknown) => this.record('host.terminalProfiles', payload, Promise.resolve(ok({ profiles: [{ id: 'zsh', name: 'zsh' }], defaultProfileId: 'zsh' }))),
+    terminalSpawn: (payload: unknown) => this.record('host.terminalSpawn', payload, Promise.resolve(ok({ sessionId: 'fake-terminal-1' }))),
+    terminalWrite: (payload: unknown) => this.record('host.terminalWrite', payload, Promise.resolve(ok({ written: true as const }))),
+    terminalResize: (payload: unknown) => this.record('host.terminalResize', payload, Promise.resolve(ok({ resized: true as const }))),
+    terminalKill: (payload: unknown) => this.record('host.terminalKill', payload, Promise.resolve(ok({ killed: true as const }))),
+    terminalList: (payload: unknown) => this.record('host.terminalList', payload, Promise.resolve(ok({ sessions: [] }))),
+    terminalStream: (_payload, _signal, onOpen) => {
+      onOpen?.()
+      return (async function* () {})()
+    },
   }
 
   // The archive-set field defaults at the binding below so list stubs keep

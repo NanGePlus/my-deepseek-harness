@@ -33,7 +33,7 @@ export type {
   ComposerAttachment, ComposerChainProps, ConversationInjected,
   ConversationSessionHeaderInjected, ConversationSessionInjected, ConversationSlotProps, ConvViewOwnerProps,
   ConvViewProps, DetailsEditorOwnerProps, DetailsGitOwnerProps, DetailsInjected, DetailsSlotProps,
-  DetailsToolOwnerProps, EmptyWorkspaceOwnerProps,
+  DetailsTerminalOwnerProps, DetailsToolOwnerProps, EmptyWorkspaceOwnerProps,
   TurnTailOwnerProps, UseChatNodeTurnData,
 } from './contract/slots.ts'
 // Export discipline: packages/client/AGENTS.md.

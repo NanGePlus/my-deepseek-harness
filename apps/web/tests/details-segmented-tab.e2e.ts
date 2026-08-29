@@ -1,7 +1,7 @@
 // Keyless browser regression for the details segmented tab chrome and editor-surface
 // (file tree + unopened-file empty state). The workspace fixture is not a Git
 // repository: an empty `.git` directory would make `git status` mis-detect one.
-// This slice covers the three-tab chrome (File editor | Git | Tool details)
+// This slice covers the four-tab chrome (File editor | Git | Terminal | Tool details)
 // and the Git panel not-a-repository empty state of the non-Git workspace fixture.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -97,9 +97,10 @@ describe.skipIf(MODE === 'record')('web e2e: details segmented tab chrome', () =
     const editorSnapshot = await captureStableAria(page, '[data-surface="editor-surface"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(EDITOR_EXPECTED, editorSnapshot, MODE)
 
-    await page.getByRole('tab', { name: 'Git panel' }).click()
-    expect(await page.getByRole('tab', { name: 'Git panel' }).getAttribute('aria-selected')).toBe('true')
+    await page.getByRole('tab', { name: 'Git' }).click()
+    expect(await page.getByRole('tab', { name: 'Git' }).getAttribute('aria-selected')).toBe('true')
     expect(await page.getByRole('tab', { name: 'File editor' }).getAttribute('aria-selected')).toBe('false')
+    expect(await page.getByRole('tab', { name: 'Terminal' }).getAttribute('aria-selected')).toBe('false')
     expect(await page.getByRole('tab', { name: 'Tool details' }).getAttribute('aria-selected')).toBe('false')
     await expect.poll(() => detailsTrack(page), { timeout: 10_000 }).toBeGreaterThan(0)
     await page.getByText('Not a Git repository', { exact: true }).waitFor({ timeout: 10_000 })
