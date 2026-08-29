@@ -28,6 +28,8 @@ export interface XtermViewportHandle {
   attach(host: HTMLElement): void
   /** Write PTY output bytes. */
   write(text: string): void
+  /** Clear the screen and scrollback before a Host scrollback replay. */
+  reset(): void
   /** Apply a Harness theme refresh. */
   setDark(dark: boolean): void
   /** Reflow to the host size and emit resize when dimensions change. */
@@ -78,6 +80,9 @@ export function createXtermViewport(options: XtermViewportOptions): XtermViewpor
     },
     write(text) {
       terminal.write(text)
+    },
+    reset() {
+      terminal.write('\x1bc')
     },
     setDark(dark) {
       terminal.options.theme = harnessXtermTheme(dark)

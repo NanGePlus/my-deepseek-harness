@@ -369,11 +369,12 @@ export function TerminalPanel({
   ])
 
   useEffect(() => {
-    if (!visible || workspaceId === undefined || selectedSessionId === undefined) return
+    if (workspaceId === undefined || selectedSessionId === undefined) return
     streamAbortRef.current?.abort()
     const ac = new AbortController()
     streamAbortRef.current = ac
-    actions.setConnecting(workspaceId, true)
+    if (visible) actions.setConnecting(workspaceId, true)
+    ensureViewport()?.reset()
     terminalStream(workspaceId, selectedSessionId, (frame) => {
       if (frame.type === 'host/terminal-scrollback' || frame.type === 'host/terminal-output') {
         ensureViewport()?.write(frame.text)
@@ -382,15 +383,15 @@ export function TerminalPanel({
         actions.updateTabTitle(workspaceId, selectedSessionId, frame.title)
       }
     }, ac.signal, () => {
-      actions.setConnecting(workspaceId, false)
+      if (visible) actions.setConnecting(workspaceId, false)
       actions.setInlineError(workspaceId, undefined)
     }, (message) => {
-      actions.setConnecting(workspaceId, false)
+      if (visible) actions.setConnecting(workspaceId, false)
       actions.setInlineError(workspaceId, message)
     })
     return () => { ac.abort() }
   }, [
-    actions, ensureViewport, selectedSessionId, streamAttempt, terminalStream, visible, workspaceId,
+    actions, ensureViewport, selectedSessionId, streamAttempt, terminalStream, workspaceId,
   ])
 
   useEffect(() => {

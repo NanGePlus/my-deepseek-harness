@@ -1,6 +1,6 @@
 # Human terminal minimal path (Issue #77)
 
-`@deepseek-ai/dsh-client-ui-terminal` injects into `conversation.details.terminal`: workspace-scoped tab store, auto-spawn on first visible entry, xterm viewport wired to `host.terminal.*`, unbound empty state, Harness light/dark theme follow, and multi-tab `+`/Kill (#78). Unavailable card, inline errors, and spawn-disabled `+` ship in #79; hard-refresh reconnect (#80) stays out of scope.
+`@deepseek-ai/dsh-client-ui-terminal` injects into `conversation.details.terminal`: workspace-scoped tab store, auto-spawn on first visible entry, xterm viewport wired to `host.terminal.*`, unbound empty state, Harness light/dark theme follow, and multi-tab `+`/Kill (#78). Unavailable card, inline errors, and spawn-disabled `+` ship in #79. Segment-hide SSE persistence, hard-refresh `list` reconnect, and scrollback replay ship in #80.
 
 ## Verification
 

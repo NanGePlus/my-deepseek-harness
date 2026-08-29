@@ -15,6 +15,7 @@ describe('createXtermViewport', () => {
     const viewport = createXtermViewport({ dark: false, onInput, onResize })
     viewport.attach(host)
     viewport.write('hello')
+    viewport.reset()
     viewport.setDark(true)
     viewport.fit()
     viewport.fit()
