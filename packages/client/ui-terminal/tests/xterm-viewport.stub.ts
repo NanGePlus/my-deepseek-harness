@@ -13,6 +13,7 @@ interface XtermViewportOptions {
 interface XtermViewportHandle {
   attach(host: HTMLElement): void
   write(text: string): void
+  reset(): void
   setDark(dark: boolean): void
   fit(): void
   dispose(): void
@@ -21,6 +22,7 @@ interface XtermViewportHandle {
 export const createXtermViewport: Mock<(options: XtermViewportOptions) => XtermViewportHandle> = vi.fn(() => ({
   attach: vi.fn(),
   write: vi.fn(),
+  reset: vi.fn(),
   setDark: vi.fn(),
   fit: vi.fn(),
   dispose: vi.fn(),
