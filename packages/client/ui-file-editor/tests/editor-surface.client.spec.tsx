@@ -952,6 +952,38 @@ describe('EditorSurface open / save', () => {
     await waitFor(() => { expect(b.gitStatus.mock.calls.length).toBeGreaterThan(1) })
   })
 
+  it('segment-disk-refresh-hidden: segmentDiskRefreshEpoch re-fetches Git badges while Explorer stays hidden', async () => {
+    const b = mount()
+    await waitFor(() => { expect(b.gitStatus).toHaveBeenCalledTimes(1) })
+    b.view.rerender(<EditorSurface {...b.props} visible={false} segmentDiskRefreshEpoch={1} />)
+    await waitFor(() => { expect(b.gitStatus.mock.calls.length).toBeGreaterThan(1) })
+  })
+
+  it('segment-disk-refresh-open-tab: segmentDiskRefreshEpoch reloads open text tabs from disk', async () => {
+    const readCounts = new Map<string, number>()
+    const b = mount({
+      read: async (_id, path, kind) => {
+        if (kind !== 'text') return defaultReadFile(_id, path, kind)
+        const count = (readCounts.get(path) ?? 0) + 1
+        readCounts.set(path, count)
+        return {
+          kind: 'text' as const,
+          path,
+          text: count === 1 ? 'initial\n' : 'terminal\n',
+        }
+      },
+    })
+    await waitFor(() => { expect(b.listWorkspaceEntries).toHaveBeenCalled() })
+    const tree = await waitFor(() => screen.getByRole('tree', { name: 'alpha' }))
+    fireEvent.click(within(tree).getByText('README.md').closest('[role="treeitem"]')!)
+    const box = await markdownEditor()
+    fireEvent.change(box, { target: { value: 'local edits\n' } })
+    expect(screen.getByLabelText('未保存')).toBeTruthy()
+    b.view.rerender(<EditorSurface {...b.props} visible={false} segmentDiskRefreshEpoch={1} />)
+    await waitFor(async () => { expect((await markdownEditor()).value).toBe('terminal\n') })
+    expect(screen.queryByLabelText('未保存')).toBeNull()
+  })
+
   it('save-skips-tree-refresh: saving updates Git badges without re-fetching the parent directory listing', async () => {
     const b = mount()
     await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })

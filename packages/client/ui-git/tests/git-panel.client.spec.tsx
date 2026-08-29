@@ -1235,6 +1235,28 @@ describe('GitPanel', () => {
     expect(screen.getByRole('progressbar', { name: '刷新 Git 状态' })).toBeTruthy()
   })
 
+  it('segment-disk-refresh-visible: segmentDiskRefreshEpoch re-reads while Git is shown', async () => {
+    const gitWorkingTree = vi.fn()
+      .mockResolvedValueOnce(DIRTY_REPO)
+      .mockReturnValueOnce(new Promise(() => {}))
+    const b = mount({ gitWorkingTree })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    b.view.rerender(<GitPanel {...b.props} segmentDiskRefreshEpoch={1} />)
+    await waitFor(() => { expect(gitWorkingTree).toHaveBeenCalledTimes(2) })
+  })
+
+  it('segment-disk-refresh-hidden: segmentDiskRefreshEpoch schedules a re-read when Git becomes visible', async () => {
+    const gitWorkingTree = vi.fn()
+      .mockResolvedValueOnce(DIRTY_REPO)
+      .mockReturnValueOnce(new Promise(() => {}))
+    const b = mount({ gitWorkingTree })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    b.view.rerender(<GitPanel {...b.props} visible={false} segmentDiskRefreshEpoch={1} />)
+    expect(gitWorkingTree).toHaveBeenCalledTimes(1)
+    b.view.rerender(<GitPanel {...b.props} visible={true} segmentDiskRefreshEpoch={1} />)
+    await waitFor(() => { expect(gitWorkingTree).toHaveBeenCalledTimes(2) })
+  })
+
   it('follows the current Session Workspace after a Session switch', async () => {
     const other = workspace({
       workspaceId: WID2,

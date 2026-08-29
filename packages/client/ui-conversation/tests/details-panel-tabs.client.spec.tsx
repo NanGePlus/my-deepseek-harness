@@ -220,6 +220,74 @@ describe('DetailsPanel segmented tabs', () => {
     expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('true')
   })
 
+  it('terminal-enter-git-disk-refresh: leaving 终端 for Git bumps segmentDiskRefreshEpoch once', () => {
+    let gitEpoch = -1
+    const { view } = bench({
+      renderSlot: (key, owner) => {
+        if (key === 'conversation.details.git') {
+          gitEpoch = (owner as unknown as DetailsGitOwnerProps).segmentDiskRefreshEpoch
+          return <div data-testid="git-panel-seat" />
+        }
+        if (key === 'conversation.details.terminal') {
+          return <div data-testid="terminal-seat" />
+        }
+        return null
+      },
+    })
+    fireEvent.click(view.getByRole('tab', { name: '终端' }))
+    fireEvent.click(view.getByRole('tab', { name: 'Git' }))
+    expect(gitEpoch).toBe(1)
+  })
+
+  it('terminal-leave-disk-refresh: leaving 终端 bumps segmentDiskRefreshEpoch on Explorer and Git seats', () => {
+    let editorEpoch = -1
+    let gitEpoch = -1
+    const { view, chat } = bench({
+      renderSlot: (key, owner) => {
+        if (key === 'conversation.details.editor') {
+          editorEpoch = (owner as unknown as DetailsEditorOwnerProps).segmentDiskRefreshEpoch
+          return <div data-testid="editor-surface-seat" />
+        }
+        if (key === 'conversation.details.git') {
+          gitEpoch = (owner as unknown as DetailsGitOwnerProps).segmentDiskRefreshEpoch
+          return <div data-testid="git-panel-seat" />
+        }
+        if (key === 'conversation.details.terminal') {
+          return <div data-testid="terminal-seat" />
+        }
+        return null
+      },
+    })
+    expect(editorEpoch).toBe(0)
+    expect(gitEpoch).toBe(0)
+    fireEvent.click(view.getByRole('tab', { name: '终端' }))
+    expect(editorEpoch).toBe(0)
+    fireEvent.click(view.getByRole('tab', { name: '资源管理器' }))
+    expect(chat.store.getSnapshot().detailsTab).toBe('editor')
+    expect(editorEpoch).toBe(1)
+    expect(gitEpoch).toBe(1)
+  })
+
+  it('terminal-stay-no-refresh: staying on 终端 does not bump segmentDiskRefreshEpoch', () => {
+    let editorEpoch = -1
+    const { view } = bench({
+      renderSlot: (key, owner) => {
+        if (key === 'conversation.details.editor') {
+          editorEpoch = (owner as unknown as DetailsEditorOwnerProps).segmentDiskRefreshEpoch
+          return null
+        }
+        if (key === 'conversation.details.terminal') {
+          return <div data-testid="terminal-seat" />
+        }
+        return null
+      },
+    })
+    fireEvent.click(view.getByRole('tab', { name: '终端' }))
+    expect(editorEpoch).toBe(0)
+    fireEvent.click(view.getByRole('tab', { name: '终端' }))
+    expect(editorEpoch).toBe(0)
+  })
+
   it('git-action-guard: Explorer writes dirty paths and Git reads them', () => {
     const { view } = bench({
       renderSlot: (key, owner) => {

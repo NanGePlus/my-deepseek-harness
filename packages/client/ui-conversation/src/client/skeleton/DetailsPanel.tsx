@@ -2,9 +2,10 @@
 // column content seats. Reads selection and tab state from the current
 // session chat store. Leaving a tab hides its panel and does not unmount it.
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import type { DetailsSlotProps } from '../contract/slots.ts'
+import type { DetailsTab } from '../contract/views.ts'
 import { ToolDetailsBody } from './ToolDetailsBody.tsx'
 import css from './DetailsPanel.module.css'
 
@@ -39,6 +40,8 @@ export function DetailsPanel({
     paths: [],
     reload: true,
   })
+  const [segmentDiskRefreshEpoch, setSegmentDiskRefreshEpoch] = useState(0)
+  const prevDetailsTabRef = useRef<DetailsTab | null>(null)
   /** Keep the same array when contents match so the Git occupant does not re-render. */
   const setDirtyPaths = useCallback((paths: readonly string[]) => {
     setDirtyPathsState((current) => {
@@ -52,6 +55,18 @@ export function DetailsPanel({
     if (paths.length === 0) return
     setDiskPathsChanged(current => ({ epoch: current.epoch + 1, paths: [...paths], reload }))
   }, [])
+
+  useEffect(() => {
+    const prev = prevDetailsTabRef.current
+    prevDetailsTabRef.current = detailsTab
+    if (prev === null) return
+    const leavingTerminal = prev === 'terminal' && detailsTab !== 'terminal'
+    const enteringEditorOrGit =
+      (detailsTab === 'editor' || detailsTab === 'git') && prev !== detailsTab
+    if (leavingTerminal || enteringEditorOrGit) {
+      setSegmentDiskRefreshEpoch(epoch => epoch + 1)
+    }
+  }, [detailsTab])
 
   return (
     <div className={css.root}>
@@ -86,6 +101,7 @@ export function DetailsPanel({
             diskPathsChangedEpoch: diskPathsChanged.epoch,
             diskPathsChanged: diskPathsChanged.paths,
             diskPathsChangedReload: diskPathsChanged.reload,
+            segmentDiskRefreshEpoch,
           })}
         </div>
         <div
@@ -97,6 +113,7 @@ export function DetailsPanel({
             visible: detailsTab === 'git',
             dirtyPaths,
             notifyDiskPathsChanged,
+            segmentDiskRefreshEpoch,
           })}
         </div>
         <div

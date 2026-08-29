@@ -453,6 +453,12 @@ export interface DetailsGitOwnerProps {
    * follow-up call with `reload: true`; default reloads open tabs from disk.
    */
   notifyDiskPathsChanged: (paths: readonly string[], reload?: boolean) => void
+  /**
+   * Monotonic epoch bumped when the toolbox leaves **终端** or enters
+   * **资源管理器** / **Git**, so the Git occupant re-reads disk after
+   * terminal-side writes without realtime refresh while Terminal is selected.
+   */
+  segmentDiskRefreshEpoch: number
 }
 
 /** Owner share of the toolbox human-terminal occupant: whether the Terminal segment is selected. */
@@ -485,6 +491,12 @@ export interface DetailsEditorOwnerProps {
    * dialog (Git discard in flight); when true, open tabs reload from disk.
    */
   diskPathsChangedReload: boolean
+  /**
+   * Monotonic epoch bumped when the toolbox leaves **终端** or enters
+   * **资源管理器** / **Git**, so Git badges and open tabs re-read disk after
+   * terminal-side writes without realtime refresh while Terminal is selected.
+   */
+  segmentDiskRefreshEpoch: number
 }
 
 /**
