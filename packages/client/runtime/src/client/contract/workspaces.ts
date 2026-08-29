@@ -400,6 +400,17 @@ export interface IWorkspaces {
     signal?: AbortSignal,
   ): Promise<{ resized: true }>
   /**
+   * Kill one live human terminal session and release its PTY.
+   * @param workspaceId - Workspace that owns the session pool.
+   * @param sessionId - live session id from spawn or list.
+   * @param signal - aborts the wire request when the caller supersedes it.
+   */
+  terminalKill(
+    workspaceId: WorkspaceId,
+    sessionId: string,
+    signal?: AbortSignal,
+  ): Promise<{ killed: true }>
+  /**
    * List live human terminal sessions for one Workspace.
    * @param workspaceId - Workspace whose session pool is queried.
    * @param signal - aborts the wire request when the caller supersedes it.

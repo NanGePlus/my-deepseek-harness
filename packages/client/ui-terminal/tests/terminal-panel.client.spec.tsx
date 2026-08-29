@@ -2,7 +2,7 @@
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { useSyncExternalStore } from 'react'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
   SessionId, SessionListState, WorkspaceId, WorkspaceView,
@@ -105,6 +105,7 @@ function mount(over: MountOverrides = {}) {
     onOpen?.()
     onFrame({ type: 'host/terminal-scrollback', text: '$ ', truncated: false })
   }))
+  const terminalKill = vi.fn(over.terminalKill ?? (async () => ({ killed: true as const })))
   const items = over.items ?? [workspace()]
   const workspacesStore = createSnapshotStore(workspacesState(items))
   const sessionsStore = createSnapshotStore(sessionsState(
@@ -124,6 +125,7 @@ function mount(over: MountOverrides = {}) {
     terminalWrite,
     terminalResize,
     terminalStream,
+    terminalKill,
     ...over,
   }
   const view = render(<TerminalPanel {...props} />)
@@ -139,7 +141,11 @@ function mount(over: MountOverrides = {}) {
     terminalWrite,
     terminalResize,
     terminalStream,
+    terminalKill: over.terminalKill,
     panelStore,
+    rerender: (next: Partial<TerminalPanelProps> = {}) => {
+      view.rerender(<TerminalPanel {...props} {...next} />)
+    },
     unmount: view.unmount,
   }
 }
@@ -370,6 +376,86 @@ describe('TerminalPanel', () => {
     await waitFor(() => { expect(handle.fit).toHaveBeenCalled() })
   })
 
+  it('no-split-menu: the + dropdown lists only Host shell profiles', async () => {
+    const terminalProfiles = vi.fn(async () => ({
+      profiles: [
+        { id: 'zsh', name: 'zsh' },
+        { id: 'bash', name: 'bash' },
+      ],
+      defaultProfileId: 'zsh',
+    }))
+    mount({ terminalProfiles })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'zsh' })).toBeTruthy() })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '新建终端' })) })
+    await waitFor(() => {
+      const menu = screen.getByRole('menu')
+      expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['zsh', 'bash'])
+    })
+    expect(screen.queryByRole('menuitem', { name: /Split/i })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /Debug/i })).toBeNull()
+  })
+
+  it('kill-tab: Kill removes the tab, calls Host kill, and selects an adjacent tab', async () => {
+    const terminalKill = vi.fn(async () => ({ killed: true as const }))
+    const terminalList = vi.fn(async () => ({
+      sessions: [
+        { sessionId: 'live-1', title: 'first', profileId: 'zsh' },
+        { sessionId: 'live-2', title: 'second', profileId: 'bash' },
+      ],
+    }))
+    mount({ terminalList, terminalKill })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'first' })).toBeTruthy() })
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: '终止终端' })[0]!)
+    })
+    await waitFor(() => {
+      expect(terminalKill).toHaveBeenCalledWith(WID, 'live-1', expect.any(AbortSignal))
+    })
+    await waitFor(() => { expect(screen.queryByRole('tab', { name: 'first' })).toBeNull() })
+    expect(screen.getByRole('tab', { name: 'second' }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('kill-tab: killing every tab defers auto-spawn until the Terminal segment is re-entered', async () => {
+    let spawnCount = 0
+    const terminalSpawn = vi.fn(async () => ({ sessionId: `term-${++spawnCount}` }))
+    const terminalList = vi.fn(async () => ({
+      sessions: [{ sessionId: 'live-1', title: 'only', profileId: 'zsh' }],
+    }))
+    const { terminalSpawn: spawnMock, rerender } = mount({ terminalList, terminalSpawn })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'only' })).toBeTruthy() })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '终止终端' }))
+    })
+    await waitFor(() => { expect(screen.queryByRole('tab')).toBeNull() })
+    await act(async () => { await Promise.resolve() })
+    expect(spawnMock).not.toHaveBeenCalled()
+    await act(async () => { rerender({ visible: false }) })
+    await act(async () => { rerender({ visible: true, terminalList: vi.fn(async () => ({ sessions: [] })) }) })
+    await waitFor(() => { expect(spawnMock).toHaveBeenCalled() })
+  })
+
+  it('spawn-via-dropdown: selecting a profile from the + menu spawns a new tab', async () => {
+    let spawnCount = 0
+    const terminalSpawn = vi.fn(async () => ({ sessionId: `term-${++spawnCount}` }))
+    const terminalProfiles = vi.fn(async () => ({
+      profiles: [
+        { id: 'zsh', name: 'zsh' },
+        { id: 'bash', name: 'bash' },
+      ],
+      defaultProfileId: 'zsh',
+    }))
+    mount({ terminalSpawn, terminalProfiles })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'zsh' })).toBeTruthy() })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '新建终端' })) })
+    await waitFor(() => { expect(screen.getByRole('menuitem', { name: 'bash' })).toBeTruthy() })
+    await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: 'bash' })) })
+    await waitFor(() => {
+      expect(terminalSpawn).toHaveBeenLastCalledWith(WID, 'bash', ROOT, expect.any(AbortSignal))
+    })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'bash' })).toBeTruthy() })
+    expect(screen.getAllByRole('tab')).toHaveLength(2)
+  })
+
   it('restores another Workspace tab set from the store without re-spawning', async () => {
     const panelStore = createTerminalPanelStore().create()
     panelStore.actions.setWorkspaceTabs(WID, [{
@@ -391,6 +477,7 @@ describe('TerminalPanel', () => {
         terminalSpawn={terminalSpawn}
         terminalWrite={vi.fn()}
         terminalResize={vi.fn()}
+        terminalKill={vi.fn(async () => ({ killed: true as const }))}
         terminalStream={vi.fn((_w, _s, _f, _sig, onOpen) => { onOpen?.() })}
       />,
     )

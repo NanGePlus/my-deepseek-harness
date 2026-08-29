@@ -18,6 +18,7 @@ async function bench() {
     terminalSpawn: vi.fn(() => Promise.resolve({ sessionId: 'fake-terminal-1' })),
     terminalWrite: vi.fn(() => Promise.resolve({ written: true as const })),
     terminalResize: vi.fn(() => Promise.resolve({ resized: true as const })),
+    terminalKill: vi.fn(() => Promise.resolve({ killed: true as const })),
     terminalStream: vi.fn(),
   }
   ctx.provide('workspaces', workspaces)
@@ -62,9 +63,11 @@ describe('ui-terminal apply', () => {
     face.terminalStream('ws' as WorkspaceId, 'term-1', () => {}, new AbortController().signal, () => {})
     face.terminalWrite('ws' as WorkspaceId, 'term-1', 'ls\n')
     face.terminalResize('ws' as WorkspaceId, 'term-1', 80, 24)
+    await expect(face.terminalKill('ws' as WorkspaceId, 'term-1')).resolves.toEqual({ killed: true })
     expect(b.workspaces.terminalStream).toHaveBeenCalled()
     expect(b.workspaces.terminalWrite).toHaveBeenCalledWith('ws', 'term-1', 'ls\n', undefined)
     expect(b.workspaces.terminalResize).toHaveBeenCalledWith('ws', 'term-1', 80, 24, undefined)
+    expect(b.workspaces.terminalKill).toHaveBeenCalledWith('ws', 'term-1', undefined)
   })
 
   it('unregisters the Terminal occupant when the plugin fiber disposes', async () => {
