@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-29-human-terminal-design-system.md
-2026-08-29-human-terminal-design-system.md: 878d9d1abc2ca7cd6cb0ee0ebba5a65681c6b655
-2026-08-29-human-terminal-design-system.zh.md: 0eb33ca5eed46ed2577c3c1830b9eff2b774aafd
+2026-08-29-human-terminal-design-system.md: ecf7014cef54decd7b636663811586345a9dcf3d
+2026-08-29-human-terminal-design-system.zh.md: 75093b613ed0ee248e429ae8fc9994a8e9a2e3a1

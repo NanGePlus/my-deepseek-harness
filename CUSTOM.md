@@ -160,7 +160,7 @@
 | `feat/v3` | V3 人类终端：父 PRD [#73](https://github.com/NanGePlus/my-deepseek-harness/issues/73)；切片 #74–#81 | 进行中；基线 `origin/custom/main` |
 | `issue/74-d-global-human-terminal-design-close` | [#74](https://github.com/NanGePlus/my-deepseek-harness/issues/74) `#D-global`：验收关闭人类终端 DESIGN.md | 进行中 |
 | `feat/v4` | V4 内嵌浏览器：父 PRD [#92](https://github.com/NanGePlus/my-deepseek-harness/issues/92)；切片 #93–#100 | 规格已锁定；基线 `origin/custom/main` |
-| `issue/93-d-global-browser-design-close` | [#93](https://github.com/NanGePlus/my-deepseek-harness/issues/93) `#D-global`：验收关闭内嵌浏览器 DESIGN.md | 待领取 |
+| `issue/93-d-global-browser-design-close` | [#93](https://github.com/NanGePlus/my-deepseek-harness/issues/93) `#D-global`：验收关闭内嵌浏览器 DESIGN.md | 进行中 |
 | `issue/94-host-browser-rpc` | [#94](https://github.com/NanGePlus/my-deepseek-harness/issues/94) Host browser RPC | 待领取 |
 | `issue/95-app-shell-browser-tab` | [#95](https://github.com/NanGePlus/my-deepseek-harness/issues/95) app-shell：五段 Tab + 浏览器槽位 | 待领取 |
 | `issue/96-ui-browser-core` | [#96](https://github.com/NanGePlus/my-deepseek-harness/issues/96) `ui-browser`：about:blank + screencast + 未绑定空态 | 待领取 |
@@ -172,6 +172,7 @@
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-08-30 | 从最新 `origin/custom/main` 创建分支 `issue/93-d-global-browser-design-close` | Issue [#93](https://github.com/NanGePlus/my-deepseek-harness/issues/93) `#D-global` 验收关闭；内嵌浏览器消费既有品牌板，不新增 §5 原语 |
 | 2026-08-30 | V4 内嵌浏览器 `/to-issues` 垂直切片 | 父 PRD [#92](https://github.com/NanGePlus/my-deepseek-harness/issues/92)；子 Issue #93–#100 |
 | 2026-08-30 | 终端 Tab 栏/内容区背景对齐资源管理器 | Tab 栏 `--dsw-specific-sidebar-fill`；xterm 内容区 `--dsw-alias-bg-base` |
 | 2026-08-30 | 终端 Tab 标题去掉路径前缀，仅显示命令/Shell 名 | Client 仍消费 Host `titleCommand`；路径不再渲染 |

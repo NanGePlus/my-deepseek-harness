@@ -25,4 +25,4 @@ The Git panel PRD 「待扩展 DESIGN §5」 list stays empty. Page layout, empt
 
 ## Consequences
 
-UI implementers for app-shell, git-panel, and human-terminal cite `DESIGN.md` §5/§6 and the PRD page list. They do not copy HEX into feature CSS, do not add a hunk-row primitive, and do not edit the brand board to land a page. A later generic primitive that the PRD does not already reuse is a Design Issue plus a PRD 「待扩展 DESIGN §5」 entry.
+UI implementers for app-shell, git-panel, human-terminal, and embedded-browser cite `DESIGN.md` §5/§6 and the PRD page list. They do not copy HEX into feature CSS, do not add a hunk-row primitive, and do not edit the brand board to land a page. A later generic primitive that the PRD does not already reuse is a Design Issue plus a PRD 「待扩展 DESIGN §5」 entry.

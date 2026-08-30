@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-[`docs/design/DESIGN.md`](../../../../docs/design/DESIGN.md) 是文件编辑器品牌板。它把 Harness `--dsw-alias-*` / `--ds-font-family-*` 映射到通用原语（含 details 分段 Tab 与文件 Tab 栏），并在 §4 命名编辑器叠色 Token（`editor-hover-tint`、`editor-selected-tint`、`editor-danger-hover-tint`、`editor-tab-active-line`、`editor-dirty-dot`）。运行时 HEX 与 alias 解析仍在 [`ui-theme`](../../../../packages/client/ui-theme/README.md) 样式表；现行编码规则仍在 [web-styling.md](../../../../docs/web-styling.md) 与 [样式系统 Agent Note](2026-07-19-web-styling-system.md)。Git 面板与人类终端消费同一品牌板，不另造色板或 §5 原语；见 [Git 面板设计系统 Agent Note](2026-08-25-git-panel-design-system.md) 与 [人类终端设计系统 Agent Note](2026-08-29-human-terminal-design-system.md)。
+[`docs/design/DESIGN.md`](../../../../docs/design/DESIGN.md) 是文件编辑器品牌板。它把 Harness `--dsw-alias-*` / `--ds-font-family-*` 映射到通用原语（含 details 分段 Tab 与文件 Tab 栏），并在 §4 命名编辑器叠色 Token（`editor-hover-tint`、`editor-selected-tint`、`editor-danger-hover-tint`、`editor-tab-active-line`、`editor-dirty-dot`）。运行时 HEX 与 alias 解析仍在 [`ui-theme`](../../../../packages/client/ui-theme/README.md) 样式表；现行编码规则仍在 [web-styling.md](../../../../docs/web-styling.md) 与 [样式系统 Agent Note](2026-07-19-web-styling-system.md)。Git 面板、人类终端与内嵌浏览器消费同一品牌板，不另造色板或 §5 原语；见 [Git 面板设计系统 Agent Note](2026-08-25-git-panel-design-system.md)、[人类终端设计系统 Agent Note](2026-08-29-human-terminal-design-system.md) 与 [内嵌浏览器设计系统 Agent Note](2026-08-30-embedded-browser-design-system.md)。
 
 `DESIGN.md` 中的全局 Token、色板与字号只通过 Design Issue 变更。UI 实现 PR 消费这些名字（alias 或局部自定义属性），不得改品牌板。第三色绿阶保持 `ui-theme` 已发布的四阶 `--dsw-static-green-*`。light 模式下 `--dsw-alias-brand-primary` 为近黑（`#0F1115`）；Tab 底边强调跟随该 alias，而不是 DeepSeek 蓝的品牌 HEX。
 
