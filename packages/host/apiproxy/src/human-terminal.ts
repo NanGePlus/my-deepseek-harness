@@ -18,6 +18,10 @@ import {
 import type { WorkspaceId } from './api/workspace.ts'
 import type { TerminalStreamFrame } from './api/host.ts'
 import { pathWithinWorkspace, WorkspacePathOutOfBoundsError } from './list-workspace-entries.ts'
+import {
+  resolveTerminalSessionTitleParts,
+  type TerminalSessionTitleParts,
+} from './terminal-session-title.ts'
 
 /** Default PTY column count for new human terminal sessions. */
 export const HUMAN_TERMINAL_DEFAULT_COLS = 80
@@ -54,6 +58,8 @@ export interface TerminalSpawnResult {
 export interface TerminalSessionSummary {
   sessionId: string
   title: string
+  titlePath: string
+  titleCommand: string
   profileId: string
 }
 
@@ -160,6 +166,8 @@ interface LiveSession {
   pty: IPty
   scrollback: BoundedScrollback
   title: string
+  titlePath: string
+  titleCommand: string
   subscribers: Set<StreamSubscriber>
   titleTimer: ReturnType<typeof setInterval> | undefined
   inspector: ProcessInspector
@@ -201,36 +209,17 @@ function defaultProfileId(shellPath: string | undefined, profiles: TerminalShell
 }
 
 /**
- * Read short command names for one process group.
- * @param pgid - foreground process group id.
- * @param exec - injectable ps hook.
- */
-function foregroundShortName(
-  pgid: number,
-  exec: ProcessInspectorInternals['exec'],
-): string | undefined {
-  try {
-    const lines = exec('ps', ['-g', String(pgid), '-o', 'comm='])
-      .split('\n')
-      .map(line => basename(line.trim()))
-      .filter(line => line.length > 0)
-    const nonShell = lines.find(name => name !== 'zsh' && name !== 'bash' && name !== 'sh')
-    return nonShell ?? lines[0]
-  } catch {
-    return undefined
-  }
-}
-
-/**
- * Resolve the tab title from the foreground process group, falling back to the shell profile name.
+ * Resolve VS Code-style tab title parts for one live session.
  * @param session - live terminal session state.
  */
-function resolveSessionTitle(session: LiveSession): string {
+function resolveSessionTitle(session: LiveSession): TerminalSessionTitleParts {
   const foregroundPgid = session.inspector.foregroundPgid(session.handle.pid)
-  if (foregroundPgid === undefined) return session.profile.name
-  const short = foregroundShortName(foregroundPgid, session.exec)
-  if (short === undefined || short === session.profile.name) return session.profile.name
-  return short
+  return resolveTerminalSessionTitleParts(
+    foregroundPgid,
+    session.cwd,
+    session.profile.name,
+    { exec: session.exec },
+  )
 }
 
 /** Workspace-indexed human terminal PTY pool. */
@@ -328,6 +317,8 @@ export class HumanTerminalRegistry {
       pty,
       scrollback: new BoundedScrollback(this.scrollbackMaxBytes),
       title: resolved.name,
+      titlePath: '',
+      titleCommand: resolved.name,
       subscribers: new Set(),
       titleTimer: undefined,
       inspector,
@@ -350,6 +341,8 @@ export class HumanTerminalRegistry {
     const sessions = [...workspaceSessions.values()].map(session => ({
       sessionId: session.sessionId,
       title: session.title,
+      titlePath: session.titlePath,
+      titleCommand: session.titleCommand,
       profileId: session.profile.id,
     }))
     return { sessions }
@@ -406,7 +399,12 @@ export class HumanTerminalRegistry {
     const session = this.requireSession(workspaceId, sessionId)
     const snapshot = session.scrollback.snapshot()
     yield { type: 'host/terminal-scrollback', text: snapshot.text, truncated: snapshot.truncated }
-    yield { type: 'host/terminal-title', title: session.title }
+    yield {
+      type: 'host/terminal-title',
+      title: session.title,
+      titlePath: session.titlePath,
+      titleCommand: session.titleCommand,
+    }
 
     const queue: TerminalStreamFrame[] = []
     let pending: (() => void) | undefined
@@ -467,9 +465,17 @@ export class HumanTerminalRegistry {
 
   private publishTitle(session: LiveSession): void {
     const next = resolveSessionTitle(session)
-    if (next === session.title) return
-    session.title = next
-    const frame: TerminalStreamFrame = { type: 'host/terminal-title', title: next }
+    if (next.title === session.title) return
+    session.title = next.title
+    session.titlePath = next.titlePath
+    session.titleCommand = next.titleCommand
+    session.cwd = next.cwd
+    const frame: TerminalStreamFrame = {
+      type: 'host/terminal-title',
+      title: next.title,
+      titlePath: next.titlePath,
+      titleCommand: next.titleCommand,
+    }
     for (const subscriber of session.subscribers) subscriber.push(frame)
   }
 }
