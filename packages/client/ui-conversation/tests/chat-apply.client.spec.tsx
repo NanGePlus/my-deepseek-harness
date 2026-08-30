@@ -99,11 +99,12 @@ describe('apply wiring', () => {
     await b.runtime.dispose()
   })
 
-  it('declares the details Git and terminal occupants alongside editor and tool seats', async () => {
+  it('declares the details Git, terminal, and browser occupants alongside editor and tool seats', async () => {
     const b = await bench()
     expect(b.slots.spec('conversation.details.editor')).toEqual({ kind: 'single', scope: 'root' })
     expect(b.slots.spec('conversation.details.git')).toEqual({ kind: 'single', scope: 'root' })
     expect(b.slots.spec('conversation.details.terminal')).toEqual({ kind: 'single', scope: 'root' })
+    expect(b.slots.spec('conversation.details.browser')).toEqual({ kind: 'single', scope: 'root' })
     expect(b.slots.spec('conversation.details.tool')).toEqual({ kind: 'single', scope: 'session' })
     await b.runtime.dispose()
   })

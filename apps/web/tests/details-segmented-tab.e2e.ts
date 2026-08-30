@@ -1,7 +1,7 @@
 // Keyless browser regression for the details segmented tab chrome and editor-surface
 // (file tree + unopened-file empty state). The workspace fixture is not a Git
 // repository: an empty `.git` directory would make `git status` mis-detect one.
-// This slice covers the four-tab chrome (File editor | Git | Terminal | Tool details)
+// This slice covers the five-tab chrome (File editor | Git | Terminal | Browser | Tool details)
 // and the Git panel not-a-repository empty state of the non-Git workspace fixture.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -21,6 +21,7 @@ const TABS_EXPECTED = join(SNAPSHOT_DIR, 'tabs.expected.md')
 const EDITOR_EXPECTED = join(SNAPSHOT_DIR, 'editor-empty.expected.md')
 const GIT_EXPECTED = join(SNAPSHOT_DIR, 'git-empty.expected.md')
 const TERMINAL_EXPECTED = join(SNAPSHOT_DIR, 'terminal-default.expected.md')
+const BROWSER_TABS_EXPECTED = join(SNAPSHOT_DIR, 'browser-selected.expected.md')
 const FIXTURE = fileURLToPath(new URL('./snapshots/lifecycle-chrome/session.jsonl', import.meta.url))
 const SEED_FIXTURE = fileURLToPath(new URL('./snapshots/seeded-history/seed.jsonl', import.meta.url))
 const PROMPT = 'Reply with the single word LIGHTHOUSE and stop.'
@@ -31,6 +32,18 @@ async function detailsTrack(page: Page): Promise<number> {
     const tracks = getComputedStyle(element).gridTemplateColumns.split(' ')
     return Number.parseFloat(tracks.at(-1) ?? 'NaN')
   })
+}
+
+async function dragDetailsWider(page: Page, deltaPx: number): Promise<void> {
+  const handle = page.locator('[data-side="details"]')
+  const box = await handle.boundingBox()
+  expect(box).not.toBeNull()
+  const startX = box!.x + box!.width / 2
+  const y = box!.y + 200
+  await page.mouse.move(startX, y)
+  await page.mouse.down()
+  await page.mouse.move(startX - deltaPx, y, { steps: 6 })
+  await page.mouse.up()
 }
 
 async function openDetailsViaEditorTab(page: Page): Promise<void> {
@@ -102,6 +115,7 @@ describe.skipIf(MODE === 'record')('web e2e: details segmented tab chrome', () =
     expect(await page.getByRole('tab', { name: 'Git Panel' }).getAttribute('aria-selected')).toBe('true')
     expect(await page.getByRole('tab', { name: 'File editor' }).getAttribute('aria-selected')).toBe('false')
     expect(await page.getByRole('tab', { name: 'Terminal' }).getAttribute('aria-selected')).toBe('false')
+    expect(await page.getByRole('tab', { name: 'Browser' }).getAttribute('aria-selected')).toBe('false')
     expect(await page.getByRole('tab', { name: 'Tool details' }).getAttribute('aria-selected')).toBe('false')
     await expect.poll(() => detailsTrack(page), { timeout: 10_000 }).toBeGreaterThan(0)
     await page.getByText('Not a Git repository', { exact: true }).waitFor({ timeout: 10_000 })
@@ -116,11 +130,29 @@ describe.skipIf(MODE === 'record')('web e2e: details segmented tab chrome', () =
     const terminalSnapshot = await captureStableAria(page, '[data-surface="human-terminal"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(TERMINAL_EXPECTED, terminalSnapshot, MODE)
 
+    await page.getByRole('tab', { name: 'Browser' }).click()
+    expect(await page.getByRole('tab', { name: 'Browser' }).getAttribute('aria-selected')).toBe('true')
+    expect(await page.getByRole('tab', { name: 'File editor' }).getAttribute('aria-selected')).toBe('false')
+    expect(await page.getByRole('tab', { name: 'Git Panel' }).getAttribute('aria-selected')).toBe('false')
+    expect(await page.getByRole('tab', { name: 'Terminal' }).getAttribute('aria-selected')).toBe('false')
+    expect(await page.getByRole('tab', { name: 'Tool details' }).getAttribute('aria-selected')).toBe('false')
+    const browserTabsSnapshot = await captureStableAria(page, '[role="tablist"][aria-label="Toolbox"]', scaffold.workspaceCwd)
+    await compareOrRefreshGolden(BROWSER_TABS_EXPECTED, browserTabsSnapshot, MODE)
+    const beforeResize = await detailsTrack(page)
+    await dragDetailsWider(page, 70)
+    await expect.poll(() => detailsTrack(page), { timeout: 10_000 }).toBeGreaterThan(beforeResize + 50)
+
     await page.getByRole('tab', { name: 'Tool details' }).click()
     await page.getByText('Click a tool row in the message flow to view its details', { exact: true }).waitFor({ timeout: 5_000 })
 
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['tabs.expected.md', 'editor-empty.expected.md', 'git-empty.expected.md', 'terminal-default.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, [
+      'tabs.expected.md',
+      'editor-empty.expected.md',
+      'git-empty.expected.md',
+      'terminal-default.expected.md',
+      'browser-selected.expected.md',
+    ])
   }, 90_000)
 })

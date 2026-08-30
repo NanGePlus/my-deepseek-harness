@@ -536,6 +536,7 @@ export function apply(ctx: Context): void {
       'conversation.details.editor': { kind: 'single', scope: 'root' },
       'conversation.details.git': { kind: 'single', scope: 'root' },
       'conversation.details.terminal': { kind: 'single', scope: 'root' },
+      'conversation.details.browser': { kind: 'single', scope: 'root' },
     },
     inject: (): DetailsInjected => ({
       openDetails: () => { layout.openDetails() },
