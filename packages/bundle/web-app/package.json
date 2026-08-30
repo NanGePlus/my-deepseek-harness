@@ -58,6 +58,7 @@
     "@deepseek-ai/dsh-client-ui-file-editor": "workspace:^",
     "@deepseek-ai/dsh-client-ui-git": "workspace:^",
     "@deepseek-ai/dsh-client-ui-terminal": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-browser": "workspace:^",
     "@deepseek-ai/dsh-client-ui-cordis": "workspace:^",
     "@deepseek-ai/dsh-client-ui-deliverables": "workspace:^",
     "@deepseek-ai/dsh-client-ui-directory-picker-browse": "workspace:^",
