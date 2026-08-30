@@ -5,7 +5,7 @@
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-specific-sidebar-fill);
 }
 
 .overlay {
@@ -215,6 +215,7 @@
   min-height: 0;
   min-width: 0;
   position: relative;
+  background: var(--dsw-alias-bg-base);
 }
 
 .viewportHost {
@@ -222,7 +223,19 @@
   min-height: 0;
   min-width: 0;
   padding: 0;
-  background: var(--dsw-alias-markdown-code-block);
+  background: var(--dsw-alias-bg-base);
+  /* Scroll-reveal: hidden until the xterm viewport scrolls (attachScrollRevealScrollbar). */
+  --dsh-scrollbar-thumb: transparent;
+  --dsh-scrollbar-thumb-hover: transparent;
+}
+
+.viewportHost :global(.xterm-viewport) {
+  background-color: var(--dsw-alias-bg-base);
+}
+
+.viewportHost[data-dsh-scroll-reveal-active] {
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l1);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l1);
 }
 
 .loadingOverlay {
@@ -233,7 +246,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: color-mix(in srgb, var(--dsw-alias-markdown-code-block) 88%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-bg-base) 88%, transparent);
 }
 
 .spinner {

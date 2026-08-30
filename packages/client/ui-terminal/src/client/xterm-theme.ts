@@ -14,7 +14,7 @@ function cssVar(name: string, fallback: string): string {
  * @returns xterm theme colors aligned with DESIGN tokens.
  */
 export function harnessXtermTheme(dark: boolean): ITheme {
-  const bg = cssVar('--dsw-alias-markdown-code-block', dark ? '#1e1e1e' : '#f6f8fa')
+  const bg = cssVar('--dsw-alias-bg-base', dark ? '#0d1117' : '#ffffff')
   const fg = cssVar('--dsw-alias-label-primary', dark ? '#e6edf3' : '#262626')
   const cursor = cssVar('--dsw-alias-state-business-primary', dark ? '#4d9fff' : '#0066ff')
   return {

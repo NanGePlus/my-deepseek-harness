@@ -1,6 +1,7 @@
 /** Imperative xterm viewport wrapper for tests and TerminalPanel. */
 
 import './xterm.css'
+import { attachXtermHostScrollReveal } from './xterm-scroll-reveal.ts'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { harnessXtermFont, harnessXtermTheme } from './xterm-theme.ts'
@@ -70,6 +71,7 @@ export function createXtermViewport(options: XtermViewportOptions): XtermViewpor
   })
   let lastCols = 0
   let lastRows = 0
+  let scrollRevealDispose: (() => void) | undefined
   const emitResize = (): void => {
     const element = terminal.element
     if (element === undefined) return
@@ -94,6 +96,10 @@ export function createXtermViewport(options: XtermViewportOptions): XtermViewpor
       if (terminal.textarea !== undefined) {
         imeGate = attachXtermImeGate(terminal.textarea)
       }
+      scrollRevealDispose?.()
+      scrollRevealDispose = undefined
+      host.removeAttribute('data-dsh-scroll-reveal-active')
+      scrollRevealDispose = attachXtermHostScrollReveal(host)
     },
     write(text) {
       terminal.write(text)
@@ -113,6 +119,8 @@ export function createXtermViewport(options: XtermViewportOptions): XtermViewpor
       return { cols: lastCols, rows: lastRows }
     },
     dispose() {
+      scrollRevealDispose?.()
+      scrollRevealDispose = undefined
       imeGate?.dispose()
       imeGate = undefined
       terminal.dispose()

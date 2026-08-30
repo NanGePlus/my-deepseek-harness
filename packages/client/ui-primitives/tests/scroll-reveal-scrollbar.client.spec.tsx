@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
-import { SCROLL_REVEAL_LINGER_MS, useScrollRevealScrollbar } from '../src/useScrollRevealScrollbar.ts'
+import { SCROLL_REVEAL_LINGER_MS, attachScrollRevealScrollbar, useScrollRevealScrollbar } from '../src/useScrollRevealScrollbar.ts'
 
 afterEach(() => {
   cleanup()
@@ -60,5 +60,20 @@ describe('useScrollRevealScrollbar', () => {
     cleanup()
     expect(() => { vi.advanceTimersByTime(SCROLL_REVEAL_LINGER_MS) }).not.toThrow()
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('attachScrollRevealScrollbar', () => {
+  it('reveals on scroll and hides after linger', () => {
+    vi.useFakeTimers()
+    const host = document.createElement('div')
+    let active = false
+    const dispose = attachScrollRevealScrollbar(host, (next) => { active = next })
+    expect(active).toBe(false)
+    host.dispatchEvent(new Event('scroll'))
+    expect(active).toBe(true)
+    vi.advanceTimersByTime(SCROLL_REVEAL_LINGER_MS)
+    expect(active).toBe(false)
+    dispose()
   })
 })
