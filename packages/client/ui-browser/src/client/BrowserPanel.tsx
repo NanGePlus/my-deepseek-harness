@@ -260,6 +260,7 @@ export function BrowserPanel({
   const [addressDraft, setAddressDraft] = useState('')
   const [streamAttempt, setStreamAttempt] = useState(0)
   const [navigating, setNavigating] = useState(false)
+  const [hardReloading, setHardReloading] = useState(false)
   const [tabMenu, setTabMenu] = useState<{ anchorTabId: string; rect: DOMRect } | null>(null)
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false)
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
@@ -534,6 +535,7 @@ export function BrowserPanel({
     /* v8 ignore next -- hard reload disables without a selected tab. */
     if (workspaceId === undefined || selectedTabId === undefined) return
     setOverflowMenuOpen(false)
+    setHardReloading(true)
     setNavigating(true)
     actions.setNavError(workspaceId, undefined)
     void browserReload(workspaceId, selectedTabId, true).then((metadata) => {
@@ -542,7 +544,10 @@ export function BrowserPanel({
     }).catch((error: unknown) => {
       navRetryRef.current = hardReload
       reportBrowserFailure(actions, workspaceId, error, 'nav')
-    }).finally(() => { setNavigating(false) })
+    }).finally(() => {
+      setNavigating(false)
+      setHardReloading(false)
+    })
   }, [actions, applyPageMetadata, browserReload, noteExternalVisit, selectedTabId, workspaceId])
 
   const runHistoryNav = useCallback((
@@ -599,8 +604,8 @@ export function BrowserPanel({
     const reentered = !wasVisibleRef.current
     wasVisibleRef.current = visible
     if (reentered) actions.setDeferAutoCreate(workspaceId, false)
-    if (tabs.length > 0) return
-    if (!reentered && deferAutoCreate) return
+    actions.clearTransientState(workspaceId)
+    if (!reentered && deferAutoCreate && tabsRef.current.length === 0) return
     const ac = new AbortController()
     void (async () => {
       try {
@@ -611,6 +616,8 @@ export function BrowserPanel({
           actions.setWorkspaceTabs(workspaceId, mapped.rows, mapped.selectedTabId)
           return
         }
+        if (tabsRef.current.length > 0) return
+        if (!reentered && deferAutoCreate) return
         await createBlankTab(true)
       } catch (error: unknown) {
         /* v8 ignore next -- bootstrap aborts when the segment hides or Workspace changes. */
@@ -620,7 +627,7 @@ export function BrowserPanel({
     })()
     return () => { ac.abort() }
   }, [
-    actions, browserList, bootstrapAttempt, createBlankTab, deferAutoCreate, tabs.length, visible, workspaceId,
+    actions, bootstrapAttempt, browserList, createBlankTab, deferAutoCreate, visible, workspaceId,
   ])
 
   useEffect(() => {
@@ -701,7 +708,8 @@ export function BrowserPanel({
   }, [])
 
   const addTabDisabled = creating || creatingRef.current
-  const showLoading = connecting || navigating
+  const showDimOverlay = connecting || (navigating && !hardReloading)
+  const showLoading = showDimOverlay
   const canCloseTabs = tabs.length > 1
 
   const tabCloseMenuItems = useMemo((): readonly MenuEntry[] => {

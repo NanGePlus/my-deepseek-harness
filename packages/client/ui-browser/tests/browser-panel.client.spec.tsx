@@ -30,6 +30,7 @@ beforeAll(() => {
 
 afterEach(() => {
   cleanup()
+  if (typeof localStorage !== 'undefined') localStorage.removeItem('dsh.browser.panel.v1')
 })
 
 const BLANK_PAGE = { url: 'about:blank', title: '', canGoBack: false, canGoForward: false } as const
@@ -963,6 +964,157 @@ describe('BrowserPanel', () => {
     expect(await screen.findByText('Hard Reload')).toBeTruthy()
     fireEvent.keyDown(document, { key: 'Escape' })
     await waitFor(() => { expect(screen.queryByText('Hard Reload')).toBeNull() })
+  })
+
+  it('segment-hidden: aborts screencast SSE when the Browser segment hides without closing Host tabs', async () => {
+    let abortSignal: AbortSignal | undefined
+    const browserList = vi.fn(async () => ({ tabs: [BLANK_TAB] }))
+    const browserCloseTab = vi.fn()
+    const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>((
+      _workspaceId,
+      _tabId,
+      _onFrame,
+      signal,
+      onOpen,
+    ) => {
+      abortSignal = signal
+      onOpen?.()
+    })
+    const { rerender, browserWatchScreencast: watchMock } = mount({
+      browserList,
+      browserCloseTab,
+      browserWatchScreencast,
+    })
+    await waitFor(() => { expect(abortSignal).toBeDefined() })
+    expect(abortSignal?.aborted).toBe(false)
+    const callsBeforeHide = watchMock.mock.calls.length
+    rerender({ visible: false })
+    expect(abortSignal?.aborted).toBe(true)
+    expect(browserCloseTab).not.toHaveBeenCalled()
+    rerender({ visible: true })
+    await waitFor(() => { expect(watchMock.mock.calls.length).toBeGreaterThan(callsBeforeHide) })
+  })
+
+  it('loading-reconnect: remount with persisted tabs calls Host list and reconnects screencast', async () => {
+    const panelStore = createBrowserPanelStore().create()
+    panelStore.actions.setWorkspaceTabs(WID, [{
+      tabId: 'live-1',
+      url: 'https://example.com',
+      title: 'Example',
+      canGoBack: false,
+      canGoForward: false,
+    }], 'live-1')
+    panelStore.actions.setZoom(WID, 1.25)
+    const browserList = vi.fn(async () => ({
+      tabs: [{
+        tabId: 'live-1',
+        url: 'https://example.com',
+        title: 'Example',
+        selected: true,
+        canGoBack: true,
+        canGoForward: false,
+      }],
+    }))
+    const browserCreateTab = vi.fn()
+    const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>((
+      _workspaceId,
+      _tabId,
+      _onFrame,
+      _signal,
+      onOpen,
+    ) => { onOpen?.() })
+    const first = mount({
+      useStore: hookOf(panelStore),
+      actions: panelStore.actions,
+      browserList,
+      browserCreateTab,
+      browserWatchScreencast,
+    })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'Example' })).toBeTruthy() })
+    expect(browserCreateTab).not.toHaveBeenCalled()
+    first.unmount()
+    browserList.mockClear()
+    browserWatchScreencast.mockClear()
+    mount({
+      useStore: hookOf(panelStore),
+      actions: panelStore.actions,
+      browserList,
+      browserCreateTab,
+      browserWatchScreencast,
+    })
+    await waitFor(() => { expect(browserList).toHaveBeenCalledWith(WID, expect.any(AbortSignal)) })
+    await waitFor(() => { expect(browserWatchScreencast).toHaveBeenCalled() })
+    expect(screen.getByRole('tab', { name: 'Example' })).toBeTruthy()
+    expect(browserWorkspaceState(panelStore.getSnapshot(), WID).zoom).toBe(1.25)
+    expect(browserCreateTab).not.toHaveBeenCalled()
+  })
+
+  it('zoom-client: changing Client zoom does not change Host resizeViewport dimensions', async () => {
+    const panelStore = createBrowserPanelStore().create()
+    const browserList = vi.fn(async () => ({ tabs: [BLANK_TAB] }))
+    const browserResizeViewport = vi.fn(async () => ({ resized: true as const }))
+    const { browserResizeViewport: resizeMock, ensureViewportHostSize, rerender } = mount({
+      browserList,
+      browserResizeViewport,
+      useStore: hookOf(panelStore),
+      actions: panelStore.actions,
+    })
+    await waitFor(() => { expect(screen.getByRole('tabpanel')).toBeTruthy() })
+    ensureViewportHostSize()
+    rerender()
+    await waitFor(() => { expect(resizeMock).toHaveBeenCalled() })
+    const firstCall = resizeMock.mock.calls[0]
+    resizeMock.mockClear()
+    act(() => { panelStore.actions.setZoom(WID, 1.25) })
+    ensureViewportHostSize()
+    rerender()
+    await act(async () => { await Promise.resolve() })
+    expect(resizeMock).not.toHaveBeenCalled()
+    act(() => { panelStore.actions.setZoom(WID, 1) })
+    rerender()
+    expect(resizeMock).not.toHaveBeenCalled()
+    if (firstCall !== undefined) {
+      expect(firstCall[2]).toBe(640)
+      expect(firstCall[3]).toBe(480)
+    }
+  })
+
+  it('loading-hard-reload: Hard Reload keeps the previous frame visible without the dim overlay', async () => {
+    let resolveReload: ((value: typeof BLANK_PAGE) => void) | undefined
+    const browserReload = vi.fn(async () => new Promise<typeof BLANK_PAGE>((resolve) => {
+      resolveReload = resolve
+    }))
+    const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>((
+      _workspaceId,
+      _tabId,
+      onFrame,
+      _signal,
+      onOpen,
+    ) => {
+      onOpen?.()
+      onFrame({
+        type: 'host/browser-screencast',
+        data: 'ZmFrZQ==',
+        width: 800,
+        height: 600,
+      })
+    })
+    const { view } = mount({
+      browserList: vi.fn(async () => ({
+        tabs: [{ ...BLANK_TAB, url: 'https://example.com', title: 'Example' }],
+      })),
+      browserReload,
+      browserWatchScreencast,
+    })
+    await waitFor(() => { expect(screen.getByLabelText('更多操作')).toBeTruthy() })
+    await waitFor(() => { expect(view.container.querySelector('img[src^="data:image/jpeg"]')).toBeTruthy() })
+    fireEvent.click(screen.getByLabelText('更多操作'))
+    fireEvent.click(await screen.findByText('Hard Reload'))
+    await waitFor(() => { expect(browserReload).toHaveBeenCalledWith(WID, 'live-1', true) })
+    expect(view.container.querySelector('[class*="loadingOverlay"]')).toBeNull()
+    expect(screen.queryByText('连接中…')).toBeNull()
+    resolveReload?.(BLANK_PAGE)
+    await waitFor(() => { expect(view.container.querySelector('img[src^="data:image/jpeg"]')).toBeTruthy() })
   })
 
   it('error-nav retry reruns the failed navigation', async () => {

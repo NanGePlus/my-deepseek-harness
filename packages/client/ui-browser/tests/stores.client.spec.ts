@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, afterEach } from 'vitest'
 import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import {
   browserWorkspaceState, createBrowserPanelStore, rowsFromBrowserList,
@@ -15,6 +15,10 @@ const tab = (over: Partial<{ tabId: string; url: string; title: string; canGoBac
 })
 
 describe('browser panel store', () => {
+  afterEach(() => {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem('dsh.browser.panel.v1')
+  })
+
   it('partitions tabs by workspace id', () => {
     const store = createBrowserPanelStore().create()
     store.actions.setWorkspaceTabs(WID, [tab()])
@@ -165,5 +169,17 @@ describe('browser panel store', () => {
     ], 'b')
     store.actions.removeTab(WID, 'b')
     expect(browserWorkspaceState(store.getSnapshot(), WID).selectedTabId).toBe('a')
+  })
+
+  it('clears transient workspace fields without dropping durable tab rows', () => {
+    const store = createBrowserPanelStore().create()
+    store.actions.setWorkspaceTabs(WID, [tab()], 'a')
+    store.actions.setConnecting(WID, true)
+    store.actions.setInlineError(WID, 'failed')
+    store.actions.clearTransientState(WID)
+    const state = browserWorkspaceState(store.getSnapshot(), WID)
+    expect(state.tabs).toHaveLength(1)
+    expect(state.connecting).toBe(false)
+    expect(state.inlineError).toBeUndefined()
   })
 })
