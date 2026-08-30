@@ -7,7 +7,7 @@
 - 运行方式：从源码 `pnpm install` / `pnpm run build:lib:host` + client bundle + `pnpm run build:web` / `pnpm dsh web`
 - Node：^22.19 或 >=24；pnpm@11.7.0（Corepack）
 - 扩展策略：V1 文件编辑器因需改 Host RPC 与 **工具箱**（details 栏）壳层，**直接改 `packages/`**；长期仍优先树外插件 / 组合包，不改 `vendor/`
-- 领域与决策：`CONTEXT.md`、`docs/adr/0001–0002`（文件编辑器）、`docs/adr/0003–0004`（Git 面板）、`docs/adr/0005–0006`（人类终端 V3）、`docs/prd/file-editor-v1.md`、`docs/prd/git-panel-v2.md`、`docs/prd/terminal-v3.md`
+- 领域与决策：`CONTEXT.md`、`docs/adr/0001–0002`（文件编辑器）、`docs/adr/0003–0004`（Git 面板）、`docs/adr/0005–0006`（人类终端 V3）、`docs/adr/0007–0008`（内嵌浏览器 V4）、`docs/prd/file-editor-v1.md`、`docs/prd/git-panel-v2.md`、`docs/prd/terminal-v3.md`、`docs/prd/browser-v4.md`
 
 ## 产品
 - 产品名：（待填写）
@@ -16,6 +16,7 @@
 - **V1 定制重点**：Web **工具箱**（原 details 栏）内嵌 Workspace 文件编辑器（文件树 + Monaco 多 Tab），与 Agent 对话并列、不占用中栏
 - **V2 定制重点（进行中）**：工具箱增加 **Git 面板**（工作区变更 + 差异预览 + Git 操作守卫）；PRD 见 `docs/prd/git-panel-v2.md` 与 Issue [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)。Host Git 只读 RPC 见 Issue [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53)；写 RPC（暂存 / 取消暂存 / 丢弃 / 提交）见 Issue [#54](https://github.com/NanGePlus/my-deepseek-harness/issues/54)；工具箱三段 Tab 见 Issue [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55)；Git 面板绑定/列表/空态/初始化见 Issue [#56](https://github.com/NanGePlus/my-deepseek-harness/issues/56)；整文件暂存/丢弃/提交见 Issue [#57](https://github.com/NanGePlus/my-deepseek-harness/issues/57)；差异预览与按块操作见 Issue [#58](https://github.com/NanGePlus/my-deepseek-harness/issues/58)；Git 操作守卫见 Issue [#59](https://github.com/NanGePlus/my-deepseek-harness/issues/59)
 - **V3 定制重点（进行中，分支 `feat/v3`）**：工具箱增加 **人类终端**（多 Tab + Shell 选择 + xterm；与 Agent PTY 分离）；PRD 见 `docs/prd/terminal-v3.md` 与 Issue [#73](https://github.com/NanGePlus/my-deepseek-harness/issues/73)。`#D-global` 见 [#74](https://github.com/NanGePlus/my-deepseek-harness/issues/74)；Host `host.terminal.*` RPC 见 [#75](https://github.com/NanGePlus/my-deepseek-harness/issues/75)；工具箱四段 Tab 见 [#76](https://github.com/NanGePlus/my-deepseek-harness/issues/76)；`ui-terminal` 最小通路见 [#77](https://github.com/NanGePlus/my-deepseek-harness/issues/77)；多 Tab / Shell / Kill 见 [#78](https://github.com/NanGePlus/my-deepseek-harness/issues/78)；不可用 / 错误态见 [#79](https://github.com/NanGePlus/my-deepseek-harness/issues/79)；切走持久 / 硬刷新重连见 [#80](https://github.com/NanGePlus/my-deepseek-harness/issues/80)；改盘刷新协调见 [#81](https://github.com/NanGePlus/my-deepseek-harness/issues/81)
+- **V4 定制重点（规格已锁定，分支 `feat/v4`）**：工具箱增加 **内嵌浏览器**（多 Tab + 导航顶栏 + screencast；Agent `browser_*` 工具与人类共用 Host Playwright 实例）；PRD 见 `docs/prd/browser-v4.md`；ADR 见 `docs/adr/0007-embedded-browser-host-playwright.md`、`docs/adr/0008-embedded-browser-client-and-tools.md`。工具箱五段 Tab：**资源管理器 | Git面板 | 终端 | 浏览器 | 工具详情**。实现切片：GitHub [#92](https://github.com/NanGePlus/my-deepseek-harness/issues/92)（#93–#100）。
 
 ## 已实现定制功能（相对上游 master）
 
@@ -117,6 +118,7 @@
 | `apps/web/` | Vite 构建含 Monaco workers / material icons 同步；**2026-08-29** 浏览器快照 `terminal-default.expected.md` 与 shell profile 名 `{{shell-profile}}` 归一化 | 2026-08 |
 | `CONTEXT.md`、`docs/adr/0001–0002`、`docs/prd/file-editor-v1.md` | 文件编辑器 V1 领域与 PRD | 2026-08 |
 | `CONTEXT.md`、`docs/adr/0005–0006`、`docs/prd/terminal-v3.md` | 人类终端 V3 领域、PRD 与 ADR（`feat/v3`） | 2026-08-29 |
+| `CONTEXT.md`、`docs/adr/0007–0008`、`docs/prd/browser-v4.md` | 内嵌浏览器 V4 领域、PRD 与 ADR（`feat/v4`） | 2026-08-30 |
 | `AGENTS.md`（Agent skills 块） | Issue 跟踪 / triage / domain / wiki 工作流说明 | 2026-08 |
 | `scripts/translation-pairing.manifest.json`、`scripts/build-exe-for-python-sdk.ts`、`scripts/verify-translation-prompt.ts` | 根 README 排除 upstream 双语配对 / 部署文档列表 | 2026-08-22 |
 | `scripts/agent-note-tree.ts` | Agent Note 生命周期根 allowlist 仅保留 `AGENTS.md` | 2026-08-22 |
@@ -157,10 +159,20 @@
 | `feat/issue-81-terminal-disk-refresh` | [#81](https://github.com/NanGePlus/my-deepseek-harness/issues/81) 改盘刷新协调 | 已合并入 `custom/main`（PR [#90](https://github.com/NanGePlus/my-deepseek-harness/pull/90)） |
 | `feat/v3` | V3 人类终端：父 PRD [#73](https://github.com/NanGePlus/my-deepseek-harness/issues/73)；切片 #74–#81 | 进行中；基线 `origin/custom/main` |
 | `issue/74-d-global-human-terminal-design-close` | [#74](https://github.com/NanGePlus/my-deepseek-harness/issues/74) `#D-global`：验收关闭人类终端 DESIGN.md | 进行中 |
+| `feat/v4` | V4 内嵌浏览器：父 PRD [#92](https://github.com/NanGePlus/my-deepseek-harness/issues/92)；切片 #93–#100 | 规格已锁定；基线 `origin/custom/main` |
+| `issue/93-d-global-browser-design-close` | [#93](https://github.com/NanGePlus/my-deepseek-harness/issues/93) `#D-global`：验收关闭内嵌浏览器 DESIGN.md | 待领取 |
+| `issue/94-host-browser-rpc` | [#94](https://github.com/NanGePlus/my-deepseek-harness/issues/94) Host browser RPC | 待领取 |
+| `issue/95-app-shell-browser-tab` | [#95](https://github.com/NanGePlus/my-deepseek-harness/issues/95) app-shell：五段 Tab + 浏览器槽位 | 待领取 |
+| `issue/96-ui-browser-core` | [#96](https://github.com/NanGePlus/my-deepseek-harness/issues/96) `ui-browser`：about:blank + screencast + 未绑定空态 | 待领取 |
+| `issue/97-ui-browser-tabs-nav` | [#97](https://github.com/NanGePlus/my-deepseek-harness/issues/97) `ui-browser`：多 Tab + 导航顶栏 | 待领取 |
+| `issue/98-ui-browser-states-menu` | [#98](https://github.com/NanGePlus/my-deepseek-harness/issues/98) `ui-browser`：不可用 + 错误 + 溢出菜单 | 待领取 |
+| `issue/99-ui-browser-lifecycle` | [#99](https://github.com/NanGePlus/my-deepseek-harness/issues/99) `ui-browser`：SSE 生命周期 + Zoom + viewport | 待领取 |
+| `issue/100-tool-browser` | [#100](https://github.com/NanGePlus/my-deepseek-harness/issues/100) `tool-browser`：Agent `browser_*` 工具 | 待领取 |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-08-30 | V4 内嵌浏览器 `/to-issues` 垂直切片 | 父 PRD [#92](https://github.com/NanGePlus/my-deepseek-harness/issues/92)；子 Issue #93–#100 |
 | 2026-08-30 | 终端 Tab 栏/内容区背景对齐资源管理器 | Tab 栏 `--dsw-specific-sidebar-fill`；xterm 内容区 `--dsw-alias-bg-base` |
 | 2026-08-30 | 终端 Tab 标题去掉路径前缀，仅显示命令/Shell 名 | Client 仍消费 Host `titleCommand`；路径不再渲染 |
 | 2026-08-30 | 终端最后一个 Tab 禁止关闭 | `ui-terminal` 仅剩 1 个 Tab 时隐藏 ×，禁用「关闭 / 关闭全部」，底层拦截 kill |
@@ -290,3 +302,5 @@
 | 2026-08-29 | Issue #80 切走持久 / 硬刷新重连 | 分支 `feat/issue-80-terminal-persist-reconnect`：切走 **终端** 段保持 SSE 不 Kill；硬刷新 `list` 恢复 Tab + scrollback 回放；Workspace 切换展示对应 Tab 集 |
 | 2026-08-29 | Issue #81 改盘刷新协调 | 分支 `feat/issue-81-terminal-disk-refresh` 已合并 PR [#90](https://github.com/NanGePlus/my-deepseek-harness/pull/90)；`DetailsPanel` `segmentDiskRefreshEpoch` 协调 Explorer / Git 重读 |
 | 2026-08-29 | 从最新 `origin/custom/main` 创建分支 `issue/74-d-global-human-terminal-design-close` | Issue [#74](https://github.com/NanGePlus/my-deepseek-harness/issues/74) `#D-global` 验收关闭；人类终端消费既有品牌板，不新增 §5 原语 |
+| 2026-08-30 | 从最新 `origin/custom/main` 创建分支 `feat/v4` | V4 版本迭代线；基线 PR #91 merge commit `5ca6576365` |
+| 2026-08-30 | V4 内嵌浏览器规格锁定 | `grill-with-docs` 拷问完成；更新 `CONTEXT.md`；新增 `docs/prd/browser-v4.md`、`docs/adr/0007-embedded-browser-host-playwright.md`、`docs/adr/0008-embedded-browser-client-and-tools.md` |

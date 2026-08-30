@@ -1,6 +1,6 @@
-# 文件编辑器、Git 面板与人类终端
+# 文件编辑器、Git 面板、人类终端与内嵌浏览器
 
-DeepSeek Harness Web 端面向人类的工具箱插件。V1 在绑定 Workspace 内提供文件树浏览与内容编辑；V2 在同一绑定 Workspace 上增加 Git 面板，与文件树的只读 Git 状态标记职责分离；V3 在工具箱增加人类终端，与 Agent 侧 PTY 工具完全分离。
+DeepSeek Harness Web 端面向人类的工具箱插件。V1 在绑定 Workspace 内提供文件树浏览与内容编辑；V2 在同一绑定 Workspace 上增加 Git 面板，与文件树的只读 Git 状态标记职责分离；V3 在工具箱增加人类终端，与 Agent 侧 PTY 工具完全分离；V4 在工具箱增加内嵌浏览器，与 Agent 浏览器工具共用同一浏览器实例。
 
 ## 领域语言
 
@@ -59,7 +59,7 @@ V1 仅覆盖常见图片格式（如 `.png`、`.jpg`、`.gif`、`.webp`、`.svg`
 *避免使用*: 冲突 (Conflict)（作术语时易泛化；本语境专指缓冲与磁盘不一致）
 
 **Session 切换守卫 (Session Switch Guard)**：
-用户切换当前 Session 时，若存在 dirty 的编辑器标签页，须先逐文件保存、丢弃或取消切换；不允许静默丢失未保存编辑缓冲。不因非空提交说明草稿而阻断切换。**不因运行中的人类终端 PTY 而阻断切换**；切换至绑定 Workspace 不同的 Session 时，原 Workspace 的 PTY 继续在后台运行。
+用户切换当前 Session 时，若存在 dirty 的编辑器标签页，须先逐文件保存、丢弃或取消切换；不允许静默丢失未保存编辑缓冲。不因非空提交说明草稿而阻断切换。**不因运行中的人类终端 PTY 而阻断切换**；**不因打开中的浏览器 Tab 而阻断切换**；切换至绑定 Workspace 不同的 Session 时，原 Workspace 的 PTY 与浏览器页面可仍在 Host 后台运行。
 *避免使用*: 未保存提示 (Unsaved Prompt)
 
 **Git 状态标记 (Git Status Badge)**：
@@ -148,12 +148,24 @@ Git 面板内、选中一条工作区变更后展示的差异；不是编辑器�
 Host 无法 spawn 交互式 PTY（如无可用 Shell、PTY 创建失败、权限不足）。**终端** 段仍可见；内容区展示 Host 返回的原因与可选「重试」；不隐藏 Tab、不降级为非交互输出。
 *避免使用*: Shell 不可用（作与缺 Workspace 空态混淆时）
 
+**内嵌浏览器 (Embedded Browser)**：
+工具箱「浏览器」段内、面向人类开发者的 Web 浏览视图；与 Agent 浏览器工具 **共用同一浏览器实例**——同一 **绑定 Workspace** 下共享 Tab 集合、导航状态与同源存储（Cookie / localStorage / sessionStorage 等）。人类手动导航与人类侧交互默认不进 Session 日志；Agent 触发的浏览器操作按 model-visible 规则写入 Session 日志。Agent 浏览器工具 V4 覆盖四类操作：**导航**（打开 URL、后退、前进、刷新）、**感知**（当前页结构快照）、**交互**（点击、输入、滚动、选择）、**Tab 管理**（新建 / 切换 / 关闭，与人类 Tab 栏同一套）；V4 不做截图写入 Session、任意 JS 执行或清 Cookie / 缓存 / 历史。Agent 与人类可同时看见并操作同一 Tab，**不加全局锁**，以浏览器原生事件顺序为准。启用前提与资源管理器相同：须有 Session 且已 **绑定 Workspace**；未满足时 **浏览器** 段仍可见，但内容区展示 **「无法使用浏览器」** 说明空态，不渲染 Tab 栏、不自动打开 Tab，地址栏与导航不可用；Agent 浏览器工具同样不可用。与人类终端不同：不是独立会话池，Agent 与人类看见并操作同一组 Tab。V4 支持多 Tab、`+` 新建、`×` 关闭与 Tab 切换；**不含** Split 视图、独立窗口拖拽与书签管理器。始终至少保留 1 个浏览器 Tab：仅剩最后一个时隐藏 `×`、禁用「关闭 / 关闭全部」；关闭后选中相邻 Tab；Tab 右键菜单支持 **关闭 / 关闭其他 / 关闭左侧 / 关闭右侧 / 关闭全部**（受最后一 Tab 规则约束）。Agent 浏览器工具默认操作当前选中 Tab，亦可通过参数指定 Tab。同一绑定 Workspace 下多个 dsh Session 共用一套浏览器 Tab；切换到绑定 Workspace 不同的 Session 时，切换到该 Workspace 的 Tab 集（页面可仍在后台）。某 Workspace 尚无浏览器 Tab 时，**首次进入浏览器段**自动打开一个 Tab，默认 URL 为 **`about:blank`** 且地址栏获焦；不自动猜测 dev server 端口。若该 Workspace 已有 Tab 记录（切回或硬刷新后从 store 恢复），则恢复上次 Tab 集合与 URL，不走首次逻辑。切走 **浏览器** 段只隐藏视图，不销毁 WebView / 页面；切回时恢复 Tab 集合、选中 Tab、滚动位置与页面状态。硬刷新 dsh Web 后从 Workspace 级持久 store 恢复 Tab 栏并按 URL 重载各 Tab。**Session 切换守卫** 不因打开中的浏览器 Tab 阻断切换。
+*避免使用*: WebView（作正式术语时）、Agent 浏览器（单独指 Agent 工具面时）
+
+**浏览器 Tab (Browser Tab)**：
+内嵌浏览器段内的一个 Web 浏览视图，对应一个可导航页面实例。Tab 栏可并存多个；Tab 标题取自页面 `document.title`（过长省略），无标题时回退为 URL 主机名。不是编辑器标签页，也不是终端 Tab 或 Git 差异预览。可导航范围为 **`http://` 与 `https://` 任意可达地址**（含 localhost / 127.0.0.1 与公网）；V4 不支持 `file://` 与自定义协议。首次导航到非 localhost 域名时，段内顶部 inline 提示「正在访问外部站点」，不阻断、不弹模态。段顶栏提供后退、前进、刷新、地址栏；溢出菜单含 Hard Reload、Copy Current URL、Zoom（− / 百分比 / + / 重置）；**在外部浏览器打开**当前 Tab URL。V4 **不含** Take Screenshot、Capture Area Screenshot、Clear Browsing History / Cookies / Cache，以及顶栏跳转 **终端** 的快捷图标。
+*避免使用*: 网页窗口 (Web Window)、标签页（单独使用且易与编辑器 Tab 混淆时）
+
+**浏览器不可用 (Browser Unavailable)**：
+Host 或运行时无法创建浏览器视图（如 Chromium 未安装、Playwright Context 启动失败、沙箱拒绝、资源不足）。**浏览器** 段仍可见；Tab 栏仍渲染（若 store 中有 Tab 记录）；内容区展示 **「浏览器不可用」** 卡片 + Host 原因 + **重试**；不隐藏段、不降级为纯文本链接。Agent 浏览器工具返回相同不可用原因。
+*避免使用*: 浏览器未启用（作与未绑定 Workspace 空态混淆时）
+
 **工具箱 (Toolbox)**：
-Web 右侧可收起栏。V3 四段为 **资源管理器 | Git | 终端 | 工具详情**，同时只显示一段。
+Web 右侧可收起栏。V4 五段为 **资源管理器 | Git面板 | 终端 | 浏览器 | 工具详情**，同时只显示一段。
 *避免使用*: 详情栏、详情面板、侧栏 (Sidebar)
 
 **编辑界面 (Editor Surface)**：
-资源管理器一段的界面组成：文件树（含文件名过滤、文件类型图标、Git 状态标记）+ 多 Tab 编辑区（语法高亮、显式保存）。切到 Git、终端或工具详情即隐藏该视图。不含 Git 操作（Git 操作在 Git 面板）；人类终端在独立的 **终端** 段。
+资源管理器一段的界面组成：文件树（含文件名过滤、文件类型图标、Git 状态标记）+ 多 Tab 编辑区（语法高亮、显式保存）。切到 Git面板、终端、浏览器或工具详情即隐藏该视图。不含 Git 操作（Git 操作在 Git 面板）；人类终端在独立的 **终端** 段；内嵌浏览器在独立的 **浏览器** 段。
 *避免使用*: IDE 布局 (IDE Layout)、工作区面板 (Workspace Panel)
 
 **文件编辑器抽屉 (File Editor Drawer)**：
