@@ -10,6 +10,8 @@ export interface BrowserTabRow {
   tabId: string
   url: string
   title: string
+  canGoBack: boolean
+  canGoForward: boolean
 }
 
 /** Workspace-scoped embedded browser UI state. */
@@ -56,6 +58,8 @@ type BrowserPanelActions = {
     tabId: string,
     url: string,
     title: string,
+    canGoBack: boolean,
+    canGoForward: boolean,
   ) => void
   removeTab: (root: BrowserPanelState, workspaceId: WorkspaceId, tabId: string) => void
   setDeferAutoCreate: (root: BrowserPanelState, workspaceId: WorkspaceId, deferAutoCreate: boolean) => void
@@ -127,13 +131,13 @@ export function createBrowserPanelStore(): EngineStoreHandle<BrowserPanelState, 
         const current = workspaceState(root, workspaceId)
         root.byWorkspace[workspaceId] = { ...current, inlineError }
       },
-      updateTabMetadata: (root, workspaceId, tabId, url, title) => {
+      updateTabMetadata: (root, workspaceId, tabId, url, title, canGoBack, canGoForward) => {
         const current = workspaceState(root, workspaceId)
         root.byWorkspace[workspaceId] = {
           ...current,
           tabs: current.tabs.map((row): BrowserTabRow => {
             if (row.tabId !== tabId) return row
-            return { ...row, url, title }
+            return { ...row, url, title, canGoBack, canGoForward }
           }),
         }
       },
@@ -179,7 +183,14 @@ export function browserWorkspaceState(
 }
 
 /** Map Host list rows into store tab rows. */
-export function rowsFromBrowserList(tabs: readonly { tabId: string; url: string; title: string; selected: boolean }[]): {
+export function rowsFromBrowserList(tabs: readonly {
+  tabId: string
+  url: string
+  title: string
+  selected: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+}[]): {
   rows: BrowserTabRow[]
   selectedTabId: string | undefined
 } {
@@ -187,6 +198,8 @@ export function rowsFromBrowserList(tabs: readonly { tabId: string; url: string;
     tabId: tab.tabId,
     url: tab.url,
     title: tab.title,
+    canGoBack: tab.canGoBack,
+    canGoForward: tab.canGoForward,
   }))
   const selected = tabs.find(tab => tab.selected)
   return { rows, selectedTabId: selected?.tabId ?? rows[0]?.tabId }

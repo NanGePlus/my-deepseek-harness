@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   IconChevronLeftOutline14, IconChevronRightOutline14, IconCloseOutline16,
-  IconGlobeOutline14, IconLoadingOutline16, IconPlusOutline16, IconRefreshOutline16,
+  IconGlobeOutline14, IconLinkOutline16, IconLoadingOutline16, IconPlusOutline16, IconRefreshOutline16,
+  Menu, type MenuEntry,
   Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
@@ -14,6 +15,14 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { reportBrowserFailure } from './browser-failure.ts'
+import {
+  browserTabCloseMenuState,
+  type BrowserTabCloseScope,
+  surviveTabIdAfterClose,
+  tabIdsForCloseScope,
+  wouldCloseEveryBrowserTab,
+} from './browser-tab-close-scope.ts'
+import { isExternalBrowserUrl, normalizeBrowserNavigateUrl } from './browser-navigate-url.ts'
 import {
   browserWorkspaceState, createBrowserPanelStore, rowsFromBrowserList,
 } from './stores.ts'
@@ -232,6 +241,7 @@ export function BrowserPanel({
   const [addressDraft, setAddressDraft] = useState('')
   const [streamAttempt, setStreamAttempt] = useState(0)
   const [navigating, setNavigating] = useState(false)
+  const [tabMenu, setTabMenu] = useState<{ anchorTabId: string; rect: DOMRect } | null>(null)
   const visibleRef = useRef(visible)
   visibleRef.current = visible
 
@@ -239,6 +249,11 @@ export function BrowserPanel({
     () => tabs.find(tab => tab.tabId === selectedTabId),
     [selectedTabId, tabs],
   )
+  const canGoBack = activeTab?.canGoBack ?? false
+  const canGoForward = activeTab?.canGoForward ?? false
+  const externalUrl = activeTab !== undefined && isExternalBrowserUrl(activeTab.url)
+    ? activeTab.url
+    : undefined
 
   useEffect(() => {
     setAddressDraft(activeTab?.url ?? '')
@@ -313,6 +328,8 @@ export function BrowserPanel({
         tabId: created.tabId,
         url: DEFAULT_BROWSER_TAB_URL,
         title: '',
+        canGoBack: false,
+        canGoForward: false,
       })
       actions.setSelectedTab(workspaceId, created.tabId)
       if (focusAddress) focusAddressBar()
@@ -330,8 +347,11 @@ export function BrowserPanel({
   const handleNavigate = useCallback(async () => {
     /* v8 ignore next 2 -- navigation chrome disables without a bound tab or empty URL. */
     if (workspaceId === undefined || selectedTabId === undefined) return
-    const url = addressDraft.trim()
-    if (url === '') return
+    const url = normalizeBrowserNavigateUrl(addressDraft)
+    if (url === undefined) {
+      actions.setInlineError(workspaceId, t('browser.error.invalidUrl'))
+      return
+    }
     const ac = new AbortController()
     try {
       setNavigating(true)
@@ -339,7 +359,14 @@ export function BrowserPanel({
       const metadata = await browserNavigate(workspaceId, selectedTabId, url, ac.signal)
       /* v8 ignore next -- superseded navigate calls abort before settlement. */
       if (ac.signal.aborted) return
-      actions.updateTabMetadata(workspaceId, selectedTabId, metadata.url, metadata.title)
+      actions.updateTabMetadata(
+        workspaceId,
+        selectedTabId,
+        metadata.url,
+        metadata.title,
+        metadata.canGoBack,
+        metadata.canGoForward,
+      )
     } catch (error: unknown) {
       /* v8 ignore next -- superseded navigate calls abort before settlement. */
       if (ac.signal.aborted) return
@@ -348,7 +375,22 @@ export function BrowserPanel({
       /* v8 ignore next -- aborted navigations leave navigating state to the replacement call. */
       if (!ac.signal.aborted) setNavigating(false)
     }
-  }, [actions, addressDraft, browserNavigate, selectedTabId, workspaceId])
+  }, [actions, addressDraft, browserNavigate, selectedTabId, t, workspaceId])
+
+  const handleSelectTab = useCallback(async (tabId: string) => {
+    /* v8 ignore next -- tab rows only render after a bound Workspace bootstrap. */
+    if (workspaceId === undefined) return
+    actions.setSelectedTab(workspaceId, tabId)
+    const ac = new AbortController()
+    try {
+      await browserSelectTab(workspaceId, tabId, ac.signal)
+    } catch (error: unknown) {
+      /* v8 ignore next -- DirectoryBrowseError is expected; abort means a superseded select. */
+      if (error instanceof DirectoryBrowseError || ac.signal.aborted) return
+      /* v8 ignore next -- unexpected Host failures propagate to the runtime error boundary. */
+      throw error
+    }
+  }, [actions, browserSelectTab, workspaceId])
 
   const handleCloseTab = useCallback(async (tabId: string) => {
     /* v8 ignore next -- the close affordance hides while only one tab remains. */
@@ -367,20 +409,44 @@ export function BrowserPanel({
     }
   }, [actions, browserCloseTab, workspaceId])
 
-  const handleSelectTab = useCallback(async (tabId: string) => {
-    /* v8 ignore next -- tab rows only render after a bound Workspace bootstrap. */
+  const executeCloseTabs = useCallback(async (
+    tabIds: readonly string[],
+    surviveTabId: string | undefined,
+  ) => {
+    /* v8 ignore next -- bulk close only runs while a bound Workspace is mounted. */
     if (workspaceId === undefined) return
-    actions.setSelectedTab(workspaceId, tabId)
-    const ac = new AbortController()
-    try {
-      await browserSelectTab(workspaceId, tabId, ac.signal)
-    } catch (error: unknown) {
-      /* v8 ignore next -- DirectoryBrowseError is expected; abort means a superseded select. */
-      if (error instanceof DirectoryBrowseError || ac.signal.aborted) return
-      /* v8 ignore next -- unexpected Host failures propagate to the runtime error boundary. */
-      throw error
+    for (const tabId of tabIds) {
+      if (tabsRef.current.length <= 1) break
+      await handleCloseTab(tabId)
     }
-  }, [actions, browserSelectTab, workspaceId])
+    if (
+      surviveTabId !== undefined
+      && tabsRef.current.some(tab => tab.tabId === surviveTabId)
+    ) {
+      await handleSelectTab(surviveTabId)
+    }
+  }, [handleCloseTab, handleSelectTab, workspaceId])
+
+  const requestCloseTabs = useCallback((
+    tabIds: readonly string[],
+    surviveTabId: string | undefined,
+  ) => {
+    if (wouldCloseEveryBrowserTab(tabsRef.current, tabIds)) return
+    void executeCloseTabs(tabIds, surviveTabId)
+  }, [executeCloseTabs])
+
+  const handleCloseTabs = useCallback((scope: BrowserTabCloseScope, anchorTabId: string) => {
+    const currentTabs = tabsRef.current
+    const tabIds = tabIdsForCloseScope(currentTabs, anchorTabId, scope)
+    if (tabIds.length === 0) return
+    const surviveTabId = surviveTabIdAfterClose(currentTabs, anchorTabId, scope)
+    requestCloseTabs(tabIds, surviveTabId)
+  }, [requestCloseTabs])
+
+  const openExternalBrowser = useCallback(() => {
+    if (externalUrl === undefined) return
+    window.open(externalUrl, '_blank', 'noopener,noreferrer')
+  }, [externalUrl])
 
   const retryInline = useCallback(() => {
     /* v8 ignore next -- retry only renders while a bound Workspace tab is active. */
@@ -508,6 +574,32 @@ export function BrowserPanel({
   const showLoading = connecting || navigating
   const canCloseTabs = tabs.length > 1
 
+  const tabCloseMenuItems = useMemo((): readonly MenuEntry[] => {
+    if (tabMenu === null) return []
+    const disabled = browserTabCloseMenuState(tabs, tabMenu.anchorTabId)
+    return [
+      { id: 'current', label: t('browser.tab.closeCurrent'), disabled: disabled.closeCurrentDisabled },
+      { id: 'others', label: t('browser.tab.closeOthers'), disabled: disabled.closeOthersDisabled },
+      { id: 'right', label: t('browser.tab.closeRight'), disabled: disabled.closeRightDisabled },
+      { id: 'left', label: t('browser.tab.closeLeft'), disabled: disabled.closeLeftDisabled },
+      { type: 'separator', id: 'close-sep' },
+      { id: 'all', label: t('browser.tab.closeAll'), danger: true, disabled: disabled.closeAllDisabled },
+    ]
+  }, [tabMenu, tabs, t])
+
+  const applyPageMetadata = useCallback((tabId: string, metadata: BrowserPageMetadata) => {
+    /* v8 ignore next -- metadata updates only run while a bound Workspace tab is active. */
+    if (workspaceId === undefined) return
+    actions.updateTabMetadata(
+      workspaceId,
+      tabId,
+      metadata.url,
+      metadata.title,
+      metadata.canGoBack,
+      metadata.canGoForward,
+    )
+  }, [actions, workspaceId])
+
   if (workspaceId === undefined) {
     return (
       <div className={css.root} data-surface="embedded-browser">
@@ -535,6 +627,14 @@ export function BrowserPanel({
               aria-selected={tab.tabId === selectedTabId}
               className={clsx(css.tab, tab.tabId === selectedTabId && css.tabActive)}
               onClick={() => { void handleSelectTab(tab.tabId) }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                setTabMenu({
+                  anchorTabId: tab.tabId,
+                  rect: event.currentTarget.getBoundingClientRect(),
+                })
+              }}
             >
               <span className={css.tabTitle}>{browserTabDisplayTitle(tab)}</span>
               {canCloseTabs && (
@@ -553,6 +653,23 @@ export function BrowserPanel({
             </div>
           ))}
         </div>
+        {tabMenu !== null && (
+          <Menu
+            open
+            portal
+            compact
+            align="start"
+            side="bottom"
+            anchor={<span aria-hidden="true" />}
+            items={tabCloseMenuItems}
+            onSelect={(id) => {
+              handleCloseTabs(id as BrowserTabCloseScope, tabMenu.anchorTabId)
+              setTabMenu(null)
+            }}
+            onClose={() => { setTabMenu(null) }}
+            getAnchorRect={() => tabMenu.rect}
+          />
+        )}
         <div className={css.tabBarActions}>
           <Tooltip label={t('browser.tab.new')} delayMs={500}>
             <button
@@ -573,12 +690,12 @@ export function BrowserPanel({
             type="button"
             className={css.navButton}
             aria-label={t('browser.nav.back')}
-            disabled={selectedTabId === undefined}
+            disabled={selectedTabId === undefined || !canGoBack}
             onClick={() => {
               /* v8 ignore next -- nav buttons disable without a selected tab. */
               if (workspaceId === undefined || selectedTabId === undefined) return
               void browserGoBack(workspaceId, selectedTabId).then((metadata) => {
-                actions.updateTabMetadata(workspaceId, selectedTabId, metadata.url, metadata.title)
+                applyPageMetadata(selectedTabId, metadata)
               }).catch((error: unknown) => {
                 reportBrowserFailure(actions, workspaceId, error)
               })
@@ -592,12 +709,12 @@ export function BrowserPanel({
             type="button"
             className={css.navButton}
             aria-label={t('browser.nav.forward')}
-            disabled={selectedTabId === undefined}
+            disabled={selectedTabId === undefined || !canGoForward}
             onClick={() => {
               /* v8 ignore next -- nav buttons disable without a selected tab. */
               if (workspaceId === undefined || selectedTabId === undefined) return
               void browserGoForward(workspaceId, selectedTabId).then((metadata) => {
-                actions.updateTabMetadata(workspaceId, selectedTabId, metadata.url, metadata.title)
+                applyPageMetadata(selectedTabId, metadata)
               }).catch((error: unknown) => {
                 reportBrowserFailure(actions, workspaceId, error)
               })
@@ -617,7 +734,7 @@ export function BrowserPanel({
               if (workspaceId === undefined || selectedTabId === undefined) return
               setNavigating(true)
               void browserReload(workspaceId, selectedTabId).then((metadata) => {
-                actions.updateTabMetadata(workspaceId, selectedTabId, metadata.url, metadata.title)
+                applyPageMetadata(selectedTabId, metadata)
               }).catch((error: unknown) => {
                 reportBrowserFailure(actions, workspaceId, error)
               }).finally(() => { setNavigating(false) })
@@ -642,6 +759,17 @@ export function BrowserPanel({
             }
           }}
         />
+        <Tooltip label={t('browser.nav.openExternal')} delayMs={500}>
+          <button
+            type="button"
+            className={css.navButton}
+            aria-label={t('browser.nav.openExternal')}
+            disabled={externalUrl === undefined}
+            onClick={openExternalBrowser}
+          >
+            <IconLinkOutline16 size={14} />
+          </button>
+        </Tooltip>
       </div>
       {inlineError !== undefined && (
         <div className={css.inlineError} role="alert">

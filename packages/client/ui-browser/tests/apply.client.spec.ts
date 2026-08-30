@@ -7,6 +7,8 @@ import { apply as applyNode } from '../src/index.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { BrowserPanel, type BrowserPanelInjected } from '../src/client/BrowserPanel.tsx'
 
+const BLANK_PAGE = { url: 'about:blank', title: '', canGoBack: false, canGoForward: false } as const
+
 async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
@@ -17,10 +19,10 @@ async function bench() {
     browserCreateTab: vi.fn(() => Promise.resolve({ tabId: 'fake-browser-1' })),
     browserCloseTab: vi.fn(() => Promise.resolve({ closed: true as const })),
     browserSelectTab: vi.fn(() => Promise.resolve({ selected: true as const })),
-    browserNavigate: vi.fn(() => Promise.resolve({ url: 'about:blank', title: '' })),
-    browserGoBack: vi.fn(() => Promise.resolve({ url: 'about:blank', title: '' })),
-    browserGoForward: vi.fn(() => Promise.resolve({ url: 'about:blank', title: '' })),
-    browserReload: vi.fn(() => Promise.resolve({ url: 'about:blank', title: '' })),
+    browserNavigate: vi.fn(() => Promise.resolve(BLANK_PAGE)),
+    browserGoBack: vi.fn(() => Promise.resolve(BLANK_PAGE)),
+    browserGoForward: vi.fn(() => Promise.resolve(BLANK_PAGE)),
+    browserReload: vi.fn(() => Promise.resolve(BLANK_PAGE)),
     browserResizeViewport: vi.fn(() => Promise.resolve({ resized: true as const })),
     browserSendPointer: vi.fn(() => Promise.resolve({ sent: true as const })),
     browserSendKeyboard: vi.fn(() => Promise.resolve({ sent: true as const })),
@@ -65,13 +67,10 @@ describe('ui-browser apply', () => {
     face.browserSendKeyboard('ws' as WorkspaceId, 'tab-1', { type: 'char', text: 'a' })
     await expect(face.browserCloseTab('ws' as WorkspaceId, 'tab-1')).resolves.toEqual({ closed: true })
     await expect(face.browserSelectTab('ws' as WorkspaceId, 'tab-1')).resolves.toEqual({ selected: true })
-    await expect(face.browserNavigate('ws' as WorkspaceId, 'tab-1', 'https://example.com')).resolves.toEqual({
-      url: 'about:blank',
-      title: '',
-    })
-    await expect(face.browserGoBack('ws' as WorkspaceId, 'tab-1')).resolves.toEqual({ url: 'about:blank', title: '' })
-    await expect(face.browserGoForward('ws' as WorkspaceId, 'tab-1')).resolves.toEqual({ url: 'about:blank', title: '' })
-    await expect(face.browserReload('ws' as WorkspaceId, 'tab-1', true)).resolves.toEqual({ url: 'about:blank', title: '' })
+    await expect(face.browserNavigate('ws' as WorkspaceId, 'tab-1', 'https://example.com')).resolves.toEqual(BLANK_PAGE)
+    await expect(face.browserGoBack('ws' as WorkspaceId, 'tab-1')).resolves.toEqual(BLANK_PAGE)
+    await expect(face.browserGoForward('ws' as WorkspaceId, 'tab-1')).resolves.toEqual(BLANK_PAGE)
+    await expect(face.browserReload('ws' as WorkspaceId, 'tab-1', true)).resolves.toEqual(BLANK_PAGE)
     await expect(face.browserResizeViewport('ws' as WorkspaceId, 'tab-1', 640, 480)).resolves.toEqual({ resized: true })
     expect(b.workspaces.browserWatchScreencast).toHaveBeenCalled()
     expect(b.workspaces.browserSendPointer).toHaveBeenCalled()

@@ -7,6 +7,8 @@ import type {
 } from '../src/client/api.ts'
 import { RpcId } from '../src/client/api.ts'
 
+const BLANK_BROWSER_PAGE = { url: 'about:blank', title: '', canGoBack: false, canGoForward: false } as const
+
 export interface Deferred<T> {
   promise: Promise<T>
   resolve(value: T): void
@@ -195,10 +197,10 @@ export class FakeApiClient implements IApiClient {
     browserCreateTab: payload => this.record('host.browserCreateTab', payload, Promise.resolve(ok({ tabId: 'fake-browser-1' }))),
     browserCloseTab: payload => this.record('host.browserCloseTab', payload, Promise.resolve(ok({ closed: true as const }))),
     browserSelectTab: payload => this.record('host.browserSelectTab', payload, Promise.resolve(ok({ selected: true as const }))),
-    browserNavigate: payload => this.record('host.browserNavigate', payload, Promise.resolve(ok({ url: 'about:blank', title: '' }))),
-    browserGoBack: payload => this.record('host.browserGoBack', payload, Promise.resolve(ok({ url: 'about:blank', title: '' }))),
-    browserGoForward: payload => this.record('host.browserGoForward', payload, Promise.resolve(ok({ url: 'about:blank', title: '' }))),
-    browserReload: payload => this.record('host.browserReload', payload, Promise.resolve(ok({ url: 'about:blank', title: '' }))),
+    browserNavigate: payload => this.record('host.browserNavigate', payload, Promise.resolve(ok(BLANK_BROWSER_PAGE))),
+    browserGoBack: payload => this.record('host.browserGoBack', payload, Promise.resolve(ok(BLANK_BROWSER_PAGE))),
+    browserGoForward: payload => this.record('host.browserGoForward', payload, Promise.resolve(ok(BLANK_BROWSER_PAGE))),
+    browserReload: payload => this.record('host.browserReload', payload, Promise.resolve(ok(BLANK_BROWSER_PAGE))),
     browserSnapshot: payload => this.record('host.browserSnapshot', payload, Promise.resolve(ok({ tree: '' }))),
     browserClick: payload => this.record('host.browserClick', payload, Promise.resolve(ok({ clicked: true as const }))),
     browserType: payload => this.record('host.browserType', payload, Promise.resolve(ok({ typed: true as const }))),

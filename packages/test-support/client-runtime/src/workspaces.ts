@@ -774,21 +774,21 @@ export class TestWorkspaces implements IWorkspaces {
     this.calls.push({ method: 'browserNavigate', args: [workspaceId, tabId, url, signal] })
     const stub = this.stubs.get('browserNavigate')
     if (stub !== undefined) return await (stub(workspaceId, tabId, url, signal) as Promise<BrowserPageMetadata>)
-    return { url, title: '' }
+    return { url, title: '', canGoBack: false, canGoForward: false }
   }
 
   async browserGoBack(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserPageMetadata> {
     this.calls.push({ method: 'browserGoBack', args: [workspaceId, tabId, signal] })
     const stub = this.stubs.get('browserGoBack')
     if (stub !== undefined) return await (stub(workspaceId, tabId, signal) as Promise<BrowserPageMetadata>)
-    return { url: 'about:blank', title: '' }
+    return { url: 'about:blank', title: '', canGoBack: false, canGoForward: false }
   }
 
   async browserGoForward(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserPageMetadata> {
     this.calls.push({ method: 'browserGoForward', args: [workspaceId, tabId, signal] })
     const stub = this.stubs.get('browserGoForward')
     if (stub !== undefined) return await (stub(workspaceId, tabId, signal) as Promise<BrowserPageMetadata>)
-    return { url: 'about:blank', title: '' }
+    return { url: 'about:blank', title: '', canGoBack: false, canGoForward: false }
   }
 
   async browserReload(
@@ -800,7 +800,7 @@ export class TestWorkspaces implements IWorkspaces {
     this.calls.push({ method: 'browserReload', args: [workspaceId, tabId, hard, signal] })
     const stub = this.stubs.get('browserReload')
     if (stub !== undefined) return await (stub(workspaceId, tabId, hard, signal) as Promise<BrowserPageMetadata>)
-    return { url: 'about:blank', title: '' }
+    return { url: 'about:blank', title: '', canGoBack: false, canGoForward: false }
   }
 
   async browserSnapshot(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserSnapshotResult> {

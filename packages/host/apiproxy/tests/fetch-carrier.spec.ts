@@ -276,16 +276,16 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
         return { rpcId: request.rpcId, result: { ok: true, value: { selected: true as const } } }
       },
       async browserNavigate(request) {
-        return { rpcId: request.rpcId, result: { ok: true, value: { url: 'about:blank', title: '' } } }
+        return { rpcId: request.rpcId, result: { ok: true, value: { url: 'about:blank', title: '', canGoBack: false, canGoForward: false } } }
       },
       async browserGoBack(request) {
-        return { rpcId: request.rpcId, result: { ok: true, value: { url: 'about:blank', title: '' } } }
+        return { rpcId: request.rpcId, result: { ok: true, value: { url: 'about:blank', title: '', canGoBack: false, canGoForward: false } } }
       },
       async browserGoForward(request) {
-        return { rpcId: request.rpcId, result: { ok: true, value: { url: 'about:blank', title: '' } } }
+        return { rpcId: request.rpcId, result: { ok: true, value: { url: 'about:blank', title: '', canGoBack: false, canGoForward: false } } }
       },
       async browserReload(request) {
-        return { rpcId: request.rpcId, result: { ok: true, value: { url: 'about:blank', title: '' } } }
+        return { rpcId: request.rpcId, result: { ok: true, value: { url: 'about:blank', title: '', canGoBack: false, canGoForward: false } } }
       },
       async browserSnapshot(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { tree: '' } } }

@@ -300,6 +300,10 @@ export interface BrowserTabSummary {
   url: string
   title: string
   selected: boolean
+  /** True when the tab history stack can move backward. */
+  canGoBack: boolean
+  /** True when the tab history stack can move forward. */
+  canGoForward: boolean
 }
 
 /** host.browserList response value. */
@@ -316,6 +320,10 @@ export interface BrowserCreateTabResult {
 export interface BrowserPageMetadata {
   url: string
   title: string
+  /** True when the tab history stack can move backward. */
+  canGoBack: boolean
+  /** True when the tab history stack can move forward. */
+  canGoForward: boolean
 }
 
 /** host.browserSnapshot response value. */
