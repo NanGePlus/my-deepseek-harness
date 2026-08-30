@@ -8,7 +8,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { z } from 'zod'
-import type { ApiProxy, MuxFrame, HostFrame, WatchPathFrame, TerminalStreamFrame } from '../api/index.ts'
+import type { ApiProxy, MuxFrame, HostFrame, WatchPathFrame, TerminalStreamFrame, BrowserScreencastFrame } from '../api/index.ts'
 import { sessionLogQuerySchema } from '../api/downloads.schema.ts'
 import type { RequestPayload, ResponseValue, RpcMethodMap } from '../api/rpc-map.ts'
 import type { ClientRequest, RpcError, RpcRequest, RpcResponse, ServerRequest, ServerResponse } from '../api/rpc.ts'
@@ -64,6 +64,23 @@ import {
   hostTerminalKillRequestSchema,
   hostTerminalListRequestSchema,
   hostTerminalStreamQuerySchema,
+  hostBrowserListRequestSchema,
+  hostBrowserCreateTabRequestSchema,
+  hostBrowserCloseTabRequestSchema,
+  hostBrowserSelectTabRequestSchema,
+  hostBrowserNavigateRequestSchema,
+  hostBrowserGoBackRequestSchema,
+  hostBrowserGoForwardRequestSchema,
+  hostBrowserReloadRequestSchema,
+  hostBrowserSnapshotRequestSchema,
+  hostBrowserClickRequestSchema,
+  hostBrowserTypeRequestSchema,
+  hostBrowserScrollRequestSchema,
+  hostBrowserSelectOptionRequestSchema,
+  hostBrowserResizeViewportRequestSchema,
+  hostBrowserSendPointerRequestSchema,
+  hostBrowserSendKeyboardRequestSchema,
+  hostBrowserWatchScreencastQuerySchema,
 } from '../api/host.schema.ts'
 import {
   workspaceArchiveSessionRequestSchema,
@@ -169,6 +186,22 @@ const UNARY_ROUTES: UnaryRoutes = {
   'host.terminalResize': { schema: hostTerminalResizeRequestSchema, invoke: (api, r, signal) => api.host.terminalResize(r, signal) },
   'host.terminalKill': { schema: hostTerminalKillRequestSchema, invoke: (api, r, signal) => api.host.terminalKill(r, signal) },
   'host.terminalList': { schema: hostTerminalListRequestSchema, invoke: (api, r, signal) => api.host.terminalList(r, signal) },
+  'host.browserList': { schema: hostBrowserListRequestSchema, invoke: (api, r, signal) => api.host.browserList(r, signal) },
+  'host.browserCreateTab': { schema: hostBrowserCreateTabRequestSchema, invoke: (api, r, signal) => api.host.browserCreateTab(r, signal) },
+  'host.browserCloseTab': { schema: hostBrowserCloseTabRequestSchema, invoke: (api, r, signal) => api.host.browserCloseTab(r, signal) },
+  'host.browserSelectTab': { schema: hostBrowserSelectTabRequestSchema, invoke: (api, r, signal) => api.host.browserSelectTab(r, signal) },
+  'host.browserNavigate': { schema: hostBrowserNavigateRequestSchema, invoke: (api, r, signal) => api.host.browserNavigate(r, signal) },
+  'host.browserGoBack': { schema: hostBrowserGoBackRequestSchema, invoke: (api, r, signal) => api.host.browserGoBack(r, signal) },
+  'host.browserGoForward': { schema: hostBrowserGoForwardRequestSchema, invoke: (api, r, signal) => api.host.browserGoForward(r, signal) },
+  'host.browserReload': { schema: hostBrowserReloadRequestSchema, invoke: (api, r, signal) => api.host.browserReload(r, signal) },
+  'host.browserSnapshot': { schema: hostBrowserSnapshotRequestSchema, invoke: (api, r, signal) => api.host.browserSnapshot(r, signal) },
+  'host.browserClick': { schema: hostBrowserClickRequestSchema, invoke: (api, r, signal) => api.host.browserClick(r, signal) },
+  'host.browserType': { schema: hostBrowserTypeRequestSchema, invoke: (api, r, signal) => api.host.browserType(r, signal) },
+  'host.browserScroll': { schema: hostBrowserScrollRequestSchema, invoke: (api, r, signal) => api.host.browserScroll(r, signal) },
+  'host.browserSelectOption': { schema: hostBrowserSelectOptionRequestSchema, invoke: (api, r, signal) => api.host.browserSelectOption(r, signal) },
+  'host.browserResizeViewport': { schema: hostBrowserResizeViewportRequestSchema, invoke: (api, r, signal) => api.host.browserResizeViewport(r, signal) },
+  'host.browserSendPointer': { schema: hostBrowserSendPointerRequestSchema, invoke: (api, r, signal) => api.host.browserSendPointer(r, signal) },
+  'host.browserSendKeyboard': { schema: hostBrowserSendKeyboardRequestSchema, invoke: (api, r, signal) => api.host.browserSendKeyboard(r, signal) },
   'workspace.list': { schema: workspaceListRequestSchema, invoke: (api, r) => api.workspace.list(r) },
   'workspace.create': { schema: workspaceCreateRequestSchema, invoke: (api, r) => api.workspace.create(r) },
   'workspace.rename': { schema: workspaceRenameRequestSchema, invoke: (api, r) => api.workspace.rename(r) },
@@ -250,8 +283,10 @@ async function handleUnary<K extends keyof RpcMethodMap>(
   }
 }
 
+type SseFrame = MuxFrame | HostFrame | WatchPathFrame | TerminalStreamFrame | BrowserScreencastFrame
+
 /** SSE frame: complete the narrow RpcRequest<frame> into a ServerRequest full form (method = frame type). */
-function fullFrame(narrow: RpcRequest<MuxFrame | HostFrame | WatchPathFrame | TerminalStreamFrame>): ServerRequest {
+function fullFrame(narrow: RpcRequest<SseFrame>): ServerRequest {
   return { type: 'server-request', rpcId: narrow.rpcId, method: narrow.payload.type, payload: narrow.payload }
 }
 
@@ -259,7 +294,7 @@ function fullFrame(narrow: RpcRequest<MuxFrame | HostFrame | WatchPathFrame | Te
  * Wrap a frame stream as an SSE Response; stops when req.signal aborts. An
  * impl throw mid-stream emits one stream/error frame and then closes.
  */
-function sseResponse(frames: AsyncIterable<RpcRequest<MuxFrame | HostFrame | WatchPathFrame | TerminalStreamFrame>>): Response {
+function sseResponse(frames: AsyncIterable<RpcRequest<SseFrame>>): Response {
   const encoder = new TextEncoder()
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -275,7 +310,7 @@ function sseResponse(frames: AsyncIterable<RpcRequest<MuxFrame | HostFrame | Wat
         // Mid-stream impl failure → one stream/error frame, then close: the client must see
         // the failure instead of a silent end (which reads as a normal disconnect). A fresh
         // rpcId is minted — this is a server-initiated push like any other frame.
-        const failure: MuxFrame | HostFrame | WatchPathFrame | TerminalStreamFrame = { type: 'stream/error', error: { code: 'internal', message: String(error), details: {} } }
+        const failure: SseFrame = { type: 'stream/error', error: { code: 'internal', message: String(error), details: {} } }
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(fullFrame({ rpcId: RpcId(randomUUID()), payload: failure }))}\n\n`))
         } catch {
@@ -329,6 +364,13 @@ export function toFetchHandler(api: ApiProxy): { fetch: typeof fetch } {
           return new Response('missing or invalid workspaceId or sessionId query parameter', { status: 400 })
         }
         return sseResponse(api.host.terminalStream({ rpcId: RpcId(randomUUID()), payload: parsed.data }, req.signal))
+      }
+      if (path === '/api/host.browserWatchScreencast' && req.method === 'GET') {
+        const parsed = hostBrowserWatchScreencastQuerySchema.safeParse(Object.fromEntries(url.searchParams))
+        if (!parsed.success) {
+          return new Response('missing or invalid workspaceId or tabId query parameter', { status: 400 })
+        }
+        return sseResponse(api.host.browserWatchScreencast({ rpcId: RpcId(randomUUID()), payload: parsed.data }, req.signal))
       }
       if (path === '/api/session.export' && (req.method === 'GET' || req.method === 'HEAD')) {
         // Query params are a different boundary from the POST envelope, but

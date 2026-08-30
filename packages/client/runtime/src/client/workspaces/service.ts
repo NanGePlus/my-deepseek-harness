@@ -8,6 +8,7 @@ import type {
   GitWorkingTreeResult, GitInitResult, GitLogResult, GitCommitDiffResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
   TerminalProfilesResult, TerminalSpawnResult, TerminalListResult, TerminalStreamFrame,
+  BrowserListResult, BrowserCreateTabResult, BrowserPageMetadata, BrowserSnapshotResult, BrowserScreencastFrame,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '../contract/store.ts'
 import { createSnapshotStore } from '../contract/store.ts'
@@ -796,6 +797,183 @@ export class WorkspaceRuntime implements IWorkspaces {
     void (async () => {
       try {
         for await (const frame of this.api.host.terminalStream({ workspaceId, sessionId }, lifetime, onOpen)) {
+          if (lifetime.aborted) return
+          onFrame(frame.payload)
+        }
+      } catch (error: unknown) {
+        if (lifetime.aborted || onError === undefined) return
+        if (error instanceof DirectoryBrowseError) {
+          onError(error.rpcError.message)
+          return
+        }
+        if (error instanceof Error) {
+          onError(error.message)
+          return
+        }
+        onError(String(error))
+      }
+    })()
+  }
+
+  async browserList(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<BrowserListResult> {
+    const response = await this.api.host.browserList({ workspaceId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserCreateTab(workspaceId: WorkspaceId, url?: string, signal?: AbortSignal): Promise<BrowserCreateTabResult> {
+    const payload = { workspaceId, ...(url === undefined ? {} : { url }) }
+    const response = await this.api.host.browserCreateTab(payload, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserCloseTab(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<{ closed: true }> {
+    const response = await this.api.host.browserCloseTab({ workspaceId, tabId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserSelectTab(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<{ selected: true }> {
+    const response = await this.api.host.browserSelectTab({ workspaceId, tabId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserNavigate(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<BrowserPageMetadata> {
+    const response = await this.api.host.browserNavigate({ workspaceId, tabId, url }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserGoBack(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserPageMetadata> {
+    const response = await this.api.host.browserGoBack({ workspaceId, tabId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserGoForward(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserPageMetadata> {
+    const response = await this.api.host.browserGoForward({ workspaceId, tabId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserReload(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    hard?: boolean,
+    signal?: AbortSignal,
+  ): Promise<BrowserPageMetadata> {
+    const payload = { workspaceId, tabId, ...(hard === undefined ? {} : { hard }) }
+    const response = await this.api.host.browserReload(payload, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserSnapshot(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserSnapshotResult> {
+    const response = await this.api.host.browserSnapshot({ workspaceId, tabId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserClick(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    x: number,
+    y: number,
+    signal?: AbortSignal,
+  ): Promise<{ clicked: true }> {
+    const response = await this.api.host.browserClick({ workspaceId, tabId, x, y }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserType(workspaceId: WorkspaceId, tabId: string, text: string, signal?: AbortSignal): Promise<{ typed: true }> {
+    const response = await this.api.host.browserType({ workspaceId, tabId, text }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserScroll(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    deltaX: number,
+    deltaY: number,
+    signal?: AbortSignal,
+  ): Promise<{ scrolled: true }> {
+    const response = await this.api.host.browserScroll({ workspaceId, tabId, deltaX, deltaY }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserSelectOption(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    selector: string,
+    values: string[],
+    signal?: AbortSignal,
+  ): Promise<{ selected: true }> {
+    const response = await this.api.host.browserSelectOption({ workspaceId, tabId, selector, values }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserResizeViewport(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    width: number,
+    height: number,
+    signal?: AbortSignal,
+  ): Promise<{ resized: true }> {
+    const response = await this.api.host.browserResizeViewport({ workspaceId, tabId, width, height }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserSendPointer(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    event: {
+      type: 'mousePressed' | 'mouseReleased' | 'mouseMoved'
+      x: number
+      y: number
+      button?: 'left' | 'right' | 'middle'
+    },
+    signal?: AbortSignal,
+  ): Promise<{ sent: true }> {
+    const response = await this.api.host.browserSendPointer({ workspaceId, tabId, ...event }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  async browserSendKeyboard(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    event: { type: 'keyDown' | 'keyUp' | 'char'; key?: string; text?: string },
+    signal?: AbortSignal,
+  ): Promise<{ sent: true }> {
+    const response = await this.api.host.browserSendKeyboard({ workspaceId, tabId, ...event }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
+  browserWatchScreencast(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    onFrame: (frame: BrowserScreencastFrame) => void,
+    signal?: AbortSignal,
+    onOpen?: () => void,
+    onError?: (message: string) => void,
+  ): void {
+    const lifetime = signal ?? new AbortController().signal
+    void (async () => {
+      try {
+        for await (const frame of this.api.host.browserWatchScreencast({ workspaceId, tabId }, lifetime, onOpen)) {
           if (lifetime.aborted) return
           onFrame(frame.payload)
         }

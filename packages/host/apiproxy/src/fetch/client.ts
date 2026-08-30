@@ -6,7 +6,7 @@
  */
 
 import type { z } from 'zod'
-import type { ApiProxy, HostFrame, MuxFrame, WatchPathFrame, TerminalStreamFrame } from '../api/index.ts'
+import type { ApiProxy, HostFrame, MuxFrame, WatchPathFrame, TerminalStreamFrame, BrowserScreencastFrame } from '../api/index.ts'
 import type { RequestPayload, ResponseValue, RpcMethodMap } from '../api/rpc-map.ts'
 import type { ClientRequest, ClientResponse, RpcMessage, RpcReceipt, RpcRequest, RpcResponse, ServerRequest } from '../api/rpc.ts'
 import { RpcId } from '../api/rpc.ts'
@@ -47,6 +47,23 @@ import {
   hostTerminalKillValueSchema,
   hostTerminalListValueSchema,
   terminalStreamFrameSchema,
+  hostBrowserListValueSchema,
+  hostBrowserCreateTabValueSchema,
+  hostBrowserCloseTabValueSchema,
+  hostBrowserSelectTabValueSchema,
+  hostBrowserNavigateValueSchema,
+  hostBrowserGoBackValueSchema,
+  hostBrowserGoForwardValueSchema,
+  hostBrowserReloadValueSchema,
+  hostBrowserSnapshotValueSchema,
+  hostBrowserClickValueSchema,
+  hostBrowserTypeValueSchema,
+  hostBrowserScrollValueSchema,
+  hostBrowserSelectOptionValueSchema,
+  hostBrowserResizeViewportValueSchema,
+  hostBrowserSendPointerValueSchema,
+  hostBrowserSendKeyboardValueSchema,
+  browserScreencastFrameSchema,
 } from '../api/host.schema.ts'
 import {
   sessionCancelValueSchema,
@@ -181,6 +198,27 @@ export interface IApiClient {
       signal: AbortSignal,
       onOpen?: () => void,
     ): AsyncIterable<RpcRequest<TerminalStreamFrame>>
+    browserList(payload: RequestPayload<'host.browserList'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserList'>>>
+    browserCreateTab(payload: RequestPayload<'host.browserCreateTab'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserCreateTab'>>>
+    browserCloseTab(payload: RequestPayload<'host.browserCloseTab'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserCloseTab'>>>
+    browserSelectTab(payload: RequestPayload<'host.browserSelectTab'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserSelectTab'>>>
+    browserNavigate(payload: RequestPayload<'host.browserNavigate'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserNavigate'>>>
+    browserGoBack(payload: RequestPayload<'host.browserGoBack'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserGoBack'>>>
+    browserGoForward(payload: RequestPayload<'host.browserGoForward'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserGoForward'>>>
+    browserReload(payload: RequestPayload<'host.browserReload'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserReload'>>>
+    browserSnapshot(payload: RequestPayload<'host.browserSnapshot'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserSnapshot'>>>
+    browserClick(payload: RequestPayload<'host.browserClick'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserClick'>>>
+    browserType(payload: RequestPayload<'host.browserType'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserType'>>>
+    browserScroll(payload: RequestPayload<'host.browserScroll'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserScroll'>>>
+    browserSelectOption(payload: RequestPayload<'host.browserSelectOption'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserSelectOption'>>>
+    browserResizeViewport(payload: RequestPayload<'host.browserResizeViewport'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserResizeViewport'>>>
+    browserSendPointer(payload: RequestPayload<'host.browserSendPointer'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserSendPointer'>>>
+    browserSendKeyboard(payload: RequestPayload<'host.browserSendKeyboard'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserSendKeyboard'>>>
+    browserWatchScreencast(
+      payload: { workspaceId: RequestPayload<'host.browserList'>['workspaceId']; tabId: string },
+      signal: AbortSignal,
+      onOpen?: () => void,
+    ): AsyncIterable<RpcRequest<BrowserScreencastFrame>>
   }
   workspace: {
     list(payload: RequestPayload<'workspace.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.list'>>>
@@ -290,6 +328,22 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'host.terminalResize': hostTerminalResizeValueSchema,
   'host.terminalKill': hostTerminalKillValueSchema,
   'host.terminalList': hostTerminalListValueSchema,
+  'host.browserList': hostBrowserListValueSchema,
+  'host.browserCreateTab': hostBrowserCreateTabValueSchema,
+  'host.browserCloseTab': hostBrowserCloseTabValueSchema,
+  'host.browserSelectTab': hostBrowserSelectTabValueSchema,
+  'host.browserNavigate': hostBrowserNavigateValueSchema,
+  'host.browserGoBack': hostBrowserGoBackValueSchema,
+  'host.browserGoForward': hostBrowserGoForwardValueSchema,
+  'host.browserReload': hostBrowserReloadValueSchema,
+  'host.browserSnapshot': hostBrowserSnapshotValueSchema,
+  'host.browserClick': hostBrowserClickValueSchema,
+  'host.browserType': hostBrowserTypeValueSchema,
+  'host.browserScroll': hostBrowserScrollValueSchema,
+  'host.browserSelectOption': hostBrowserSelectOptionValueSchema,
+  'host.browserResizeViewport': hostBrowserResizeViewportValueSchema,
+  'host.browserSendPointer': hostBrowserSendPointerValueSchema,
+  'host.browserSendKeyboard': hostBrowserSendKeyboardValueSchema,
   'workspace.list': workspaceListValueSchema,
   'workspace.create': workspaceCreateValueSchema,
   'workspace.rename': workspaceRenameValueSchema,
@@ -478,6 +532,16 @@ export abstract class AbstractApiClient implements IApiClient {
     return this.readSse(`/api/host.terminalStream?${query}`, signal, terminalStreamFrameSchema, onOpen)
   }
 
+  /** host.browserWatchScreencast opener; virtual. */
+  protected openBrowserWatchScreencast(
+    payload: { workspaceId: RequestPayload<'host.browserList'>['workspaceId']; tabId: string },
+    signal: AbortSignal,
+    onOpen?: () => void,
+  ): AsyncIterable<RpcRequest<BrowserScreencastFrame>> {
+    const query = new URLSearchParams({ workspaceId: payload.workspaceId, tabId: payload.tabId })
+    return this.readSse(`/api/host.browserWatchScreencast?${query}`, signal, browserScreencastFrameSchema, onOpen)
+  }
+
   /**
    * SSE protocol path: streaming fetch (not EventSource), '\n\n' framing, ServerRequest envelope +
    * frame-schema parse, tap, narrow yield. onOpen fires once the response headers are in and the
@@ -485,7 +549,7 @@ export abstract class AbstractApiClient implements IApiClient {
    * either parse level is reported and skipped (one corrupt frame must not kill the stream; the
    * client's gap detection covers whatever the frame carried).
    */
-  protected async *readSse<F extends MuxFrame | HostFrame | WatchPathFrame | TerminalStreamFrame>(
+  protected async *readSse<F extends MuxFrame | HostFrame | WatchPathFrame | TerminalStreamFrame | BrowserScreencastFrame>(
     path: string,
     signal: AbortSignal,
     frameSchema: z.ZodType<F>,
@@ -601,6 +665,23 @@ export abstract class AbstractApiClient implements IApiClient {
     terminalList: (payload, signal) => this.callUnary('host.terminalList', payload, signal),
     watchPath: (payload, signal, onOpen) => this.openWatchPath(payload, signal, onOpen),
     terminalStream: (payload, signal, onOpen) => this.openTerminalStream(payload, signal, onOpen),
+    browserList: (payload, signal) => this.callUnary('host.browserList', payload, signal),
+    browserCreateTab: (payload, signal) => this.callUnary('host.browserCreateTab', payload, signal),
+    browserCloseTab: (payload, signal) => this.callUnary('host.browserCloseTab', payload, signal),
+    browserSelectTab: (payload, signal) => this.callUnary('host.browserSelectTab', payload, signal),
+    browserNavigate: (payload, signal) => this.callUnary('host.browserNavigate', payload, signal),
+    browserGoBack: (payload, signal) => this.callUnary('host.browserGoBack', payload, signal),
+    browserGoForward: (payload, signal) => this.callUnary('host.browserGoForward', payload, signal),
+    browserReload: (payload, signal) => this.callUnary('host.browserReload', payload, signal),
+    browserSnapshot: (payload, signal) => this.callUnary('host.browserSnapshot', payload, signal),
+    browserClick: (payload, signal) => this.callUnary('host.browserClick', payload, signal),
+    browserType: (payload, signal) => this.callUnary('host.browserType', payload, signal),
+    browserScroll: (payload, signal) => this.callUnary('host.browserScroll', payload, signal),
+    browserSelectOption: (payload, signal) => this.callUnary('host.browserSelectOption', payload, signal),
+    browserResizeViewport: (payload, signal) => this.callUnary('host.browserResizeViewport', payload, signal),
+    browserSendPointer: (payload, signal) => this.callUnary('host.browserSendPointer', payload, signal),
+    browserSendKeyboard: (payload, signal) => this.callUnary('host.browserSendKeyboard', payload, signal),
+    browserWatchScreencast: (payload, signal, onOpen) => this.openBrowserWatchScreencast(payload, signal, onOpen),
   }
 
   readonly workspace: IApiClient['workspace'] = {

@@ -50,6 +50,8 @@ export type {
   HostLspHover, LspHoverDocumentResult,
   TerminalShellProfile, TerminalProfilesResult, TerminalSpawnResult,
   TerminalSessionSummary, TerminalListResult, TerminalStreamFrame,
+  BrowserTabSummary, BrowserListResult, BrowserCreateTabResult, BrowserPageMetadata,
+  BrowserSnapshotResult, BrowserScreencastFrame,
 } from '@deepseek-ai/dsh-client-connection/client'
 export type {} from '@deepseek-ai/dsh-api-gateway/client'
 export type {} from '@deepseek-ai/dsh-cordis-host-runner/remote'

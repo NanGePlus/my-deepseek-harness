@@ -263,6 +263,57 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       terminalStream() {
         return (async function* () {})()
       },
+      async browserList(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { tabs: [] } } }
+      },
+      async browserCreateTab(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { tabId: 'browser-1' } } }
+      },
+      async browserCloseTab(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { closed: true as const } } }
+      },
+      async browserSelectTab(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { selected: true as const } } }
+      },
+      async browserNavigate(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { url: 'about:blank', title: '' } } }
+      },
+      async browserGoBack(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { url: 'about:blank', title: '' } } }
+      },
+      async browserGoForward(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { url: 'about:blank', title: '' } } }
+      },
+      async browserReload(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { url: 'about:blank', title: '' } } }
+      },
+      async browserSnapshot(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { tree: '' } } }
+      },
+      async browserClick(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { clicked: true as const } } }
+      },
+      async browserType(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { typed: true as const } } }
+      },
+      async browserScroll(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { scrolled: true as const } } }
+      },
+      async browserSelectOption(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { selected: true as const } } }
+      },
+      async browserResizeViewport(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { resized: true as const } } }
+      },
+      async browserSendPointer(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { sent: true as const } } }
+      },
+      async browserSendKeyboard(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { sent: true as const } } }
+      },
+      browserWatchScreencast() {
+        return (async function* () {})()
+      },
     },
     workspace: {
       async list(request) {

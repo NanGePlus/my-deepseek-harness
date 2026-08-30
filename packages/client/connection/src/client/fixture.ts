@@ -2634,6 +2634,23 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       terminalKill: request => ok(request, { killed: true as const }),
       terminalList: request => ok(request, { sessions: [] }),
       terminalStream: () => (async function* () {})(),
+      browserList: request => ok(request, { tabs: [] }),
+      browserCreateTab: request => ok(request, { tabId: 'fixture-browser-1' }),
+      browserCloseTab: request => ok(request, { closed: true as const }),
+      browserSelectTab: request => ok(request, { selected: true as const }),
+      browserNavigate: request => ok(request, { url: 'about:blank', title: '' }),
+      browserGoBack: request => ok(request, { url: 'about:blank', title: '' }),
+      browserGoForward: request => ok(request, { url: 'about:blank', title: '' }),
+      browserReload: request => ok(request, { url: 'about:blank', title: '' }),
+      browserSnapshot: request => ok(request, { tree: '' }),
+      browserClick: request => ok(request, { clicked: true as const }),
+      browserType: request => ok(request, { typed: true as const }),
+      browserScroll: request => ok(request, { scrolled: true as const }),
+      browserSelectOption: request => ok(request, { selected: true as const }),
+      browserResizeViewport: request => ok(request, { resized: true as const }),
+      browserSendPointer: request => ok(request, { sent: true as const }),
+      browserSendKeyboard: request => ok(request, { sent: true as const }),
+      browserWatchScreencast: () => (async function* () {})(),
       watchPath: () => (async function* () {})(),
     },
     workspace: {
@@ -3200,6 +3217,22 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'host.terminalResize': return this.api.host.terminalResize(request, signal)
       case 'host.terminalKill': return this.api.host.terminalKill(request, signal)
       case 'host.terminalList': return this.api.host.terminalList(request, signal)
+      case 'host.browserList': return this.api.host.browserList(request, signal)
+      case 'host.browserCreateTab': return this.api.host.browserCreateTab(request, signal)
+      case 'host.browserCloseTab': return this.api.host.browserCloseTab(request, signal)
+      case 'host.browserSelectTab': return this.api.host.browserSelectTab(request, signal)
+      case 'host.browserNavigate': return this.api.host.browserNavigate(request, signal)
+      case 'host.browserGoBack': return this.api.host.browserGoBack(request, signal)
+      case 'host.browserGoForward': return this.api.host.browserGoForward(request, signal)
+      case 'host.browserReload': return this.api.host.browserReload(request, signal)
+      case 'host.browserSnapshot': return this.api.host.browserSnapshot(request, signal)
+      case 'host.browserClick': return this.api.host.browserClick(request, signal)
+      case 'host.browserType': return this.api.host.browserType(request, signal)
+      case 'host.browserScroll': return this.api.host.browserScroll(request, signal)
+      case 'host.browserSelectOption': return this.api.host.browserSelectOption(request, signal)
+      case 'host.browserResizeViewport': return this.api.host.browserResizeViewport(request, signal)
+      case 'host.browserSendPointer': return this.api.host.browserSendPointer(request, signal)
+      case 'host.browserSendKeyboard': return this.api.host.browserSendKeyboard(request, signal)
       case 'workspace.list': return this.api.workspace.list(request)
       case 'workspace.create': return this.api.workspace.create(request)
       case 'workspace.rename': return this.api.workspace.rename(request)

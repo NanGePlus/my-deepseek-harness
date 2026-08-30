@@ -311,6 +311,26 @@ export class FakeApiClient implements IApiClient {
       onOpen?.()
       return (async function* () {})()
     },
+    browserList: (payload: unknown) => this.record('host.browserList', payload, Promise.resolve(ok({ tabs: [] }))),
+    browserCreateTab: (payload: unknown) => this.record('host.browserCreateTab', payload, Promise.resolve(ok({ tabId: 'fake-browser-1' }))),
+    browserCloseTab: (payload: unknown) => this.record('host.browserCloseTab', payload, Promise.resolve(ok({ closed: true as const }))),
+    browserSelectTab: (payload: unknown) => this.record('host.browserSelectTab', payload, Promise.resolve(ok({ selected: true as const }))),
+    browserNavigate: (payload: unknown) => this.record('host.browserNavigate', payload, Promise.resolve(ok({ url: 'about:blank', title: '' }))),
+    browserGoBack: (payload: unknown) => this.record('host.browserGoBack', payload, Promise.resolve(ok({ url: 'about:blank', title: '' }))),
+    browserGoForward: (payload: unknown) => this.record('host.browserGoForward', payload, Promise.resolve(ok({ url: 'about:blank', title: '' }))),
+    browserReload: (payload: unknown) => this.record('host.browserReload', payload, Promise.resolve(ok({ url: 'about:blank', title: '' }))),
+    browserSnapshot: (payload: unknown) => this.record('host.browserSnapshot', payload, Promise.resolve(ok({ tree: '' }))),
+    browserClick: (payload: unknown) => this.record('host.browserClick', payload, Promise.resolve(ok({ clicked: true as const }))),
+    browserType: (payload: unknown) => this.record('host.browserType', payload, Promise.resolve(ok({ typed: true as const }))),
+    browserScroll: (payload: unknown) => this.record('host.browserScroll', payload, Promise.resolve(ok({ scrolled: true as const }))),
+    browserSelectOption: (payload: unknown) => this.record('host.browserSelectOption', payload, Promise.resolve(ok({ selected: true as const }))),
+    browserResizeViewport: (payload: unknown) => this.record('host.browserResizeViewport', payload, Promise.resolve(ok({ resized: true as const }))),
+    browserSendPointer: (payload: unknown) => this.record('host.browserSendPointer', payload, Promise.resolve(ok({ sent: true as const }))),
+    browserSendKeyboard: (payload: unknown) => this.record('host.browserSendKeyboard', payload, Promise.resolve(ok({ sent: true as const }))),
+    browserWatchScreencast: (_payload, _signal, onOpen) => {
+      onOpen?.()
+      return (async function* () {})()
+    },
   }
 
   // The archive-set field defaults at the binding below so list stubs keep

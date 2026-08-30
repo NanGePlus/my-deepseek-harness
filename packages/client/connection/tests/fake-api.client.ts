@@ -191,6 +191,26 @@ export class FakeApiClient implements IApiClient {
       onOpen?.()
       return (async function* () {})()
     },
+    browserList: payload => this.record('host.browserList', payload, Promise.resolve(ok({ tabs: [] }))),
+    browserCreateTab: payload => this.record('host.browserCreateTab', payload, Promise.resolve(ok({ tabId: 'fake-browser-1' }))),
+    browserCloseTab: payload => this.record('host.browserCloseTab', payload, Promise.resolve(ok({ closed: true as const }))),
+    browserSelectTab: payload => this.record('host.browserSelectTab', payload, Promise.resolve(ok({ selected: true as const }))),
+    browserNavigate: payload => this.record('host.browserNavigate', payload, Promise.resolve(ok({ url: 'about:blank', title: '' }))),
+    browserGoBack: payload => this.record('host.browserGoBack', payload, Promise.resolve(ok({ url: 'about:blank', title: '' }))),
+    browserGoForward: payload => this.record('host.browserGoForward', payload, Promise.resolve(ok({ url: 'about:blank', title: '' }))),
+    browserReload: payload => this.record('host.browserReload', payload, Promise.resolve(ok({ url: 'about:blank', title: '' }))),
+    browserSnapshot: payload => this.record('host.browserSnapshot', payload, Promise.resolve(ok({ tree: '' }))),
+    browserClick: payload => this.record('host.browserClick', payload, Promise.resolve(ok({ clicked: true as const }))),
+    browserType: payload => this.record('host.browserType', payload, Promise.resolve(ok({ typed: true as const }))),
+    browserScroll: payload => this.record('host.browserScroll', payload, Promise.resolve(ok({ scrolled: true as const }))),
+    browserSelectOption: payload => this.record('host.browserSelectOption', payload, Promise.resolve(ok({ selected: true as const }))),
+    browserResizeViewport: payload => this.record('host.browserResizeViewport', payload, Promise.resolve(ok({ resized: true as const }))),
+    browserSendPointer: payload => this.record('host.browserSendPointer', payload, Promise.resolve(ok({ sent: true as const }))),
+    browserSendKeyboard: payload => this.record('host.browserSendKeyboard', payload, Promise.resolve(ok({ sent: true as const }))),
+    browserWatchScreencast: (_payload, _signal, onOpen) => {
+      onOpen?.()
+      return (async function* () {})()
+    },
   }
 
   readonly workspace: IApiClient['workspace'] = {

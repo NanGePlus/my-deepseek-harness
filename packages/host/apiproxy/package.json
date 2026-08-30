@@ -75,6 +75,7 @@
     "@deepseek-ai/schemastery": "workspace:^",
     "fflate": "^0.8.2",
     "node-pty": "^1.1.0",
+    "playwright": "^1.49.0",
     "zod": "^4.4.3"
   },
   "peerDependencies": {

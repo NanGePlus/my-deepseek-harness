@@ -114,6 +114,10 @@ export interface RpcErrorDetailsMap {
   'terminal-unavailable': { workspaceId?: string }
   /** The requested human terminal session id is absent for the Workspace. */
   'terminal-session-not-found': { workspaceId: string; sessionId: string }
+  /** The host cannot start Playwright Chromium for browser RPC. */
+  'browser-unavailable': { workspaceId?: string; reason: 'chromium-missing' | 'context-start-failed' }
+  /** The requested browser tab id is absent for the Workspace. */
+  'browser-tab-not-found': { workspaceId: string; tabId: string }
   /** The host has no git executable on PATH. */
   'git-unavailable': {}
   /** Git is available and an ancestor of the bound Workspace is already a repository. */

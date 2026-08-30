@@ -7,6 +7,7 @@ import type {
   GitWorkingTreeResult, GitInitResult, GitLogResult, GitCommitDiffResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
   TerminalProfilesResult, TerminalSpawnResult, TerminalListResult, TerminalStreamFrame,
+  BrowserListResult, BrowserCreateTabResult, BrowserPageMetadata, BrowserSnapshotResult, BrowserScreencastFrame,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { workspaceListState } from './fixtures.ts'
 import type { Stabilizer } from './fixtures.ts'
@@ -733,6 +734,187 @@ export class TestWorkspaces implements IWorkspaces {
     this.calls.push({ method: 'terminalStream', args: [workspaceId, sessionId, onFrame, signal, onOpen, onError] })
     const stub = this.stubs.get('terminalStream')
     if (stub !== undefined) stub(workspaceId, sessionId, onFrame, signal, onOpen, onError)
+    else onOpen?.()
+  }
+
+  async browserList(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<BrowserListResult> {
+    this.calls.push({ method: 'browserList', args: [workspaceId, signal] })
+    const stub = this.stubs.get('browserList')
+    if (stub !== undefined) return await (stub(workspaceId, signal) as Promise<BrowserListResult>)
+    return { tabs: [] }
+  }
+
+  async browserCreateTab(workspaceId: WorkspaceId, url?: string, signal?: AbortSignal): Promise<BrowserCreateTabResult> {
+    this.calls.push({ method: 'browserCreateTab', args: [workspaceId, url, signal] })
+    const stub = this.stubs.get('browserCreateTab')
+    if (stub !== undefined) return await (stub(workspaceId, url, signal) as Promise<BrowserCreateTabResult>)
+    return { tabId: 'test-browser-1' }
+  }
+
+  async browserCloseTab(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<{ closed: true }> {
+    this.calls.push({ method: 'browserCloseTab', args: [workspaceId, tabId, signal] })
+    const stub = this.stubs.get('browserCloseTab')
+    if (stub !== undefined) return await (stub(workspaceId, tabId, signal) as Promise<{ closed: true }>)
+    return { closed: true }
+  }
+
+  async browserSelectTab(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<{ selected: true }> {
+    this.calls.push({ method: 'browserSelectTab', args: [workspaceId, tabId, signal] })
+    const stub = this.stubs.get('browserSelectTab')
+    if (stub !== undefined) return await (stub(workspaceId, tabId, signal) as Promise<{ selected: true }>)
+    return { selected: true }
+  }
+
+  async browserNavigate(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<BrowserPageMetadata> {
+    this.calls.push({ method: 'browserNavigate', args: [workspaceId, tabId, url, signal] })
+    const stub = this.stubs.get('browserNavigate')
+    if (stub !== undefined) return await (stub(workspaceId, tabId, url, signal) as Promise<BrowserPageMetadata>)
+    return { url, title: '' }
+  }
+
+  async browserGoBack(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserPageMetadata> {
+    this.calls.push({ method: 'browserGoBack', args: [workspaceId, tabId, signal] })
+    const stub = this.stubs.get('browserGoBack')
+    if (stub !== undefined) return await (stub(workspaceId, tabId, signal) as Promise<BrowserPageMetadata>)
+    return { url: 'about:blank', title: '' }
+  }
+
+  async browserGoForward(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserPageMetadata> {
+    this.calls.push({ method: 'browserGoForward', args: [workspaceId, tabId, signal] })
+    const stub = this.stubs.get('browserGoForward')
+    if (stub !== undefined) return await (stub(workspaceId, tabId, signal) as Promise<BrowserPageMetadata>)
+    return { url: 'about:blank', title: '' }
+  }
+
+  async browserReload(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    hard?: boolean,
+    signal?: AbortSignal,
+  ): Promise<BrowserPageMetadata> {
+    this.calls.push({ method: 'browserReload', args: [workspaceId, tabId, hard, signal] })
+    const stub = this.stubs.get('browserReload')
+    if (stub !== undefined) return await (stub(workspaceId, tabId, hard, signal) as Promise<BrowserPageMetadata>)
+    return { url: 'about:blank', title: '' }
+  }
+
+  async browserSnapshot(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserSnapshotResult> {
+    this.calls.push({ method: 'browserSnapshot', args: [workspaceId, tabId, signal] })
+    const stub = this.stubs.get('browserSnapshot')
+    if (stub !== undefined) return await (stub(workspaceId, tabId, signal) as Promise<BrowserSnapshotResult>)
+    return { tree: '' }
+  }
+
+  async browserClick(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    x: number,
+    y: number,
+    signal?: AbortSignal,
+  ): Promise<{ clicked: true }> {
+    this.calls.push({ method: 'browserClick', args: [workspaceId, tabId, x, y, signal] })
+    const stub = this.stubs.get('browserClick')
+    if (stub !== undefined) return await (stub(workspaceId, tabId, x, y, signal) as Promise<{ clicked: true }>)
+    return { clicked: true }
+  }
+
+  async browserType(workspaceId: WorkspaceId, tabId: string, text: string, signal?: AbortSignal): Promise<{ typed: true }> {
+    this.calls.push({ method: 'browserType', args: [workspaceId, tabId, text, signal] })
+    const stub = this.stubs.get('browserType')
+    if (stub !== undefined) return await (stub(workspaceId, tabId, text, signal) as Promise<{ typed: true }>)
+    return { typed: true }
+  }
+
+  async browserScroll(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    deltaX: number,
+    deltaY: number,
+    signal?: AbortSignal,
+  ): Promise<{ scrolled: true }> {
+    this.calls.push({ method: 'browserScroll', args: [workspaceId, tabId, deltaX, deltaY, signal] })
+    const stub = this.stubs.get('browserScroll')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, tabId, deltaX, deltaY, signal) as Promise<{ scrolled: true }>)
+    }
+    return { scrolled: true }
+  }
+
+  async browserSelectOption(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    selector: string,
+    values: string[],
+    signal?: AbortSignal,
+  ): Promise<{ selected: true }> {
+    this.calls.push({ method: 'browserSelectOption', args: [workspaceId, tabId, selector, values, signal] })
+    const stub = this.stubs.get('browserSelectOption')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, tabId, selector, values, signal) as Promise<{ selected: true }>)
+    }
+    return { selected: true }
+  }
+
+  async browserResizeViewport(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    width: number,
+    height: number,
+    signal?: AbortSignal,
+  ): Promise<{ resized: true }> {
+    this.calls.push({ method: 'browserResizeViewport', args: [workspaceId, tabId, width, height, signal] })
+    const stub = this.stubs.get('browserResizeViewport')
+    if (stub !== undefined) {
+      return await (stub(workspaceId, tabId, width, height, signal) as Promise<{ resized: true }>)
+    }
+    return { resized: true }
+  }
+
+  async browserSendPointer(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    event: {
+      type: 'mousePressed' | 'mouseReleased' | 'mouseMoved'
+      x: number
+      y: number
+      button?: 'left' | 'right' | 'middle'
+    },
+    signal?: AbortSignal,
+  ): Promise<{ sent: true }> {
+    this.calls.push({ method: 'browserSendPointer', args: [workspaceId, tabId, event, signal] })
+    const stub = this.stubs.get('browserSendPointer')
+    if (stub !== undefined) return await (stub(workspaceId, tabId, event, signal) as Promise<{ sent: true }>)
+    return { sent: true }
+  }
+
+  async browserSendKeyboard(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    event: { type: 'keyDown' | 'keyUp' | 'char'; key?: string; text?: string },
+    signal?: AbortSignal,
+  ): Promise<{ sent: true }> {
+    this.calls.push({ method: 'browserSendKeyboard', args: [workspaceId, tabId, event, signal] })
+    const stub = this.stubs.get('browserSendKeyboard')
+    if (stub !== undefined) return await (stub(workspaceId, tabId, event, signal) as Promise<{ sent: true }>)
+    return { sent: true }
+  }
+
+  browserWatchScreencast(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    onFrame: (frame: BrowserScreencastFrame) => void,
+    signal?: AbortSignal,
+    onOpen?: () => void,
+    onError?: (message: string) => void,
+  ): void {
+    this.calls.push({ method: 'browserWatchScreencast', args: [workspaceId, tabId, onFrame, signal, onOpen, onError] })
+    const stub = this.stubs.get('browserWatchScreencast')
+    if (stub !== undefined) stub(workspaceId, tabId, onFrame, signal, onOpen, onError)
     else onOpen?.()
   }
 

@@ -122,13 +122,19 @@ import { inspectGitWorkingTree, initGitRepository, readGitDiffPreview, stageGitP
 import { GIT_LOG_DEFAULT_LIMIT, readGitLog } from './git-log.ts'
 import { readGitCommitDiff } from './git-commit-diff.ts'
 import { watchWorkspacePath } from './watch-path.ts'
-import type { WatchPathFrame, TerminalStreamFrame } from './api/host.ts'
+import type { WatchPathFrame, TerminalStreamFrame, BrowserScreencastFrame } from './api/host.ts'
 import {
   HumanTerminalRegistry,
   TerminalSessionNotFoundError,
   TerminalUnavailableError,
   type HumanTerminalInternals,
 } from './human-terminal.ts'
+import {
+  BrowserRegistry,
+  BrowserTabNotFoundError,
+  BrowserUnavailableError,
+  type BrowserRegistryInternals,
+} from './browser-registry.ts'
 import {
   readWorkspaceFile,
   writeWorkspaceFile,
@@ -749,6 +755,8 @@ export interface ApiProxyDefaults {
   canOpenPath?: () => boolean
   /** Injectable human-terminal hooks for host integration tests. */
   humanTerminal?: HumanTerminalInternals
+  /** Injectable Playwright hooks for host browser integration tests. */
+  browserRegistry?: BrowserRegistryInternals
 }
 
 /** The tool/call payload fields the presenter path reads. */
@@ -1214,6 +1222,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   const muxQueues = new Set<FrameQueue<RpcRequest<MuxFrame>>>()
   const imageAdmissionChains = new WeakMap<Agent, Promise<void>>()
   const humanTerminal = new HumanTerminalRegistry(defaults.humanTerminal)
+  const browserRegistry = new BrowserRegistry(defaults.cwd, defaults.browserRegistry)
 
   /** Serialize image admission with model selection for one agent. */
   function serializeImageAdmission<T>(agent: Agent, operation: () => Promise<T>): Promise<T> {
@@ -3959,6 +3968,405 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                   code: 'terminal-session-not-found',
                   message: error.message,
                   details: { workspaceId, sessionId },
+                },
+              })
+              return
+            }
+            throw error
+          }
+        })()
+      },
+
+      async browserList(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        return ok(request, browserRegistry.list(workspaceId))
+      },
+
+      async browserCreateTab(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, url } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.createTab(workspaceId, url))
+        } catch (error: unknown) {
+          if (error instanceof BrowserUnavailableError) {
+            return err(request, {
+              code: 'browser-unavailable',
+              message: error.message,
+              details: { workspaceId, reason: error.reason },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserCloseTab(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.closeTab(workspaceId, tabId))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserSelectTab(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, browserRegistry.selectTab(workspaceId, tabId))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserNavigate(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId, url } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.navigate(workspaceId, tabId, url))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserGoBack(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.goBack(workspaceId, tabId))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserGoForward(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.goForward(workspaceId, tabId))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserReload(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId, hard } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.reload(workspaceId, tabId, hard))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserSnapshot(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.snapshot(workspaceId, tabId))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserClick(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId, x, y } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.click(workspaceId, tabId, x, y))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserType(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId, text } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.type(workspaceId, tabId, text))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserScroll(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId, deltaX, deltaY } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.scroll(workspaceId, tabId, deltaX, deltaY))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserSelectOption(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId, selector, values } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.selectOption(workspaceId, tabId, selector, values))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserResizeViewport(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId, width, height } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.resizeViewport(workspaceId, tabId, width, height))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserSendPointer(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId, type, x, y, button } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.sendPointer(workspaceId, tabId, {
+            type,
+            x,
+            y,
+            ...(button === undefined ? {} : { button }),
+          }))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserSendKeyboard(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId, type, key, text } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.sendKeyboard(workspaceId, tabId, {
+            type,
+            ...(key === undefined ? {} : { key }),
+            ...(text === undefined ? {} : { text }),
+          }))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      browserWatchScreencast(request, signal) {
+        const { workspaceId, tabId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) {
+          return (async function* () {
+            yield frame<BrowserScreencastFrame>({
+              type: 'stream/error',
+              error: {
+                code: 'workspace-not-found',
+                message: `workspace not found: ${workspaceId}`,
+                details: { workspaceId },
+              },
+            })
+          })()
+        }
+        return (async function* () {
+          try {
+            for await (const payload of browserRegistry.watchScreencast(workspaceId, tabId, signal)) {
+              yield frame(payload)
+            }
+          } catch (error: unknown) {
+            if (error instanceof BrowserTabNotFoundError) {
+              yield frame<BrowserScreencastFrame>({
+                type: 'stream/error',
+                error: {
+                  code: 'browser-tab-not-found',
+                  message: error.message,
+                  details: { workspaceId, tabId },
                 },
               })
               return

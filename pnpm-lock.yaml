@@ -4962,6 +4962,9 @@ importers:
       node-pty:
         specifier: ^1.1.0
         version: 1.1.0(patch_hash=7a0c04f1f49d798a9ffe2f7f414c01064a44ca2489772d0c3e1235ab336755e6)
+      playwright:
+        specifier: ^1.49.0
+        version: 1.61.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3
