@@ -28,6 +28,14 @@ export interface BrowserWorkspaceState {
   deferAutoCreate: boolean
   /** Inline create, navigate, or reconnect failure copy for the active tab body. */
   inlineError: string | undefined
+  /** Host Playwright / Chromium unavailable reason for the card empty state. */
+  browserUnavailable: string | undefined
+  /** Navigation failure copy shown under the nav bar and on the screencast canvas. */
+  navError: string | undefined
+  /** Inline info banner for a first visit to a non-localhost host. */
+  externalInfo: string | undefined
+  /** External hosts already visited in this Workspace (not written to Session log). */
+  seenExternalHosts: string[]
 }
 
 /** Root store keyed by bound Workspace id. */
@@ -52,6 +60,18 @@ type BrowserPanelActions = {
     workspaceId: WorkspaceId,
     inlineError: string | undefined,
   ) => void
+  setBrowserUnavailable: (
+    root: BrowserPanelState,
+    workspaceId: WorkspaceId,
+    browserUnavailable: string | undefined,
+  ) => void
+  setNavError: (root: BrowserPanelState, workspaceId: WorkspaceId, navError: string | undefined) => void
+  setExternalInfo: (
+    root: BrowserPanelState,
+    workspaceId: WorkspaceId,
+    externalInfo: string | undefined,
+  ) => void
+  markExternalHostSeen: (root: BrowserPanelState, workspaceId: WorkspaceId, host: string) => void
   updateTabMetadata: (
     root: BrowserPanelState,
     workspaceId: WorkspaceId,
@@ -79,6 +99,10 @@ function emptyWorkspaceState(): BrowserWorkspaceState {
     creating: false,
     deferAutoCreate: false,
     inlineError: undefined,
+    browserUnavailable: undefined,
+    navError: undefined,
+    externalInfo: undefined,
+    seenExternalHosts: [],
   }
 }
 
@@ -130,6 +154,26 @@ export function createBrowserPanelStore(): EngineStoreHandle<BrowserPanelState, 
       setInlineError: (root, workspaceId, inlineError) => {
         const current = workspaceState(root, workspaceId)
         root.byWorkspace[workspaceId] = { ...current, inlineError }
+      },
+      setBrowserUnavailable: (root, workspaceId, browserUnavailable) => {
+        const current = workspaceState(root, workspaceId)
+        root.byWorkspace[workspaceId] = { ...current, browserUnavailable }
+      },
+      setNavError: (root, workspaceId, navError) => {
+        const current = workspaceState(root, workspaceId)
+        root.byWorkspace[workspaceId] = { ...current, navError }
+      },
+      setExternalInfo: (root, workspaceId, externalInfo) => {
+        const current = workspaceState(root, workspaceId)
+        root.byWorkspace[workspaceId] = { ...current, externalInfo }
+      },
+      markExternalHostSeen: (root, workspaceId, host) => {
+        const current = workspaceState(root, workspaceId)
+        if (current.seenExternalHosts.includes(host)) return
+        root.byWorkspace[workspaceId] = {
+          ...current,
+          seenExternalHosts: [...current.seenExternalHosts, host],
+        }
       },
       updateTabMetadata: (root, workspaceId, tabId, url, title, canGoBack, canGoForward) => {
         const current = workspaceState(root, workspaceId)

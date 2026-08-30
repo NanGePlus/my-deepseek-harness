@@ -8,5 +8,4 @@ Human browser navigation in the toolbox does **not** write Session events. Agent
 
 ## Known Limitations and Deferred Work
 
-- Overflow menu (Hard Reload, Copy URL, Zoom controls) and non-localhost inline info belong to later browser UI slices.
-- **浏览器不可用** Host card + retry is deferred until the unavailable-state slice lands.
+- Segment hide/resume SSE, hard-refresh reconnect, and viewport debounce belong to Issue #99.

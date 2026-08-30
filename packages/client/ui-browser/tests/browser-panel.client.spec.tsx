@@ -10,6 +10,7 @@ import type {
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { BrowserPanel, type BrowserPanelProps } from '../src/client/BrowserPanel.tsx'
 import { createBrowserPanelStore, browserWorkspaceState } from '../src/client/stores.ts'
+import { formatBrowserZoomLabel } from '../src/client/browser-zoom.ts'
 import { DEFAULT_BROWSER_TAB_URL } from '../src/client/browser-tab-title.ts'
 import { zh } from '../src/client/locales.ts'
 
@@ -483,7 +484,7 @@ describe('BrowserPanel', () => {
     await waitFor(() => { expect(browserCloseTab).toHaveBeenCalledWith(WID, 'live-1', expect.any(AbortSignal)) })
   })
 
-  it('selects another tab and surfaces stream/error frames inline', async () => {
+  it('selects another tab and surfaces non-unavailable stream/error frames inline', async () => {
     const browserList = vi.fn(async () => ({
       tabs: [
         { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true, canGoBack: false, canGoForward: false },
@@ -499,7 +500,7 @@ describe('BrowserPanel', () => {
     ) => {
       onOpen?.()
       if (tabId === 'live-1') {
-        onFrame({ type: 'stream/error', error: { code: 'browser-unavailable', message: 'boom', details: { reason: 'chromium-missing' } } })
+        onFrame({ type: 'stream/error', error: { code: 'internal', message: 'boom', details: {} } })
       }
     })
     const browserSelectTab = vi.fn(async () => ({ selected: true as const }))
@@ -817,5 +818,167 @@ describe('BrowserPanel', () => {
     fireEvent.click(screen.getByLabelText('在外部浏览器打开'))
     expect(openSpy).toHaveBeenCalledWith('https://example.com/page', '_blank', 'noopener,noreferrer')
     openSpy.mockRestore()
+  })
+
+  it('empty-unavailable: shows 浏览器不可用 card with retry while keeping stored tabs visible', async () => {
+    const browserList = vi.fn(async () => ({
+      tabs: [{
+        tabId: 'live-1',
+        url: 'https://example.com',
+        title: 'Example',
+        selected: true,
+        canGoBack: false,
+        canGoForward: false,
+      }],
+    }))
+    let attempt = 0
+    const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>((
+      _workspaceId,
+      _tabId,
+      onFrame,
+      _signal,
+      onOpen,
+    ) => {
+      attempt += 1
+      onOpen?.()
+      if (attempt === 1) {
+        onFrame({
+          type: 'stream/error',
+          error: { code: 'browser-unavailable', message: 'Chromium 未安装', details: { reason: 'chromium-missing' } },
+        })
+      }
+    })
+    mount({ browserList, browserWatchScreencast })
+    await waitFor(() => {
+      expect(screen.getByText('浏览器不可用')).toBeTruthy()
+      expect(screen.getByText('Chromium 未安装')).toBeTruthy()
+      expect(screen.getByRole('tab', { name: 'Example' })).toBeTruthy()
+    })
+    fireEvent.click(screen.getByText('重试'))
+    await waitFor(() => { expect(browserWatchScreencast.mock.calls.length).toBeGreaterThan(1) })
+  })
+
+  it('US-17: bootstrap browser-unavailable without tabs shows retry card and no tab chrome', async () => {
+    const { DirectoryBrowseError } = await import('@deepseek-ai/dsh-client-runtime/client')
+    const browserCreateTab = vi.fn(async () => Promise.reject(new DirectoryBrowseError({
+      code: 'browser-unavailable',
+      message: '无法启动浏览器',
+      details: { reason: 'context-start-failed' },
+    })))
+    mount({ browserCreateTab })
+    await waitFor(() => { expect(screen.getByText('浏览器不可用')).toBeTruthy() })
+    expect(screen.getByText('无法启动浏览器')).toBeTruthy()
+    expect(screen.queryByRole('tablist')).toBeNull()
+    fireEvent.click(screen.getByText('重试'))
+    await waitFor(() => { expect(browserCreateTab.mock.calls.length).toBeGreaterThan(1) })
+  })
+
+  it('error-nav: navigation failure keeps the tab open with inline error and canvas empty state', async () => {
+    const browserNavigate = vi.fn(async () => Promise.reject(new Error('dns failed')))
+    mount({ browserNavigate })
+    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
+    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://missing.example' } })
+    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
+    await waitFor(() => { expect(screen.getByText('dns failed')).toBeTruthy() })
+    expect(screen.getByText('无法加载此页')).toBeTruthy()
+    expect(screen.getByRole('tablist')).toBeTruthy()
+  })
+
+  it('US-13 / info-external: first non-localhost visit shows inline info without modal', async () => {
+    const browserNavigate = vi.fn(async (_wid, _tabId, url: string) => ({
+      url,
+      title: 'Example',
+      canGoBack: false,
+      canGoForward: false,
+    }))
+    mount({ browserNavigate })
+    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
+    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://example.com' } })
+    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
+    await waitFor(() => { expect(screen.getByText('正在访问外部站点')).toBeTruthy() })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://example.com/docs' } })
+    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
+    await waitFor(() => { expect(screen.queryByText('正在访问外部站点')).toBeNull() })
+  })
+
+  it('US-14 / menu-overflow: overflow menu exposes Hard Reload, Copy URL, and Zoom controls', async () => {
+    const panelStore = createBrowserPanelStore().create()
+    const browserReload = vi.fn(async () => ({
+      url: 'https://example.com', title: 'Example', canGoBack: false, canGoForward: false,
+    }))
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    mount({
+      browserList: vi.fn(async () => ({
+        tabs: [{
+          tabId: 'live-1',
+          url: 'https://example.com',
+          title: 'Example',
+          selected: true,
+          canGoBack: false,
+          canGoForward: false,
+        }],
+      })),
+      browserReload,
+      useStore: hookOf(panelStore),
+      actions: panelStore.actions,
+    })
+    await waitFor(() => { expect(screen.getByLabelText('更多操作')).toBeTruthy() })
+    fireEvent.click(screen.getByLabelText('更多操作'))
+    fireEvent.click(await screen.findByText('Hard Reload'))
+    await waitFor(() => {
+      expect(browserReload).toHaveBeenCalledWith(WID, 'live-1', true)
+    })
+    fireEvent.click(screen.getByLabelText('更多操作'))
+    fireEvent.click(await screen.findByText('Copy Current URL'))
+    expect(writeText).toHaveBeenCalledWith('https://example.com')
+    fireEvent.click(screen.getByLabelText('更多操作'))
+    fireEvent.click(await screen.findByText('+'))
+    expect(browserWorkspaceState(panelStore.getSnapshot(), WID).zoom).toBe(1.25)
+    const zoomOut = (await screen.findAllByRole('menuitem')).find(item => item.textContent === '−')
+    expect(zoomOut).toBeTruthy()
+    fireEvent.click(zoomOut!)
+    expect(browserWorkspaceState(panelStore.getSnapshot(), WID).zoom).toBe(1)
+    fireEvent.click(await screen.findByText('重置'))
+    expect(browserWorkspaceState(panelStore.getSnapshot(), WID).zoom).toBe(1)
+    expect(formatBrowserZoomLabel(browserWorkspaceState(panelStore.getSnapshot(), WID).zoom)).toBe('100%')
+  })
+
+  it('closes the overflow and tab context menus on Escape', async () => {
+    mount({
+      browserList: vi.fn(async () => ({
+        tabs: [
+          { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true, canGoBack: false, canGoForward: false },
+          { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false, canGoBack: false, canGoForward: false },
+        ],
+      })),
+    })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'One' })).toBeTruthy() })
+    fireEvent.contextMenu(screen.getByRole('tab', { name: 'One' }))
+    expect(await screen.findByText('关闭其他')).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => { expect(screen.queryByText('关闭其他')).toBeNull() })
+    fireEvent.click(screen.getByLabelText('更多操作'))
+    expect(await screen.findByText('Hard Reload')).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => { expect(screen.queryByText('Hard Reload')).toBeNull() })
+  })
+
+  it('error-nav retry reruns the failed navigation', async () => {
+    let attempt = 0
+    const browserNavigate = vi.fn(async () => {
+      attempt += 1
+      if (attempt === 1) return Promise.reject(new Error('dns failed'))
+      return { url: 'https://example.com/', title: 'Example', canGoBack: false, canGoForward: false }
+    })
+    mount({ browserNavigate })
+    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
+    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://example.com' } })
+    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
+    await waitFor(() => { expect(screen.getByText('dns failed')).toBeTruthy() })
+    fireEvent.click(screen.getByText('重试'))
+    await waitFor(() => { expect(screen.queryByText('无法加载此页')).toBeNull() })
+    expect(browserNavigate).toHaveBeenCalledTimes(2)
   })
 })
