@@ -27,6 +27,8 @@ export type {
   HostLspHover, LspHoverDocumentResult,
   TerminalShellProfile, TerminalProfilesResult, TerminalSpawnResult,
   TerminalSessionSummary, TerminalListResult, TerminalStreamFrame,
+  BrowserTabSummary, BrowserListResult, BrowserCreateTabResult, BrowserPageMetadata,
+  BrowserSnapshotResult, BrowserScreencastFrame,
   SkillsApi, SkillEntry,
   ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,
   MessageId, ModelReasoningEffort, ModelSelection, QueueAction, QueuedInboxItem, SessionModels,

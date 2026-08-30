@@ -662,6 +662,33 @@ describe('WorkspaceRuntime', () => {
     }])
   })
 
+  it('forwards browser RPC and SSE screencast frames through the workspaces face', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const workspaces = new WorkspaceRuntime(ctx, api, new SessionRuntime(ctx, api, fakeRemote()))
+    const frames: string[] = []
+    api.host.browserWatchScreencast = vi.fn((_payload, _signal, onOpen) => {
+      onOpen?.()
+      return (async function* () {
+        yield {
+          rpcId: 'browser-1' as never,
+          payload: { type: 'host/browser-screencast' as const, data: 'jpeg', width: 100, height: 80 },
+        }
+      })()
+    })
+    await expect(workspaces.browserCreateTab(wid('alpha'))).resolves.toEqual({ tabId: 'fake-browser-1' })
+    await expect(workspaces.browserList(wid('alpha'))).resolves.toEqual({ tabs: [] })
+    await expect(workspaces.browserNavigate(wid('alpha'), 'fake-browser-1', 'about:blank')).resolves.toEqual({
+      url: 'about:blank',
+      title: '',
+    })
+    workspaces.browserWatchScreencast(wid('alpha'), 'fake-browser-1', (frame) => {
+      if (frame.type === 'host/browser-screencast') frames.push(frame.data)
+    })
+    await vi.waitFor(() => { expect(frames).toEqual(['jpeg']) })
+    expect(api.callsOf('host.browserCreateTab')).toEqual([{ workspaceId: 'alpha' }])
+  })
+
   it('passes workspace path mutations through the host wire', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()

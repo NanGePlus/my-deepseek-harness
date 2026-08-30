@@ -569,3 +569,217 @@ export const terminalStreamFrameSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('stream/error'), error: rpcErrorSchema }),
 ])
+
+const browserTabSummarySchema = z.object({
+  tabId: z.string(),
+  url: z.string(),
+  title: z.string(),
+  selected: z.boolean(),
+})
+
+/** host.browserList request payload. */
+export const hostBrowserListRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserList'>>>
+
+/** host.browserList response value. */
+export const hostBrowserListValueSchema = z.object({
+  tabs: z.array(browserTabSummarySchema),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.browserList'>>>
+
+/** host.browserCreateTab request payload. */
+export const hostBrowserCreateTabRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  url: z.string().optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserCreateTab'>>>
+
+/** host.browserCreateTab response value. */
+export const hostBrowserCreateTabValueSchema = z.object({
+  tabId: z.string(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.browserCreateTab'>>>
+
+/** host.browserCloseTab request payload. */
+export const hostBrowserCloseTabRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserCloseTab'>>>
+
+/** host.browserCloseTab response value. */
+export const hostBrowserCloseTabValueSchema = z.object({
+  closed: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.browserCloseTab'>>>
+
+/** host.browserSelectTab request payload. */
+export const hostBrowserSelectTabRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserSelectTab'>>>
+
+/** host.browserSelectTab response value. */
+export const hostBrowserSelectTabValueSchema = z.object({
+  selected: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.browserSelectTab'>>>
+
+const browserPageMetadataSchema = z.object({
+  url: z.string(),
+  title: z.string(),
+})
+
+/** host.browserNavigate request payload. */
+export const hostBrowserNavigateRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+  url: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserNavigate'>>>
+
+/** host.browserNavigate response value. */
+export const hostBrowserNavigateValueSchema = browserPageMetadataSchema satisfies z.ZodType<Wire<ResponseValue<'host.browserNavigate'>>>
+
+/** host.browserGoBack request payload. */
+export const hostBrowserGoBackRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserGoBack'>>>
+
+/** host.browserGoBack response value. */
+export const hostBrowserGoBackValueSchema = browserPageMetadataSchema satisfies z.ZodType<Wire<ResponseValue<'host.browserGoBack'>>>
+
+/** host.browserGoForward request payload. */
+export const hostBrowserGoForwardRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserGoForward'>>>
+
+/** host.browserGoForward response value. */
+export const hostBrowserGoForwardValueSchema = browserPageMetadataSchema satisfies z.ZodType<Wire<ResponseValue<'host.browserGoForward'>>>
+
+/** host.browserReload request payload. */
+export const hostBrowserReloadRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+  hard: z.boolean().optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserReload'>>>
+
+/** host.browserReload response value. */
+export const hostBrowserReloadValueSchema = browserPageMetadataSchema satisfies z.ZodType<Wire<ResponseValue<'host.browserReload'>>>
+
+/** host.browserSnapshot request payload. */
+export const hostBrowserSnapshotRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserSnapshot'>>>
+
+/** host.browserSnapshot response value. */
+export const hostBrowserSnapshotValueSchema = z.object({
+  tree: z.string(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.browserSnapshot'>>>
+
+/** host.browserClick request payload. */
+export const hostBrowserClickRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+  x: z.number(),
+  y: z.number(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserClick'>>>
+
+/** host.browserClick response value. */
+export const hostBrowserClickValueSchema = z.object({
+  clicked: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.browserClick'>>>
+
+/** host.browserType request payload. */
+export const hostBrowserTypeRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+  text: z.string(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserType'>>>
+
+/** host.browserType response value. */
+export const hostBrowserTypeValueSchema = z.object({
+  typed: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.browserType'>>>
+
+/** host.browserScroll request payload. */
+export const hostBrowserScrollRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+  deltaX: z.number(),
+  deltaY: z.number(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserScroll'>>>
+
+/** host.browserScroll response value. */
+export const hostBrowserScrollValueSchema = z.object({
+  scrolled: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.browserScroll'>>>
+
+/** host.browserSelectOption request payload. */
+export const hostBrowserSelectOptionRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+  selector: z.string().min(1),
+  values: z.array(z.string()),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserSelectOption'>>>
+
+/** host.browserSelectOption response value. */
+export const hostBrowserSelectOptionValueSchema = z.object({
+  selected: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.browserSelectOption'>>>
+
+/** host.browserResizeViewport request payload. */
+export const hostBrowserResizeViewportRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+  width: z.number().int().min(1),
+  height: z.number().int().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserResizeViewport'>>>
+
+/** host.browserResizeViewport response value. */
+export const hostBrowserResizeViewportValueSchema = z.object({
+  resized: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.browserResizeViewport'>>>
+
+/** host.browserSendPointer request payload. */
+export const hostBrowserSendPointerRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+  type: z.union([z.literal('mousePressed'), z.literal('mouseReleased'), z.literal('mouseMoved')]),
+  x: z.number(),
+  y: z.number(),
+  button: z.union([z.literal('left'), z.literal('right'), z.literal('middle')]).optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserSendPointer'>>>
+
+/** host.browserSendPointer response value. */
+export const hostBrowserSendPointerValueSchema = z.object({
+  sent: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.browserSendPointer'>>>
+
+/** host.browserSendKeyboard request payload. */
+export const hostBrowserSendKeyboardRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+  type: z.union([z.literal('keyDown'), z.literal('keyUp'), z.literal('char')]),
+  key: z.string().optional(),
+  text: z.string().optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserSendKeyboard'>>>
+
+/** host.browserSendKeyboard response value. */
+export const hostBrowserSendKeyboardValueSchema = z.object({
+  sent: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.browserSendKeyboard'>>>
+
+/** host.browserWatchScreencast GET query: workspace-bound tab id. */
+export const hostBrowserWatchScreencastQuerySchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+})
+
+/** host.browserWatchScreencast SSE frame union. */
+export const browserScreencastFrameSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('host/browser-screencast'),
+    data: z.string(),
+    width: z.number(),
+    height: z.number(),
+  }),
+  z.object({ type: z.literal('stream/error'), error: rpcErrorSchema }),
+])

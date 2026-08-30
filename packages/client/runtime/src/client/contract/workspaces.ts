@@ -12,6 +12,7 @@ import type {
   GitWorkingTreeResult, GitInitResult, GitLogResult, GitCommitDiffResult, GitDiffSide, GitDiffPreview,
   LspSyncDocumentResult, LspCloseDocumentResult, LspHoverDocumentResult,
   TerminalProfilesResult, TerminalSpawnResult, TerminalListResult, TerminalStreamFrame,
+  BrowserListResult, BrowserCreateTabResult, BrowserPageMetadata, BrowserSnapshotResult, BrowserScreencastFrame,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceListState } from '../workspaces/service.ts'
 import type { ObservableSnapshot } from './store.ts'
@@ -430,6 +431,59 @@ export interface IWorkspaces {
     workspaceId: WorkspaceId,
     sessionId: string,
     onFrame: (frame: TerminalStreamFrame) => void,
+    signal?: AbortSignal,
+    onOpen?: () => void,
+    onError?: (message: string) => void,
+  ): void
+  /** List live browser tabs for one Workspace. */
+  browserList(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<BrowserListResult>
+  /** Open one browser tab in a registered Workspace. */
+  browserCreateTab(workspaceId: WorkspaceId, url?: string, signal?: AbortSignal): Promise<BrowserCreateTabResult>
+  browserCloseTab(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<{ closed: true }>
+  browserSelectTab(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<{ selected: true }>
+  browserNavigate(workspaceId: WorkspaceId, tabId: string, url: string, signal?: AbortSignal): Promise<BrowserPageMetadata>
+  browserGoBack(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserPageMetadata>
+  browserGoForward(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserPageMetadata>
+  browserReload(workspaceId: WorkspaceId, tabId: string, hard?: boolean, signal?: AbortSignal): Promise<BrowserPageMetadata>
+  browserSnapshot(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserSnapshotResult>
+  browserClick(workspaceId: WorkspaceId, tabId: string, x: number, y: number, signal?: AbortSignal): Promise<{ clicked: true }>
+  browserType(workspaceId: WorkspaceId, tabId: string, text: string, signal?: AbortSignal): Promise<{ typed: true }>
+  browserScroll(workspaceId: WorkspaceId, tabId: string, deltaX: number, deltaY: number, signal?: AbortSignal): Promise<{ scrolled: true }>
+  browserSelectOption(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    selector: string,
+    values: string[],
+    signal?: AbortSignal,
+  ): Promise<{ selected: true }>
+  browserResizeViewport(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    width: number,
+    height: number,
+    signal?: AbortSignal,
+  ): Promise<{ resized: true }>
+  browserSendPointer(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    event: {
+      type: 'mousePressed' | 'mouseReleased' | 'mouseMoved'
+      x: number
+      y: number
+      button?: 'left' | 'right' | 'middle'
+    },
+    signal?: AbortSignal,
+  ): Promise<{ sent: true }>
+  browserSendKeyboard(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    event: { type: 'keyDown' | 'keyUp' | 'char'; key?: string; text?: string },
+    signal?: AbortSignal,
+  ): Promise<{ sent: true }>
+  browserWatchScreencast(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    onFrame: (frame: BrowserScreencastFrame) => void,
     signal?: AbortSignal,
     onOpen?: () => void,
     onError?: (message: string) => void,

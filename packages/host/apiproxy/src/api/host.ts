@@ -294,6 +294,40 @@ export type TerminalStreamFrame =
   | { type: 'host/terminal-title'; title: string; titlePath: string; titleCommand: string }
   | { type: 'stream/error'; error: RpcError }
 
+/** One live browser tab row of host.browserList. */
+export interface BrowserTabSummary {
+  tabId: string
+  url: string
+  title: string
+  selected: boolean
+}
+
+/** host.browserList response value. */
+export interface BrowserListResult {
+  tabs: BrowserTabSummary[]
+}
+
+/** host.browserCreateTab response value. */
+export interface BrowserCreateTabResult {
+  tabId: string
+}
+
+/** host.browserNavigate / reload / history navigation response value. */
+export interface BrowserPageMetadata {
+  url: string
+  title: string
+}
+
+/** host.browserSnapshot response value. */
+export interface BrowserSnapshotResult {
+  tree: string
+}
+
+/** host.browserWatchScreencast SSE frame union. */
+export type BrowserScreencastFrame =
+  | { type: 'host/browser-screencast'; data: string; width: number; height: number }
+  | { type: 'stream/error'; error: RpcError }
+
 /** Zero-based UTF-16 position in an editor buffer. */
 export interface HostLspPosition {
   line: number
@@ -741,4 +775,128 @@ export interface HostApi {
     request: RpcRequest<{ workspaceId: WorkspaceId; sessionId: string }>,
     signal: AbortSignal,
   ): AsyncIterable<RpcRequest<TerminalStreamFrame>>
+
+  /**
+   * List live browser tabs for one Workspace. Unknown Workspace ids fail with
+   * `workspace-not-found`. An uninitialized browser pool returns an empty list.
+   */
+  browserList(
+    request: RpcRequest<{ workspaceId: WorkspaceId }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<BrowserListResult>>
+
+  /**
+   * Open one browser tab for a registered Workspace. Fails with
+   * `browser-unavailable` when Chromium is missing or the Context cannot start.
+   */
+  browserCreateTab(
+    request: RpcRequest<{ workspaceId: WorkspaceId; url?: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<BrowserCreateTabResult>>
+
+  /** Close one browser tab. Fails with `browser-tab-not-found` when absent. */
+  browserCloseTab(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ closed: true }>>
+
+  /** Mark one browser tab selected within its Workspace pool. */
+  browserSelectTab(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ selected: true }>>
+
+  /** Navigate one tab to an http(s) URL and return updated metadata. */
+  browserNavigate(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string; url: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<BrowserPageMetadata>>
+
+  /** Navigate back when history allows. */
+  browserGoBack(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<BrowserPageMetadata>>
+
+  /** Navigate forward when history allows. */
+  browserGoForward(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<BrowserPageMetadata>>
+
+  /** Reload the current document; `hard` bypasses cache. */
+  browserReload(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string; hard?: boolean }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<BrowserPageMetadata>>
+
+  /** Return the accessibility tree for one tab. */
+  browserSnapshot(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<BrowserSnapshotResult>>
+
+  /** Click at viewport coordinates on one tab. */
+  browserClick(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string; x: number; y: number }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ clicked: true }>>
+
+  /** Type UTF-8 text into the focused element on one tab. */
+  browserType(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string; text: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ typed: true }>>
+
+  /** Scroll one tab by pixel deltas. */
+  browserScroll(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string; deltaX: number; deltaY: number }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ scrolled: true }>>
+
+  /** Select option values on one tab. */
+  browserSelectOption(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string; selector: string; values: string[] }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ selected: true }>>
+
+  /** Resize the Playwright viewport for one tab. */
+  browserResizeViewport(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string; width: number; height: number }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ resized: true }>>
+
+  /** Forward one pointer event to one tab through CDP. */
+  browserSendPointer(
+    request: RpcRequest<{
+      workspaceId: WorkspaceId
+      tabId: string
+      type: 'mousePressed' | 'mouseReleased' | 'mouseMoved'
+      x: number
+      y: number
+      button?: 'left' | 'right' | 'middle'
+    }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ sent: true }>>
+
+  /** Forward one keyboard event to one tab through CDP. */
+  browserSendKeyboard(
+    request: RpcRequest<{
+      workspaceId: WorkspaceId
+      tabId: string
+      type: 'keyDown' | 'keyUp' | 'char'
+      key?: string
+      text?: string
+    }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ sent: true }>>
+
+  /**
+   * Stream JPEG screencast frames for one browser tab until the caller aborts.
+   * Disconnecting the stream does not destroy the BrowserContext.
+   */
+  browserWatchScreencast(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string }>,
+    signal: AbortSignal,
+  ): AsyncIterable<RpcRequest<BrowserScreencastFrame>>
 }

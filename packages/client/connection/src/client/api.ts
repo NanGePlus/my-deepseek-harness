@@ -19,6 +19,8 @@ export type {
   WatchPathFrame,
   TerminalShellProfile, TerminalProfilesResult, TerminalSpawnResult,
   TerminalSessionSummary, TerminalListResult, TerminalStreamFrame,
+  BrowserTabSummary, BrowserListResult, BrowserCreateTabResult, BrowserPageMetadata,
+  BrowserSnapshotResult, BrowserScreencastFrame,
   ResponseValue, WorkspaceApi, WorkspaceId, WorkspaceView,
   SkillsApi, SkillEntry,
   ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,
