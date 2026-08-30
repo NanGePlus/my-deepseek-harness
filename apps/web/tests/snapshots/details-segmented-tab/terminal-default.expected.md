@@ -1,4 +1,6 @@
 - tablist "Terminal tab":
   - tab "{{shell-profile}}" [selected]
+- button "New terminal":
+  - img
 - tabpanel "Terminal output":
   - textbox "Terminal input"

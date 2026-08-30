@@ -152,6 +152,14 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'conversation.details.terminal': { kind: 'single'; scope: 'root'; owner: DetailsTerminalOwnerProps }
     /**
+     * The embedded browser rendered when the details segmented tab selects
+     * 「浏览器」. One occupant; ui-browser injects here. The shell hides this
+     * seat when the tab is not selected and does not unmount it. `visible` is
+     * true only while Browser is the selected segment; the occupant must not
+     * destroy Host BrowserContext when `visible` becomes false.
+     */
+    'conversation.details.browser': { kind: 'single'; scope: 'root'; owner: DetailsBrowserOwnerProps }
+    /**
      * The composer takeover chain: entries are selector-routed replacements
      * of the default InputBar. Declared by this package's 'conversation'
      * entry; the owner dispatches the {@link ComposerChainProps} currency and
@@ -464,6 +472,12 @@ export interface DetailsGitOwnerProps {
 /** Owner share of the toolbox human-terminal occupant: whether the Terminal segment is selected. */
 export interface DetailsTerminalOwnerProps {
   /** True while the toolbox Terminal segment is selected. Hidden panels stay mounted. */
+  visible: boolean
+}
+
+/** Owner share of the toolbox embedded-browser occupant: whether the Browser segment is selected. */
+export interface DetailsBrowserOwnerProps {
+  /** True while the toolbox Browser segment is selected. Hidden panels stay mounted. */
   visible: boolean
 }
 
@@ -859,7 +873,7 @@ export interface DetailsInjected {
 }
 
 /** Full details-slot props: Tool, editor, Git, and terminal seats, session-bound hooks, layout callbacks, and locale. */
-export type DetailsSlotProps = PropsRuntime<'details'> & PropsRenderSlots<'conversation.details.tool' | 'conversation.details.editor' | 'conversation.details.git' | 'conversation.details.terminal'>
+export type DetailsSlotProps = PropsRuntime<'details'> & PropsRenderSlots<'conversation.details.tool' | 'conversation.details.editor' | 'conversation.details.git' | 'conversation.details.terminal' | 'conversation.details.browser'>
   & Omit<DetailsInjected, 'hooks'> & {
     useChat: SnapshotSelectorHook<SessionChatBinding>
     useConversation: SnapshotSelectorHook<ConversationSnapshot>

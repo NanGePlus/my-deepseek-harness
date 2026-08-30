@@ -9,7 +9,8 @@ import {
 import type { ConversationSnapshot, SessionId, SessionListState, WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionProviderComponent } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
-  DetailsEditorOwnerProps, DetailsGitOwnerProps, DetailsSlotProps, DetailsTerminalOwnerProps,
+  DetailsBrowserOwnerProps, DetailsEditorOwnerProps, DetailsGitOwnerProps, DetailsSlotProps,
+  DetailsTerminalOwnerProps,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
@@ -91,6 +92,12 @@ function bench(overrides?: Partial<Pick<DetailsSlotProps, 'renderSlot'>>) {
         <div data-testid="terminal-seat" data-visible={String(terminalOwner.visible)} />
       )
     }
+    if (key === 'conversation.details.browser') {
+      const browserOwner = owner as unknown as DetailsBrowserOwnerProps
+      return (
+        <div data-testid="browser-seat" data-visible={String(browserOwner.visible)} />
+      )
+    }
     return null
   })
   const view = render(
@@ -134,16 +141,18 @@ describe('DetailsPanel segmented tabs', () => {
     expect(openDetails).not.toHaveBeenCalled()
   })
 
-  it('default: shows 资源管理器 | Git | 终端 | 工具详情 with the editor selected', () => {
+  it('default: shows 资源管理器 | Git面板 | 终端 | 浏览器 | 工具详情 with the editor selected', () => {
     const { view } = bench()
-    expect(tabLabels(view)).toEqual(['资源管理器', 'Git面板', '终端', '工具详情'])
+    expect(tabLabels(view)).toEqual(['资源管理器', 'Git面板', '终端', '浏览器', '工具详情'])
     expect(selectedTab(view)).toBe('资源管理器')
     expect(view.getByTestId('editor-surface-seat').getAttribute('data-visible')).toBe('true')
     expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('false')
     expect(view.getByTestId('terminal-seat').getAttribute('data-visible')).toBe('false')
+    expect(view.getByTestId('browser-seat').getAttribute('data-visible')).toBe('false')
     expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('true')
     expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('true')
     expect(panels(view)[3]!.getAttribute('aria-hidden')).toBe('true')
+    expect(panels(view)[4]!.getAttribute('aria-hidden')).toBe('true')
   })
 
   it('tab-selected: selecting 资源管理器 keeps the editor surface visible', () => {
@@ -172,6 +181,7 @@ describe('DetailsPanel segmented tabs', () => {
     expect(panels(view)[1]!.getAttribute('aria-hidden')).toBe('false')
     expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('true')
     expect(panels(view)[3]!.getAttribute('aria-hidden')).toBe('true')
+    expect(panels(view)[4]!.getAttribute('aria-hidden')).toBe('true')
   })
 
   it('tab-selected-terminal: selecting 终端 renders the human-terminal seat', () => {
@@ -183,7 +193,32 @@ describe('DetailsPanel segmented tabs', () => {
     expect(view.getByTestId('terminal-seat').getAttribute('data-visible')).toBe('true')
     expect(view.getByTestId('editor-surface-seat').getAttribute('data-visible')).toBe('false')
     expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('false')
+    expect(view.getByTestId('browser-seat').getAttribute('data-visible')).toBe('false')
     expect(panels(view)[2]!.getAttribute('aria-hidden')).toBe('false')
+    expect(panels(view)[3]!.getAttribute('aria-hidden')).toBe('true')
+  })
+
+  it('tab-selected-browser: selecting 浏览器 renders the embedded-browser seat', () => {
+    const { view, chat, openDetails } = bench()
+    fireEvent.click(view.getByRole('tab', { name: '浏览器' }))
+    expect(chat.store.getSnapshot().detailsTab).toBe('browser')
+    expect(openDetails).toHaveBeenCalledTimes(1)
+    expect(selectedTab(view)).toBe('浏览器')
+    expect(view.getByTestId('browser-seat').getAttribute('data-visible')).toBe('true')
+    expect(view.getByTestId('editor-surface-seat').getAttribute('data-visible')).toBe('false')
+    expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('false')
+    expect(view.getByTestId('terminal-seat').getAttribute('data-visible')).toBe('false')
+    expect(panels(view)[3]!.getAttribute('aria-hidden')).toBe('false')
+  })
+
+  it('tab-leave-browser: leaving 浏览器 hides the seat without unmounting it', () => {
+    const { view, chat } = bench()
+    fireEvent.click(view.getByRole('tab', { name: '浏览器' }))
+    fireEvent.click(view.getByRole('tab', { name: '资源管理器' }))
+    expect(chat.store.getSnapshot().detailsTab).toBe('editor')
+    expect(view.getByTestId('browser-seat')).toBeTruthy()
+    expect(view.getByTestId('browser-seat').getAttribute('data-visible')).toBe('false')
+    expect(panels(view)[3]!.getAttribute('aria-hidden')).toBe('true')
   })
 
   it('tab-leave-terminal: leaving 终端 hides the seat without unmounting it', () => {

@@ -1,6 +1,6 @@
 - tablist "Toolbox":
-  - tab "File editor" [selected]
+  - tab "File editor"
   - tab "Git Panel"
   - tab "Terminal"
-  - tab "Browser"
+  - tab "Browser" [selected]
   - tab "Tool details"
