@@ -249,3 +249,6 @@
   config:
     fetch: false
     searchTimeoutMs: 60000
+
+- id: tool-browser
+  name: '@deepseek-ai/dsh-tool-browser'

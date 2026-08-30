@@ -251,6 +251,9 @@
     fetch: false
     searchTimeoutMs: 60000
 
+- id: tool-browser
+  name: '@deepseek-ai/dsh-tool-browser'
+
 # ── presentation ────────────────────────────────────────────────────────────
 
 # Code Mode for this agent alone. The row waits for the host's `codeRuntime`
