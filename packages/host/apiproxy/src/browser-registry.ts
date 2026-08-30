@@ -15,6 +15,8 @@ export interface BrowserTabSummary {
   url: string
   title: string
   selected: boolean
+  canGoBack: boolean
+  canGoForward: boolean
 }
 
 /** host.browserList success value. */
@@ -31,6 +33,8 @@ export interface BrowserCreateTabResult {
 export interface BrowserPageMetadata {
   url: string
   title: string
+  canGoBack: boolean
+  canGoForward: boolean
 }
 
 /** host.browserSnapshot success value. */
@@ -74,6 +78,8 @@ interface LiveTab {
   page: Page
   url: string
   title: string
+  canGoBack: boolean
+  canGoForward: boolean
 }
 
 interface WorkspaceBrowser {
@@ -109,6 +115,8 @@ export class BrowserRegistry {
         url: tab.url,
         title: tab.title,
         selected: tab.tabId === workspace.selectedTabId,
+        canGoBack: tab.canGoBack,
+        canGoForward: tab.canGoForward,
       })),
     }
   }
@@ -156,24 +164,21 @@ export class BrowserRegistry {
   async navigate(workspaceId: WorkspaceId, tabId: string, url: string): Promise<BrowserPageMetadata> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.goto(url, { waitUntil: 'domcontentloaded' })
-    await this.syncTabMetadata(tab)
-    return { url: tab.url, title: tab.title }
+    return this.pageMetadata(tab)
   }
 
   /** Navigate back when history allows. */
   async goBack(workspaceId: WorkspaceId, tabId: string): Promise<BrowserPageMetadata> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.goBack({ waitUntil: 'domcontentloaded' })
-    await this.syncTabMetadata(tab)
-    return { url: tab.url, title: tab.title }
+    return this.pageMetadata(tab)
   }
 
   /** Navigate forward when history allows. */
   async goForward(workspaceId: WorkspaceId, tabId: string): Promise<BrowserPageMetadata> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.goForward({ waitUntil: 'domcontentloaded' })
-    await this.syncTabMetadata(tab)
-    return { url: tab.url, title: tab.title }
+    return this.pageMetadata(tab)
   }
 
   /**
@@ -189,8 +194,7 @@ export class BrowserRegistry {
     } else {
       await tab.page.reload({ waitUntil: 'domcontentloaded' })
     }
-    await this.syncTabMetadata(tab)
-    return { url: tab.url, title: tab.title }
+    return this.pageMetadata(tab)
   }
 
   /** Return the accessibility tree for one tab. */
@@ -310,15 +314,51 @@ export class BrowserRegistry {
   }
 
   private trackTab(workspace: WorkspaceBrowser, tabId: string, page: Page): LiveTab {
-    const tab: LiveTab = { tabId, page, url: page.url(), title: '' }
+    const tab: LiveTab = {
+      tabId,
+      page,
+      url: page.url(),
+      title: '',
+      canGoBack: false,
+      canGoForward: false,
+    }
     workspace.tabs.set(tabId, tab)
     page.on('framenavigated', () => { void this.syncTabMetadata(tab) })
     return tab
   }
 
+  private async pageMetadata(tab: LiveTab): Promise<BrowserPageMetadata> {
+    await this.syncTabMetadata(tab)
+    return {
+      url: tab.url,
+      title: tab.title,
+      canGoBack: tab.canGoBack,
+      canGoForward: tab.canGoForward,
+    }
+  }
+
   private async syncTabMetadata(tab: LiveTab): Promise<void> {
     tab.url = tab.page.url()
     tab.title = await tab.page.title()
+    const navigation = await this.readNavigationState(tab.page)
+    tab.canGoBack = navigation.canGoBack
+    tab.canGoForward = navigation.canGoForward
+  }
+
+  private async readNavigationState(page: Page): Promise<{ canGoBack: boolean; canGoForward: boolean }> {
+    try {
+      const cdp = await page.context().newCDPSession(page)
+      const history = await cdp.send('Page.getNavigationHistory') as {
+        currentIndex: number
+        entries: readonly unknown[]
+      }
+      return {
+        canGoBack: history.currentIndex > 0,
+        canGoForward: history.currentIndex < history.entries.length - 1,
+      }
+    } catch {
+      return { canGoBack: false, canGoForward: false }
+    }
   }
 
   private requireWorkspace(workspaceId: WorkspaceId): WorkspaceBrowser {

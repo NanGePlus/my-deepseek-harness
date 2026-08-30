@@ -575,6 +575,8 @@ const browserTabSummarySchema = z.object({
   url: z.string(),
   title: z.string(),
   selected: z.boolean(),
+  canGoBack: z.boolean(),
+  canGoForward: z.boolean(),
 })
 
 /** host.browserList request payload. */
@@ -623,6 +625,8 @@ export const hostBrowserSelectTabValueSchema = z.object({
 const browserPageMetadataSchema = z.object({
   url: z.string(),
   title: z.string(),
+  canGoBack: z.boolean(),
+  canGoForward: z.boolean(),
 })
 
 /** host.browserNavigate request payload. */

@@ -31,6 +31,8 @@ afterEach(() => {
   cleanup()
 })
 
+const BLANK_PAGE = { url: 'about:blank', title: '', canGoBack: false, canGoForward: false } as const
+const BLANK_TAB = { tabId: 'live-1', url: 'about:blank', title: '', selected: true, canGoBack: false, canGoForward: false } as const
 const SID = 's1' as SessionId
 const WID = 'ws1' as WorkspaceId
 const ROOT = '/w/alpha'
@@ -88,10 +90,10 @@ function mount(over: MountOverrides = {}) {
   const browserCreateTab = vi.fn(over.browserCreateTab ?? (async () => ({ tabId: 'tab-1' })))
   const browserCloseTab = vi.fn(over.browserCloseTab ?? (async () => ({ closed: true as const })))
   const browserSelectTab = vi.fn(over.browserSelectTab ?? (async () => ({ selected: true as const })))
-  const browserNavigate = vi.fn(over.browserNavigate ?? (async () => ({ url: 'about:blank', title: '' })))
-  const browserGoBack = vi.fn(over.browserGoBack ?? (async () => ({ url: 'about:blank', title: '' })))
-  const browserGoForward = vi.fn(over.browserGoForward ?? (async () => ({ url: 'about:blank', title: '' })))
-  const browserReload = vi.fn(over.browserReload ?? (async () => ({ url: 'about:blank', title: '' })))
+  const browserNavigate = vi.fn(over.browserNavigate ?? (async () => BLANK_PAGE))
+  const browserGoBack = vi.fn(over.browserGoBack ?? (async () => BLANK_PAGE))
+  const browserGoForward = vi.fn(over.browserGoForward ?? (async () => BLANK_PAGE))
+  const browserReload = vi.fn(over.browserReload ?? (async () => BLANK_PAGE))
   const browserResizeViewport = vi.fn(over.browserResizeViewport ?? (async () => ({ resized: true as const })))
   const browserSendPointer = vi.fn(over.browserSendPointer ?? (async () => ({ sent: true as const })))
   const browserSendKeyboard = vi.fn(over.browserSendKeyboard ?? (async () => ({ sent: true as const })))
@@ -201,7 +203,7 @@ describe('BrowserPanel', () => {
 
   it('default: reuses Host list rows instead of creating when tabs already exist', async () => {
     const browserList = vi.fn(async () => ({
-      tabs: [{ tabId: 'live-1', url: 'https://example.com', title: 'Example', selected: true }],
+      tabs: [{ tabId: 'live-1', url: 'https://example.com', title: 'Example', selected: true, canGoBack: true, canGoForward: false }],
     }))
     const browserCreateTab = vi.fn()
     mount({ browserList, browserCreateTab })
@@ -241,10 +243,10 @@ describe('BrowserPanel', () => {
     const SID2 = 's2' as SessionId
     const panelStore = createBrowserPanelStore().create()
     panelStore.actions.setWorkspaceTabs(WID, [{
-      tabId: 'ws1-tab', url: 'https://alpha.test', title: 'Alpha',
+      tabId: 'ws1-tab', url: 'https://alpha.test', title: 'Alpha', canGoBack: false, canGoForward: false,
     }])
     panelStore.actions.setWorkspaceTabs(WID2, [{
-      tabId: 'ws2-tab', url: 'https://beta.test', title: 'Beta',
+      tabId: 'ws2-tab', url: 'https://beta.test', title: 'Beta', canGoBack: false, canGoForward: false,
     }])
     const browserCreateTab = vi.fn()
     const workspacesStore = createSnapshotStore(workspacesState([
@@ -290,8 +292,8 @@ describe('BrowserPanel', () => {
     const SID2 = 's2' as SessionId
     const browserList = vi.fn(async (workspaceId: WorkspaceId) => ({
       tabs: workspaceId === WID
-        ? [{ tabId: 'live-1', url: 'https://alpha.test', title: 'Alpha', selected: true }]
-        : [{ tabId: 'live-2', url: 'https://beta.test', title: 'Beta', selected: true }],
+        ? [{ tabId: 'live-1', url: 'https://alpha.test', title: 'Alpha', selected: true, canGoBack: false, canGoForward: false }]
+        : [{ tabId: 'live-2', url: 'https://beta.test', title: 'Beta', selected: true, canGoBack: false, canGoForward: false }],
     }))
     const items = [
       workspace(),
@@ -335,8 +337,8 @@ describe('BrowserPanel', () => {
     const browserCloseTab = vi.fn(async () => ({ closed: true as const }))
     const browserList = vi.fn(async (workspaceId: WorkspaceId) => ({
       tabs: workspaceId === WID
-        ? [{ tabId: 'live-1', url: 'https://alpha.test', title: 'Alpha', selected: true }]
-        : [{ tabId: 'live-2', url: 'https://beta.test', title: 'Beta', selected: true }],
+        ? [{ tabId: 'live-1', url: 'https://alpha.test', title: 'Alpha', selected: true, canGoBack: false, canGoForward: false }]
+        : [{ tabId: 'live-2', url: 'https://beta.test', title: 'Beta', selected: true, canGoBack: false, canGoForward: false }],
     }))
     const { sessionsStore, rerender } = mount({
       browserCloseTab,
@@ -398,20 +400,21 @@ describe('BrowserPanel', () => {
   })
 
   it('navigates from the address bar on Enter', async () => {
-    const { browserNavigate, ensureViewportHostSize, rerender } = mount()
+    const browserNavigate = vi.fn(async () => BLANK_PAGE)
+    const { browserNavigate: navigateMock, ensureViewportHostSize, rerender } = mount({ browserNavigate })
     await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
     ensureViewportHostSize()
     rerender()
     fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://example.com' } })
     fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
     await waitFor(() => {
-      expect(browserNavigate).toHaveBeenCalledWith(WID, 'tab-1', 'https://example.com', expect.any(AbortSignal))
+      expect(navigateMock).toHaveBeenCalledWith(WID, 'tab-1', 'https://example.com/', expect.any(AbortSignal))
     })
   })
 
   it('creates a new tab from the + control', async () => {
     const browserList = vi.fn(async () => ({
-      tabs: [{ tabId: 'live-1', url: 'about:blank', title: '', selected: true }],
+      tabs: [{ tabId: 'live-1', url: 'about:blank', title: '', selected: true, canGoBack: false, canGoForward: false }],
     }))
     const browserCreateTab = vi.fn(async () => ({ tabId: 'live-2' }))
     mount({ browserList, browserCreateTab })
@@ -444,10 +447,17 @@ describe('BrowserPanel', () => {
   })
 
   it('forwards back, forward, and reload through Host RPC', async () => {
-    const browserGoBack = vi.fn(async () => ({ url: 'https://prev.test', title: 'Prev' }))
-    const browserGoForward = vi.fn(async () => ({ url: 'https://next.test', title: 'Next' }))
-    const browserReload = vi.fn(async () => ({ url: 'https://current.test', title: 'Current' }))
-    mount({ browserGoBack, browserGoForward, browserReload })
+    const browserGoBack = vi.fn(async () => BLANK_PAGE)
+    const browserGoForward = vi.fn(async () => BLANK_PAGE)
+    const browserReload = vi.fn(async () => BLANK_PAGE)
+    mount({
+      browserList: vi.fn(async () => ({
+        tabs: [{ ...BLANK_TAB, canGoBack: true, canGoForward: true }],
+      })),
+      browserGoBack,
+      browserGoForward,
+      browserReload,
+    })
     await waitFor(() => { expect(screen.getByLabelText('后退')).toBeTruthy() })
     fireEvent.click(screen.getByLabelText('后退'))
     fireEvent.click(screen.getByLabelText('前进'))
@@ -462,8 +472,8 @@ describe('BrowserPanel', () => {
   it('closes a tab when more than one tab exists', async () => {
     const browserList = vi.fn(async () => ({
       tabs: [
-        { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true },
-        { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false },
+        { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true, canGoBack: false, canGoForward: false },
+        { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false, canGoBack: false, canGoForward: false },
       ],
     }))
     const browserCloseTab = vi.fn(async () => ({ closed: true as const }))
@@ -476,8 +486,8 @@ describe('BrowserPanel', () => {
   it('selects another tab and surfaces stream/error frames inline', async () => {
     const browserList = vi.fn(async () => ({
       tabs: [
-        { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true },
-        { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false },
+        { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true, canGoBack: false, canGoForward: false },
+        { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false, canGoBack: false, canGoForward: false },
       ],
     }))
     const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>((
@@ -501,7 +511,12 @@ describe('BrowserPanel', () => {
 
   it('surfaces navigation failures inline', async () => {
     const browserGoBack = vi.fn(async () => Promise.reject(new Error('back failed')))
-    mount({ browserGoBack })
+    mount({
+      browserList: vi.fn(async () => ({
+        tabs: [{ ...BLANK_TAB, canGoBack: true, canGoForward: false }],
+      })),
+      browserGoBack,
+    })
     await waitFor(() => { expect(screen.getByLabelText('后退')).toBeTruthy() })
     fireEvent.click(screen.getByLabelText('后退'))
     await waitFor(() => { expect(screen.getByText('back failed')).toBeTruthy() })
@@ -522,7 +537,13 @@ describe('BrowserPanel', () => {
   it('surfaces forward and reload failures inline', async () => {
     const browserGoForward = vi.fn(async () => Promise.reject(new Error('forward failed')))
     const browserReload = vi.fn(async () => Promise.reject(new Error('reload failed')))
-    mount({ browserGoForward, browserReload })
+    mount({
+      browserList: vi.fn(async () => ({
+        tabs: [{ ...BLANK_TAB, canGoBack: false, canGoForward: true }],
+      })),
+      browserGoForward,
+      browserReload,
+    })
     await waitFor(() => { expect(screen.getByLabelText('前进')).toBeTruthy() })
     fireEvent.click(screen.getByLabelText('前进'))
     await waitFor(() => { expect(screen.getByText('forward failed')).toBeTruthy() })
@@ -629,7 +650,7 @@ describe('BrowserPanel', () => {
 
   it('debounces viewport resize when the screencast host resizes', async () => {
     const browserList = vi.fn(async () => ({
-      tabs: [{ tabId: 'live-1', url: 'about:blank', title: '', selected: true }],
+      tabs: [{ tabId: 'live-1', url: 'about:blank', title: '', selected: true, canGoBack: false, canGoForward: false }],
     }))
     const browserResizeViewport = vi.fn(async () => ({ resized: true as const }))
     mount({ browserList, browserResizeViewport })
@@ -641,7 +662,7 @@ describe('BrowserPanel', () => {
 
   it('skips auto-create while deferAutoCreate stays set on a visible segment', async () => {
     const panelStore = createBrowserPanelStore().create()
-    panelStore.actions.setWorkspaceTabs(WID, [{ tabId: 'a', url: 'about:blank', title: '' }], 'a')
+    panelStore.actions.setWorkspaceTabs(WID, [{ tabId: 'a', url: 'about:blank', title: '', canGoBack: false, canGoForward: false }], 'a')
     const browserCreateTab = vi.fn()
     const browserList = vi.fn(async () => ({ tabs: [] }))
     const { rerender } = mount({
@@ -667,8 +688,8 @@ describe('BrowserPanel', () => {
     const { DirectoryBrowseError } = await import('@deepseek-ai/dsh-client-runtime/client')
     const browserList = vi.fn(async () => ({
       tabs: [
-        { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true },
-        { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false },
+        { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true, canGoBack: false, canGoForward: false },
+        { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false, canGoBack: false, canGoForward: false },
       ],
     }))
     const browseError = new DirectoryBrowseError({
@@ -696,10 +717,105 @@ describe('BrowserPanel', () => {
   })
 
   it('updates tab metadata after successful back navigation', async () => {
-    const browserGoBack = vi.fn(async () => ({ url: 'https://prev.test', title: 'Prev' }))
-    mount({ browserGoBack })
+    const browserGoBack = vi.fn(async () => ({
+      url: 'https://prev.test', title: 'Prev', canGoBack: false, canGoForward: true,
+    }))
+    mount({
+      browserList: vi.fn(async () => ({
+        tabs: [{ ...BLANK_TAB, canGoBack: true, canGoForward: false }],
+      })),
+      browserGoBack,
+    })
     await waitFor(() => { expect(screen.getByLabelText('后退')).toBeTruthy() })
     fireEvent.click(screen.getByLabelText('后退'))
     await waitFor(() => { expect(screen.getByDisplayValue('https://prev.test')).toBeTruthy() })
+  })
+
+  it('disabled-last-tab: hides close affordance when only one tab remains', async () => {
+    mount({ browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })) })
+    await waitFor(() => { expect(screen.getByRole('tablist')).toBeTruthy() })
+    expect(screen.queryByLabelText('关闭')).toBeNull()
+  })
+
+  it('nav-disabled-history: disables back and forward without history', async () => {
+    mount({
+      browserList: vi.fn(async () => ({
+        tabs: [{ ...BLANK_TAB, canGoBack: false, canGoForward: false }],
+      })),
+    })
+    await waitFor(() => {
+      expect(screen.getByLabelText('后退')).toHaveProperty('disabled', true)
+      expect(screen.getByLabelText('前进')).toHaveProperty('disabled', true)
+    })
+  })
+
+  it('US-9: creates a new tab from + and focuses the address bar', async () => {
+    const browserCreateTab = vi.fn(async () => ({ tabId: 'live-2' }))
+    mount({ browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })), browserCreateTab })
+    await waitFor(() => { expect(screen.getByRole('tablist')).toBeTruthy() })
+    fireEvent.click(screen.getByLabelText('新建标签页'))
+    await waitFor(() => {
+      expect(browserCreateTab).toHaveBeenCalledWith(WID, DEFAULT_BROWSER_TAB_URL, expect.any(AbortSignal))
+      expect(screen.getByLabelText('地址栏')).toBe(document.activeElement)
+    })
+  })
+
+  it('US-10: closes tabs from the context menu while keeping at least one tab', async () => {
+    const browserCloseTab = vi.fn(async () => ({ closed: true as const }))
+    mount({
+      browserList: vi.fn(async () => ({
+        tabs: [
+          { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true, canGoBack: false, canGoForward: false },
+          { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false, canGoBack: false, canGoForward: false },
+        ],
+      })),
+      browserCloseTab,
+    })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'One' })).toBeTruthy() })
+    fireEvent.contextMenu(screen.getByRole('tab', { name: 'One' }))
+    fireEvent.click(await screen.findByText('关闭其他'))
+    await waitFor(() => { expect(browserCloseTab).toHaveBeenCalledWith(WID, 'live-2', expect.any(AbortSignal)) })
+    expect(screen.getByRole('tab', { name: 'One' })).toBeTruthy()
+  })
+
+  it('US-12: navigates localhost and public URLs from the address bar', async () => {
+    const browserNavigate = vi.fn(async (_wid, _tabId, url: string) => ({
+      url,
+      title: 'Loaded',
+      canGoBack: true,
+      canGoForward: false,
+    }))
+    mount({ browserNavigate })
+    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
+    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: '127.0.0.1:5173' } })
+    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
+    await waitFor(() => {
+      expect(browserNavigate).toHaveBeenCalledWith(WID, 'tab-1', 'http://127.0.0.1:5173/', expect.any(AbortSignal))
+    })
+    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://example.com/docs' } })
+    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
+    await waitFor(() => {
+      expect(browserNavigate).toHaveBeenCalledWith(WID, 'tab-1', 'https://example.com/docs', expect.any(AbortSignal))
+    })
+  })
+
+  it('US-15: opens the current tab URL in the external browser', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    mount({
+      browserList: vi.fn(async () => ({
+        tabs: [{
+          tabId: 'live-1',
+          url: 'https://example.com/page',
+          title: 'Example',
+          selected: true,
+          canGoBack: false,
+          canGoForward: false,
+        }],
+      })),
+    })
+    await waitFor(() => { expect(screen.getByLabelText('在外部浏览器打开')).toBeTruthy() })
+    fireEvent.click(screen.getByLabelText('在外部浏览器打开'))
+    expect(openSpy).toHaveBeenCalledWith('https://example.com/page', '_blank', 'noopener,noreferrer')
+    openSpy.mockRestore()
   })
 })
