@@ -5,7 +5,7 @@ import { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
-  SessionId, SessionListState, WorkspaceId, WorkspaceView,
+  SessionId, SessionListState, TerminalListResult, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { DirectoryBrowseError, createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { TerminalPanel, type TerminalPanelProps } from '../src/client/TerminalPanel.tsx'
@@ -37,6 +37,21 @@ afterEach(() => {
 const SID = 's1' as SessionId
 const WID = 'ws1' as WorkspaceId
 const ROOT = '/w/alpha'
+
+function hostSession(
+  sessionId: string,
+  titleCommand: string,
+  profileId: string,
+  titlePath = '~',
+): TerminalListResult['sessions'][number] {
+  return {
+    sessionId,
+    profileId,
+    titlePath,
+    titleCommand,
+    title: `${titlePath} — ${titleCommand}`,
+  }
+}
 
 function workspace(over: Partial<WorkspaceView> = {}): WorkspaceView {
   return {
@@ -171,16 +186,16 @@ describe('TerminalPanel', () => {
     await waitFor(() => {
       expect(terminalSpawn).toHaveBeenCalledWith(WID, 'zsh', ROOT, expect.any(AbortSignal))
     })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'zsh' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /zsh/ })).toBeTruthy() })
   })
 
   it('default: reuses Host list rows instead of spawning when sessions already exist', async () => {
     const terminalList = vi.fn(async () => ({
-      sessions: [{ sessionId: 'live-1', title: 'node', profileId: 'zsh' }],
+      sessions: [hostSession('live-1', 'node', 'zsh')],
     }))
     const terminalSpawn = vi.fn()
     mount({ terminalList, terminalSpawn })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'node' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /node/ })).toBeTruthy() })
     expect(terminalSpawn).not.toHaveBeenCalled()
   })
 
@@ -246,10 +261,15 @@ describe('TerminalPanel', () => {
       onOpen,
     ) => {
       onOpen?.()
-      onFrame({ type: 'host/terminal-title', title: 'remote-title' })
+      onFrame({
+        type: 'host/terminal-title',
+        title: '~/demo — node',
+        titlePath: '~/demo',
+        titleCommand: 'node',
+      })
     })
     mount({ terminalStream })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'remote-title' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'node' })).toBeTruthy() })
   })
 
   it('stream output frames write into the xterm viewport', async () => {
@@ -273,14 +293,14 @@ describe('TerminalPanel', () => {
   it('selecting another tab switches the active session id', async () => {
     const terminalList = vi.fn(async () => ({
       sessions: [
-        { sessionId: 'live-1', title: 'first', profileId: 'zsh' },
-        { sessionId: 'live-2', title: 'second', profileId: 'zsh' },
+        hostSession('live-1', 'first', 'zsh'),
+        hostSession('live-2', 'second', 'zsh'),
       ],
     }))
     mount({ terminalList })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'second' })).toBeTruthy() })
-    await act(async () => { screen.getByRole('tab', { name: 'second' }).click() })
-    expect(screen.getByRole('tab', { name: 'second' }).getAttribute('aria-selected')).toBe('true')
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /second/ })).toBeTruthy() })
+    await act(async () => { screen.getByRole('tab', { name: /second/ }).click() })
+    expect(screen.getByRole('tab', { name: /second/ }).getAttribute('aria-selected')).toBe('true')
   })
 
   it('ignores DirectoryBrowseError from the initial list/spawn handshake', async () => {
@@ -325,7 +345,7 @@ describe('TerminalPanel', () => {
       defaultProfileId: 'zsh',
     }))
     mount({ terminalProfiles })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'zsh' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /zsh/ })).toBeTruthy() })
   })
 
   it('aborts before spawn when unmounted during profile fetch', async () => {
@@ -382,7 +402,7 @@ describe('TerminalPanel', () => {
       defaultProfileId: 'zsh',
     }))
     mount({ terminalProfiles })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'zsh' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /zsh/ })).toBeTruthy() })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '新建终端' })) })
     await waitFor(() => {
       const menu = screen.getByRole('menu')
@@ -396,39 +416,134 @@ describe('TerminalPanel', () => {
     const terminalKill = vi.fn(async () => ({ killed: true as const }))
     const terminalList = vi.fn(async () => ({
       sessions: [
-        { sessionId: 'live-1', title: 'first', profileId: 'zsh' },
-        { sessionId: 'live-2', title: 'second', profileId: 'bash' },
+        hostSession('live-1', 'zsh', 'zsh'),
+        hostSession('live-2', 'bash', 'bash'),
       ],
     }))
     mount({ terminalList, terminalKill })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'first' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /zsh/ })).toBeTruthy() })
     await act(async () => {
-      fireEvent.click(screen.getAllByRole('button', { name: '终止终端' })[0]!)
+      fireEvent.click(screen.getByRole('button', { name: /关闭.*zsh/ }))
     })
     await waitFor(() => {
       expect(terminalKill).toHaveBeenCalledWith(WID, 'live-1', expect.any(AbortSignal))
     })
-    await waitFor(() => { expect(screen.queryByRole('tab', { name: 'first' })).toBeNull() })
-    expect(screen.getByRole('tab', { name: 'second' }).getAttribute('aria-selected')).toBe('true')
+    await waitFor(() => { expect(screen.queryByRole('tab', { name: 'zsh' })).toBeNull() })
+    expect(screen.getByRole('tab', { name: /bash/ }).getAttribute('aria-selected')).toBe('true')
   })
 
-  it('kill-tab: killing every tab defers auto-spawn until the Terminal segment is re-entered', async () => {
-    let spawnCount = 0
-    const terminalSpawn = vi.fn(async () => ({ sessionId: `term-${++spawnCount}` }))
+  it('kill-tab: closing down to the last tab hides its close button and keeps the session', async () => {
+    const terminalSpawn = vi.fn(async () => ({ sessionId: 'term-1' }))
     const terminalList = vi.fn(async () => ({
-      sessions: [{ sessionId: 'live-1', title: 'only', profileId: 'zsh' }],
+      sessions: [
+        hostSession('live-1', 'zsh', 'zsh'),
+        hostSession('live-2', 'bash', 'bash'),
+      ],
     }))
     const { terminalSpawn: spawnMock, rerender } = mount({ terminalList, terminalSpawn })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'only' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /zsh/ })).toBeTruthy() })
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '终止终端' }))
+      fireEvent.click(screen.getByRole('button', { name: /关闭.*zsh/ }))
     })
-    await waitFor(() => { expect(screen.queryByRole('tab')).toBeNull() })
-    await act(async () => { await Promise.resolve() })
-    expect(spawnMock).not.toHaveBeenCalled()
+    await waitFor(() => { expect(screen.queryByRole('tab', { name: 'zsh' })).toBeNull() })
+    expect(screen.getByRole('tab', { name: /bash/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '关闭 bash' })).toBeNull()
     await act(async () => { rerender({ visible: false }) })
-    await act(async () => { rerender({ visible: true, terminalList: vi.fn(async () => ({ sessions: [] })) }) })
-    await waitFor(() => { expect(spawnMock).toHaveBeenCalled() })
+    await act(async () => { rerender({ visible: true }) })
+    expect(screen.getByRole('tab', { name: /bash/ })).toBeTruthy()
+    expect(spawnMock).not.toHaveBeenCalled()
+  })
+
+  it('last-tab: hides the close button and blocks close-all menu actions', async () => {
+    const terminalKill = vi.fn(async () => ({ killed: true as const }))
+    const terminalList = vi.fn(async () => ({
+      sessions: [hostSession('live-1', 'zsh', 'zsh')],
+    }))
+    mount({ terminalList, terminalKill })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /zsh/ })).toBeTruthy() })
+    expect(screen.queryByRole('button', { name: /关闭.*zsh/ })).toBeNull()
+    await act(async () => { fireEvent.contextMenu(screen.getByRole('tab', { name: /zsh/ })) })
+    await waitFor(() => { expect(screen.getByRole('menuitem', { name: '关闭' })).toBeTruthy() })
+    expect(screen.getByRole('menuitem', { name: '关闭' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('menuitem', { name: '关闭全部' })).toHaveProperty('disabled', true)
+    await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: '关闭' })) })
+    expect(terminalKill).not.toHaveBeenCalled()
+    expect(screen.getByRole('tab', { name: /zsh/ })).toBeTruthy()
+  })
+
+  it('tab-menu-close-others: context menu closes non-anchor tabs', async () => {
+    const terminalKill = vi.fn(async () => ({ killed: true as const }))
+    const terminalList = vi.fn(async () => ({
+      sessions: [
+        hostSession('live-1', 'zsh', 'zsh'),
+        hostSession('live-2', 'zsh', 'zsh'),
+        hostSession('live-3', 'zsh', 'zsh'),
+      ],
+    }))
+    mount({ terminalList, terminalKill })
+    await waitFor(() => { expect(screen.getAllByRole('tab')).toHaveLength(3) })
+    await act(async () => {
+      fireEvent.contextMenu(screen.getAllByRole('tab')[1]!)
+    })
+    await waitFor(() => { expect(screen.getByRole('menuitem', { name: '关闭其他' })).toBeTruthy() })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menuitem', { name: '关闭其他' }))
+    })
+    await waitFor(() => {
+      expect(terminalKill).toHaveBeenCalledTimes(2)
+      expect(terminalKill).toHaveBeenCalledWith(WID, 'live-1', expect.any(AbortSignal))
+      expect(terminalKill).toHaveBeenCalledWith(WID, 'live-3', expect.any(AbortSignal))
+    })
+    expect(screen.queryAllByRole('tab')).toHaveLength(1)
+    expect(screen.getAllByRole('tab')[0]?.getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('running-guard: closing a tab with a foreground command opens a confirm dialog', async () => {
+    const terminalKill = vi.fn(async () => ({ killed: true as const }))
+    const terminalList = vi.fn(async () => ({
+      sessions: [
+        hostSession('live-1', 'node', 'zsh'),
+        hostSession('live-2', 'zsh', 'zsh'),
+      ],
+    }))
+    mount({ terminalList, terminalKill })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /node/ })).toBeTruthy() })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /关闭.*node/ }))
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: '终止正在运行的命令？' })).toBeTruthy()
+    })
+    expect(terminalKill).not.toHaveBeenCalled()
+    const dialog = screen.getByRole('dialog', { name: '终止正在运行的命令？' })
+    await act(async () => {
+      const closeButtons = within(dialog).getAllByRole('button', { name: '关闭' })
+      fireEvent.click(closeButtons[closeButtons.length - 1]!)
+    })
+    await waitFor(() => {
+      expect(terminalKill).toHaveBeenCalledWith(WID, 'live-1', expect.any(AbortSignal))
+    })
+  })
+
+  it('running-guard: cancel keeps the tab open', async () => {
+    const terminalKill = vi.fn(async () => ({ killed: true as const }))
+    const terminalList = vi.fn(async () => ({
+      sessions: [
+        hostSession('live-1', 'python', 'zsh'),
+        hostSession('live-2', 'zsh', 'zsh'),
+      ],
+    }))
+    mount({ terminalList, terminalKill })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /python/ })).toBeTruthy() })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /关闭.*python/ }))
+    })
+    await waitFor(() => { expect(screen.getByRole('dialog')).toBeTruthy() })
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '取消' }))
+    })
+    expect(terminalKill).not.toHaveBeenCalled()
+    expect(screen.getByRole('tab', { name: /python/ })).toBeTruthy()
   })
 
   it('spawn-via-dropdown: selecting a profile from the + menu spawns a new tab', async () => {
@@ -442,14 +557,14 @@ describe('TerminalPanel', () => {
       defaultProfileId: 'zsh',
     }))
     mount({ terminalSpawn, terminalProfiles })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'zsh' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /zsh/ })).toBeTruthy() })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '新建终端' })) })
     await waitFor(() => { expect(screen.getByRole('menuitem', { name: 'bash' })).toBeTruthy() })
     await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: 'bash' })) })
     await waitFor(() => {
       expect(terminalSpawn).toHaveBeenLastCalledWith(WID, 'bash', ROOT, expect.any(AbortSignal))
     })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'bash' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /bash/ })).toBeTruthy() })
     expect(screen.getAllByRole('tab')).toHaveLength(2)
   })
 
@@ -488,12 +603,12 @@ describe('TerminalPanel', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '重试' })) })
     await waitFor(() => { expect(terminalSpawn).toHaveBeenCalledTimes(2) })
     await waitFor(() => { expect(screen.queryByText('终端不可用')).toBeNull() })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'zsh' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /zsh/ })).toBeTruthy() })
   })
 
   it('error-inline: dropdown spawn failure keeps other tabs and shows inline 重试', async () => {
     const terminalList = vi.fn(async () => ({
-      sessions: [{ sessionId: 'live-1', title: 'first', profileId: 'zsh' }],
+      sessions: [hostSession('live-1', 'first', 'zsh')],
     }))
     const terminalProfiles = vi.fn(async () => ({
       profiles: [
@@ -513,13 +628,13 @@ describe('TerminalPanel', () => {
       return { sessionId: 'live-1' }
     })
     mount({ terminalList, terminalProfiles, terminalSpawn })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'first' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /first/ })).toBeTruthy() })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '新建终端' })) })
     await waitFor(() => { expect(screen.getByRole('menuitem', { name: 'bash' })).toBeTruthy() })
     await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: 'bash' })) })
     await waitFor(() => { expect(screen.getByText('spawn rejected')).toBeTruthy() })
     expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
-    expect(screen.getByRole('tab', { name: 'first' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /first/ })).toBeTruthy()
     expect(screen.getAllByRole('tab')).toHaveLength(1)
   })
 
@@ -558,7 +673,7 @@ describe('TerminalPanel', () => {
   it('restores another Workspace tab set from the store without re-spawning', async () => {
     const panelStore = createTerminalPanelStore().create()
     panelStore.actions.setWorkspaceTabs(WID, [{
-      sessionId: 'persisted-1', title: 'bash', profileId: 'bash',
+      sessionId: 'persisted-1', title: '~ — bash', titlePath: '~', titleCommand: 'bash', profileId: 'bash',
     }])
     const terminalSpawn = vi.fn()
     const workspacesStore = createSnapshotStore(workspacesState([workspace()]))
@@ -580,17 +695,17 @@ describe('TerminalPanel', () => {
         terminalStream={vi.fn((_w, _s, _f, _sig, onOpen) => { onOpen?.() })}
       />,
     )
-    expect(screen.getByRole('tab', { name: 'bash' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /bash/ })).toBeTruthy()
     expect(terminalSpawn).not.toHaveBeenCalled()
   })
 
   it('hidden-persist: hiding the Terminal segment does not call Host kill', async () => {
     const terminalKill = vi.fn(async () => ({ killed: true as const }))
     const terminalList = vi.fn(async () => ({
-      sessions: [{ sessionId: 'live-1', title: 'node', profileId: 'zsh' }],
+      sessions: [hostSession('live-1', 'node', 'zsh')],
     }))
     const { rerender } = mount({ terminalList, terminalKill })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'node' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /node/ })).toBeTruthy() })
     await act(async () => { rerender({ visible: false }) })
     expect(terminalKill).not.toHaveBeenCalled()
   })
@@ -598,7 +713,7 @@ describe('TerminalPanel', () => {
   it('hidden-persist: hiding the Terminal segment keeps the SSE subscription open', async () => {
     let abortSignal: AbortSignal | undefined
     const terminalList = vi.fn(async () => ({
-      sessions: [{ sessionId: 'live-1', title: 'node', profileId: 'zsh' }],
+      sessions: [hostSession('live-1', 'node', 'zsh')],
     }))
     const terminalStream = vi.fn<TerminalPanelProps['terminalStream']>((
       _workspaceId,
@@ -642,10 +757,10 @@ describe('TerminalPanel', () => {
     const SID2 = 's2' as SessionId
     const panelStore = createTerminalPanelStore().create()
     panelStore.actions.setWorkspaceTabs(WID, [{
-      sessionId: 'ws1-tab', title: 'alpha-shell', profileId: 'zsh',
+      sessionId: 'ws1-tab', title: '~ — alpha-shell', titlePath: '~', titleCommand: 'alpha-shell', profileId: 'zsh',
     }])
     panelStore.actions.setWorkspaceTabs(WID2, [{
-      sessionId: 'ws2-tab', title: 'beta-shell', profileId: 'bash',
+      sessionId: 'ws2-tab', title: '~ — beta-shell', titlePath: '~', titleCommand: 'beta-shell', profileId: 'bash',
     }])
     const terminalSpawn = vi.fn()
     const workspacesStore = createSnapshotStore(workspacesState([
@@ -677,11 +792,11 @@ describe('TerminalPanel', () => {
       Object.defineProperty(host, 'clientWidth', { value: 400 })
       Object.defineProperty(host, 'clientHeight', { value: 300 })
     }
-    expect(screen.getByRole('tab', { name: 'alpha-shell' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /alpha-shell/ })).toBeTruthy()
     act(() => { sessionsStore.set(sessionsState(SID2)) })
     view.rerender(<TerminalPanel {...props} />)
-    expect(screen.getByRole('tab', { name: 'beta-shell' })).toBeTruthy()
-    expect(screen.queryByRole('tab', { name: 'alpha-shell' })).toBeNull()
+    expect(screen.getByRole('tab', { name: /beta-shell/ })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: /alpha-shell/ })).toBeNull()
     expect(terminalSpawn).not.toHaveBeenCalled()
   })
 
@@ -691,8 +806,8 @@ describe('TerminalPanel', () => {
     const terminalKill = vi.fn(async () => ({ killed: true as const }))
     const terminalList = vi.fn(async (workspaceId: WorkspaceId) => ({
       sessions: workspaceId === WID
-        ? [{ sessionId: 'live-1', title: 'alpha-pty', profileId: 'zsh' }]
-        : [{ sessionId: 'live-2', title: 'beta-pty', profileId: 'bash' }],
+        ? [hostSession('live-1', 'alpha-pty', 'zsh')]
+        : [hostSession('live-2', 'beta-pty', 'bash')],
     }))
     const items = [
       workspace(),
@@ -725,10 +840,10 @@ describe('TerminalPanel', () => {
       Object.defineProperty(host, 'clientWidth', { value: 400 })
       Object.defineProperty(host, 'clientHeight', { value: 300 })
     }
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'alpha-pty' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /alpha-pty/ })).toBeTruthy() })
     act(() => { sessionsStore.set(sessionsState(SID2)) })
     view.rerender(<TerminalPanel {...props} />)
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'beta-pty' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /beta-pty/ })).toBeTruthy() })
     expect(terminalKill).not.toHaveBeenCalled()
     expect(terminalWorkspaceState(panelStore.getSnapshot(), WID).tabs).toHaveLength(1)
     expect(terminalWorkspaceState(panelStore.getSnapshot(), WID2).tabs).toHaveLength(1)
@@ -736,7 +851,7 @@ describe('TerminalPanel', () => {
 
   it('reconnect-loading: hard refresh shows 连接中… until SSE opens', async () => {
     const terminalList = vi.fn(async () => ({
-      sessions: [{ sessionId: 'persisted-host', title: 'node', profileId: 'zsh' }],
+      sessions: [hostSession('persisted-host', 'node', 'zsh')],
     }))
     const terminalSpawn = vi.fn()
     const terminalStream = vi.fn<TerminalPanelProps['terminalStream']>((
@@ -746,25 +861,16 @@ describe('TerminalPanel', () => {
       _signal,
     ) => { /* defer onOpen — simulates reconnect after reload */ })
     mount({ terminalList, terminalSpawn, terminalStream })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'node' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /node/ })).toBeTruthy() })
     expect(terminalSpawn).not.toHaveBeenCalled()
     expect(screen.getByText('连接中…')).toBeTruthy()
   })
 
-  it('scrollback-replay: SSE replays scrollback before appending live output', async () => {
-    const writeOrder: string[] = []
-    const { createXtermViewport } = await import('./xterm-viewport.stub.ts')
-    createXtermViewport.mockImplementationOnce(() => ({
-      attach: vi.fn(),
-      reset: vi.fn(),
-      write: vi.fn((text: string) => { writeOrder.push(text) }),
-      setDark: vi.fn(),
-      fit: vi.fn(),
-      dispose: vi.fn(),
-    }))
+  it('scrollback-replay: resizes before scrollback and enables input after the first scrollback frame', async () => {
     const terminalList = vi.fn(async () => ({
-      sessions: [{ sessionId: 'live-1', title: 'node', profileId: 'zsh' }],
+      sessions: [hostSession('live-1', 'node', 'zsh')],
     }))
+    const terminalResize = vi.fn(async () => ({ resized: true as const }))
     const terminalStream = vi.fn<TerminalPanelProps['terminalStream']>((
       _workspaceId,
       _sessionId,
@@ -776,25 +882,39 @@ describe('TerminalPanel', () => {
       onFrame({ type: 'host/terminal-scrollback', text: 'history\n', truncated: false })
       onFrame({ type: 'host/terminal-output', text: 'live\n' })
     })
-    mount({ terminalList, terminalStream })
+    const { terminalResize: resizeMock } = mount({ terminalList, terminalStream, terminalResize })
+    const { createXtermViewport } = await import('./xterm-viewport.stub.ts')
+    await waitFor(() => { expect(createXtermViewport).toHaveBeenCalled() })
+    const handle = createXtermViewport.mock.results.at(-1)?.value as {
+      reset: ReturnType<typeof vi.fn>
+      setInputEnabled: ReturnType<typeof vi.fn>
+      fit: ReturnType<typeof vi.fn>
+      write: ReturnType<typeof vi.fn>
+    }
     await waitFor(() => {
-      expect(writeOrder).toEqual(['history\n', 'live\n'])
+      expect(handle.write).toHaveBeenCalledWith('history\n')
+      expect(handle.write).toHaveBeenCalledWith('live\n')
+      expect(handle.reset).toHaveBeenCalled()
+      expect(handle.setInputEnabled).toHaveBeenCalledWith(false)
+      expect(handle.setInputEnabled).toHaveBeenCalledWith(true)
+      expect(handle.fit).toHaveBeenCalled()
+      expect(resizeMock).toHaveBeenCalledWith(WID, 'live-1', 80, 24, expect.any(AbortSignal))
     })
   })
 
   it('hard refresh: Host list restores tabs and reconnects without spawn', async () => {
     const terminalList = vi.fn(async () => ({
-      sessions: [{ sessionId: 'persisted-host', title: 'node', profileId: 'zsh' }],
+      sessions: [hostSession('persisted-host', 'node', 'zsh')],
     }))
     const terminalSpawn = vi.fn()
     const first = mount({ terminalList, terminalSpawn })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'node' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /node/ })).toBeTruthy() })
     expect(terminalSpawn).not.toHaveBeenCalled()
     first.unmount()
     terminalList.mockClear()
     mount({ terminalList, terminalSpawn })
     await waitFor(() => { expect(terminalList).toHaveBeenCalledWith(WID, expect.any(AbortSignal)) })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'node' })).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /node/ })).toBeTruthy() })
     expect(terminalSpawn).not.toHaveBeenCalled()
   })
 })

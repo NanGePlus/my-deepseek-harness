@@ -19,9 +19,11 @@ describe('createXtermViewport', () => {
     viewport.setDark(true)
     viewport.fit()
     viewport.fit()
+    expect(onResize).toHaveBeenCalledTimes(1)
+    const [cols, rows] = onResize.mock.calls[0]!
+    expect(viewport.fit()).toEqual({ cols, rows })
     viewport.dispose()
     document.body.removeChild(host)
-    expect(onResize).toHaveBeenCalledTimes(1)
   })
 
   it('no-ops fit before the terminal is attached', () => {
@@ -29,6 +31,7 @@ describe('createXtermViewport', () => {
     const viewport = createXtermViewport({ dark: false, onInput: vi.fn(), onResize })
     viewport.fit()
     expect(onResize).not.toHaveBeenCalled()
+    expect(viewport.fit()).toBeNull()
   })
 
   it('no-ops fit while the host has zero layout size', () => {
@@ -38,6 +41,7 @@ describe('createXtermViewport', () => {
     viewport.attach(host)
     viewport.fit()
     expect(onResize).not.toHaveBeenCalled()
+    expect(viewport.fit()).toBeNull()
   })
 
   it('survives FitAddon fit failures while the panel is still hidden', () => {
@@ -52,6 +56,7 @@ describe('createXtermViewport', () => {
     viewport.attach(host)
     viewport.fit()
     expect(onResize).not.toHaveBeenCalled()
+    expect(viewport.fit()).toBeNull()
     fit.mockRestore()
   })
 })

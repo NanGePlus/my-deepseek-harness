@@ -3,7 +3,7 @@
 // ui-theme's --dsh-scrollbar-thumb{,-hover} pair through a CSS-module
 // active class driven by this hook.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 /** How long the scrollbar stays drawn after scrolling stops. */
 export const SCROLL_REVEAL_LINGER_MS = 800
@@ -17,28 +17,45 @@ export interface ScrollRevealScrollbar {
 }
 
 /**
+ * Attach scroll-reveal timing to one scroll container.
+ * @param element - scroll container.
+ * @param onActiveChange - called when the thumb should show or hide.
+ * @returns disposer that removes listeners and clears pending linger.
+ */
+export function attachScrollRevealScrollbar(
+  element: HTMLElement,
+  onActiveChange: (active: boolean) => void,
+): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const cancel = (): void => {
+    if (timer === null) return
+    clearTimeout(timer)
+    timer = null
+  }
+  const reveal = (): void => {
+    onActiveChange(true)
+    cancel()
+    timer = setTimeout(() => {
+      timer = null
+      onActiveChange(false)
+    }, SCROLL_REVEAL_LINGER_MS)
+  }
+  const onScroll = (): void => { reveal() }
+  element.addEventListener('scroll', onScroll, { passive: true })
+  return () => {
+    element.removeEventListener('scroll', onScroll)
+    cancel()
+    onActiveChange(false)
+  }
+}
+
+/**
  * Reveal a scroll container's themed thumb only while the user is scrolling.
  * @returns the scroll container ref and whether its active class should apply.
  */
 export function useScrollRevealScrollbar(): ScrollRevealScrollbar {
   const [element, setElement] = useState<HTMLElement | null>(null)
   const [active, setActive] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const cancel = useCallback((): void => {
-    if (timerRef.current === null) return
-    clearTimeout(timerRef.current)
-    timerRef.current = null
-  }, [])
-
-  const reveal = useCallback((): void => {
-    setActive(true)
-    cancel()
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null
-      setActive(false)
-    }, SCROLL_REVEAL_LINGER_MS)
-  }, [cancel])
 
   const ref = useCallback((next: HTMLElement | null): void => {
     setElement(next)
@@ -46,15 +63,8 @@ export function useScrollRevealScrollbar(): ScrollRevealScrollbar {
 
   useEffect(() => {
     if (element === null) return
-    const onScroll = (): void => { reveal() }
-    element.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      element.removeEventListener('scroll', onScroll)
-      cancel()
-    }
-  }, [element, reveal, cancel])
-
-  useEffect(() => cancel, [cancel])
+    return attachScrollRevealScrollbar(element, setActive)
+  }, [element])
 
   return { ref, active }
 }

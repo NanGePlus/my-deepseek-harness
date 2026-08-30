@@ -13,7 +13,9 @@ export { Input } from './Input.tsx'
 export { Menu } from './Menu.tsx'
 export type { MenuEntry, MenuItem, MenuSeparator, MenuLabel } from './Menu.tsx'
 export { useAnchoredMaxHeight } from './useAnchoredMaxHeight.ts'
-export { SCROLL_REVEAL_LINGER_MS, useScrollRevealScrollbar } from './useScrollRevealScrollbar.ts'
+export {
+  SCROLL_REVEAL_LINGER_MS, attachScrollRevealScrollbar, useScrollRevealScrollbar,
+} from './useScrollRevealScrollbar.ts'
 export type { ScrollRevealScrollbar } from './useScrollRevealScrollbar.ts'
 export { HoverCard } from './HoverCard.tsx'
 export { Modal } from './Modal.tsx'

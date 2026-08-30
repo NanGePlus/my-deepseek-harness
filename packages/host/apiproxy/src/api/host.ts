@@ -277,6 +277,8 @@ export interface TerminalSpawnResult {
 export interface TerminalSessionSummary {
   sessionId: string
   title: string
+  titlePath: string
+  titleCommand: string
   profileId: string
 }
 
@@ -289,7 +291,7 @@ export interface TerminalListResult {
 export type TerminalStreamFrame =
   | { type: 'host/terminal-scrollback'; text: string; truncated: boolean }
   | { type: 'host/terminal-output'; text: string }
-  | { type: 'host/terminal-title'; title: string }
+  | { type: 'host/terminal-title'; title: string; titlePath: string; titleCommand: string }
   | { type: 'stream/error'; error: RpcError }
 
 /** Zero-based UTF-16 position in an editor buffer. */

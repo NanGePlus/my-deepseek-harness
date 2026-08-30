@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
-  IconCodeOutline16, IconLoadingOutline16, IconPlusOutline16, IconTrashOutline16, Menu,
-  Button,
+  IconCloseOutline16, IconCodeOutline16, IconLoadingOutline16, IconPlusOutline16, Menu,
+  Button, Modal, Tooltip,
   type MenuEntry,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
@@ -17,7 +17,29 @@ import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { createTerminalPanelStore, terminalWorkspaceState, type TerminalTabRow } from './stores.ts'
 import { useHarnessDark } from './use-harness-dark.ts'
 import { createXtermViewport, type XtermViewportHandle } from './xterm-viewport.ts'
+import {
+  sanitizeTerminalScrollbackForReplay,
+  waitForXtermViewportFit,
+} from './xterm-scrollback-replay.ts'
+import {
+  type TerminalTabCloseScope,
+  sessionIdsForTabCloseScope,
+  surviveSessionIdAfterTabClose,
+  terminalTabCloseMenuState,
+  wouldCloseEveryTerminalTab,
+} from './terminal-tab-close-scope.ts'
+import { terminalTabHasRunningCommand } from './tab-running-command.ts'
+import { terminalTabDisplayTitle, terminalTabTitleCommand } from './terminal-tab-title.ts'
 import css from './TerminalPanel.module.css'
+
+const TOOLTIP_DELAY_MS = 500
+
+/** Pending close after the user confirms terminating running foreground commands. */
+interface PendingTerminalClose {
+  sessionIds: readonly string[]
+  surviveSessionId: string | undefined
+  runningTitles: readonly string[]
+}
 
 /** Host human-terminal callbacks closed over `ctx.workspaces` in apply. */
 export interface TerminalPanelInjected {
@@ -149,8 +171,16 @@ function rowsFromList(sessions: TerminalListResult['sessions']): TerminalTabRow[
   return sessions.map(session => ({
     sessionId: session.sessionId,
     title: session.title,
+    titlePath: session.titlePath,
+    titleCommand: session.titleCommand,
     profileId: session.profileId,
   }))
+}
+
+/** Render one terminal tab label (command only). */
+function renderTerminalTabTitle(tab: TerminalTabRow) {
+  const label = terminalTabTitleCommand(tab)
+  return <span className={css.tabTitle}>{label}</span>
 }
 
 /**
@@ -197,7 +227,12 @@ export function TerminalPanel({
   const profilesRef = useRef<TerminalProfilesResult | null>(null)
   const addMenuTriggerRef = useRef<HTMLButtonElement>(null)
   const pendingSpawnProfileRef = useRef<string | undefined>(undefined)
+  const tabsRef = useRef(tabs)
+  tabsRef.current = tabs
+  const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const [addMenuOpen, setAddMenuOpen] = useState(false)
+  const [tabMenu, setTabMenu] = useState<{ anchorSessionId: string; rect: DOMRect } | null>(null)
+  const [pendingClose, setPendingClose] = useState<PendingTerminalClose | null>(null)
   const [profileMenuItems, setProfileMenuItems] = useState<readonly MenuEntry[]>([])
   const [streamAttempt, setStreamAttempt] = useState(0)
 
@@ -262,6 +297,62 @@ export function TerminalPanel({
     }
   }, [actions, terminalKill, workspaceId])
 
+  const executeCloseSessions = useCallback(async (
+    sessionIds: readonly string[],
+    surviveSessionId: string | undefined,
+  ) => {
+    if (workspaceId === undefined) return
+    for (const sessionId of sessionIds) {
+      await killTab(sessionId)
+    }
+    if (
+      surviveSessionId !== undefined
+      && tabsRef.current.some(tab => tab.sessionId === surviveSessionId)
+    ) {
+      actions.setSelectedSession(workspaceId, surviveSessionId)
+    }
+  }, [actions, killTab, workspaceId])
+
+  const requestCloseSessions = useCallback((
+    sessionIds: readonly string[],
+    surviveSessionId: string | undefined,
+  ) => {
+    const currentTabs = tabsRef.current
+    if (wouldCloseEveryTerminalTab(currentTabs, sessionIds)) return
+    const runningTitles = sessionIds
+      .map(sessionId => currentTabs.find(tab => tab.sessionId === sessionId))
+      .filter((tab): tab is TerminalTabRow => tab !== undefined && terminalTabHasRunningCommand(tab))
+      .map(tab => terminalTabDisplayTitle(tab))
+    if (runningTitles.length > 0) {
+      setPendingClose({ sessionIds, surviveSessionId, runningTitles })
+      return
+    }
+    void executeCloseSessions(sessionIds, surviveSessionId)
+  }, [executeCloseSessions])
+
+  const handleCloseTab = useCallback((sessionId: string) => {
+    requestCloseSessions([sessionId], undefined)
+  }, [requestCloseSessions])
+
+  const handleCloseTabs = useCallback((scope: TerminalTabCloseScope, anchorSessionId: string) => {
+    const currentTabs = tabsRef.current
+    const sessionIds = sessionIdsForTabCloseScope(currentTabs, anchorSessionId, scope)
+    if (sessionIds.length === 0) return
+    const surviveSessionId = surviveSessionIdAfterTabClose(currentTabs, anchorSessionId, scope)
+    requestCloseSessions(sessionIds, surviveSessionId)
+  }, [requestCloseSessions])
+
+  const confirmPendingClose = useCallback(() => {
+    if (pendingClose === null) return
+    const { sessionIds, surviveSessionId } = pendingClose
+    setPendingClose(null)
+    void executeCloseSessions(sessionIds, surviveSessionId)
+  }, [executeCloseSessions, pendingClose])
+
+  const cancelPendingClose = useCallback(() => {
+    setPendingClose(null)
+  }, [])
+
   const ensureViewport = useCallback((): XtermViewportHandle | null => {
     if (workspaceId === undefined || selectedSessionId === undefined) return null
     if (viewportRef.current !== null) {
@@ -288,6 +379,11 @@ export function TerminalPanel({
     return viewport
   }, [actions, dark, selectedSessionId, terminalResize, terminalWrite, workspaceId])
 
+  const ensureViewportRef = useRef(ensureViewport)
+  ensureViewportRef.current = ensureViewport
+  const visibleRef = useRef(visible)
+  visibleRef.current = visible
+
   const retryUnavailable = useCallback(() => {
     if (workspaceId === undefined) return
     actions.setUnavailableMessage(workspaceId, undefined)
@@ -305,6 +401,11 @@ export function TerminalPanel({
     }
     setStreamAttempt(attempt => attempt + 1)
   }, [actions, spawnTab, workspaceId])
+
+  useEffect(() => {
+    viewportRef.current?.dispose()
+    viewportRef.current = null
+  }, [selectedSessionId, workspaceId])
 
   useEffect(() => {
     if (!visible) return
@@ -373,25 +474,75 @@ export function TerminalPanel({
     streamAbortRef.current?.abort()
     const ac = new AbortController()
     streamAbortRef.current = ac
-    if (visible) actions.setConnecting(workspaceId, true)
-    ensureViewport()?.reset()
-    terminalStream(workspaceId, selectedSessionId, (frame) => {
+    if (visibleRef.current) actions.setConnecting(workspaceId, true)
+    let scrollbackSeen = false
+    let replayReady = false
+    const queuedFrames: TerminalStreamFrame[] = []
+
+    const handleFrame = (frame: TerminalStreamFrame): void => {
       if (frame.type === 'host/terminal-scrollback' || frame.type === 'host/terminal-output') {
-        ensureViewport()?.write(frame.text)
+        if (!scrollbackSeen && frame.type === 'host/terminal-scrollback') {
+          scrollbackSeen = true
+          ensureViewportRef.current()?.setInputEnabled(true)
+        }
+        const text = frame.type === 'host/terminal-scrollback'
+          ? sanitizeTerminalScrollbackForReplay(frame.text)
+          : frame.text
+        ensureViewportRef.current()?.write(text)
       }
       if (frame.type === 'host/terminal-title') {
-        actions.updateTabTitle(workspaceId, selectedSessionId, frame.title)
+        actions.updateTabTitle(
+          workspaceId,
+          selectedSessionId,
+          frame.title,
+          frame.titlePath,
+          frame.titleCommand,
+        )
       }
+    }
+
+    const flushQueuedFrames = (): void => {
+      for (const frame of queuedFrames) handleFrame(frame)
+      queuedFrames.length = 0
+    }
+
+    void (async () => {
+      const viewport = ensureViewportRef.current()
+      viewport?.reset()
+      viewport?.setInputEnabled(false)
+      const host = viewportHostRef.current
+      const dims = viewport !== null && host !== null
+        ? await waitForXtermViewportFit(() => viewport.fit(), host, ac.signal)
+        : null
+      if (dims !== null && !ac.signal.aborted) {
+        try {
+          await terminalResize(workspaceId, selectedSessionId, dims.cols, dims.rows, ac.signal)
+        } catch {
+          if (ac.signal.aborted) return
+        }
+      }
+      if (ac.signal.aborted) return
+      replayReady = true
+      flushQueuedFrames()
+    })()
+
+    terminalStream(workspaceId, selectedSessionId, (frame) => {
+      if (!replayReady) {
+        queuedFrames.push(frame)
+        return
+      }
+      handleFrame(frame)
     }, ac.signal, () => {
-      if (visible) actions.setConnecting(workspaceId, false)
+      if (visibleRef.current) actions.setConnecting(workspaceId, false)
       actions.setInlineError(workspaceId, undefined)
+      if (!scrollbackSeen) ensureViewportRef.current()?.setInputEnabled(true)
     }, (message) => {
-      if (visible) actions.setConnecting(workspaceId, false)
+      if (visibleRef.current) actions.setConnecting(workspaceId, false)
       actions.setInlineError(workspaceId, message)
     })
     return () => { ac.abort() }
   }, [
-    actions, ensureViewport, selectedSessionId, streamAttempt, terminalStream, workspaceId,
+    actions, selectedSessionId, streamAttempt, terminalResize, terminalStream, workspaceId,
   ])
 
   useEffect(() => {
@@ -413,9 +564,25 @@ export function TerminalPanel({
   }, [])
 
   useEffect(() => {
-    viewportRef.current?.dispose()
-    viewportRef.current = null
-  }, [selectedSessionId, workspaceId])
+    if (selectedSessionId === undefined) return
+    const tab = tabRefs.current.get(selectedSessionId)
+    if (typeof tab?.scrollIntoView === 'function') {
+      tab.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    }
+  }, [selectedSessionId, tabs])
+
+  const tabCloseMenuItems = useMemo((): readonly MenuEntry[] => {
+    if (tabMenu === null) return []
+    const disabled = terminalTabCloseMenuState(tabs, tabMenu.anchorSessionId)
+    return [
+      { id: 'current', label: t('terminal.tab.closeCurrent'), disabled: disabled.closeCurrentDisabled },
+      { id: 'others', label: t('terminal.tab.closeOthers'), disabled: disabled.closeOthersDisabled },
+      { id: 'right', label: t('terminal.tab.closeRight'), disabled: disabled.closeRightDisabled },
+      { id: 'left', label: t('terminal.tab.closeLeft'), disabled: disabled.closeLeftDisabled },
+      { type: 'separator', id: 'close-sep' },
+      { id: 'all', label: t('terminal.tab.closeAll'), danger: true, disabled: disabled.closeAllDisabled },
+    ]
+  }, [tabMenu, tabs, t])
 
   const activeTab = useMemo(
     () => tabs.find(tab => tab.sessionId === selectedSessionId),
@@ -446,26 +613,63 @@ export function TerminalPanel({
           {tabs.map(tab => (
             <div
               key={tab.sessionId}
+              ref={(element) => {
+                if (element === null) tabRefs.current.delete(tab.sessionId)
+                else tabRefs.current.set(tab.sessionId, element)
+              }}
               role="tab"
               aria-selected={tab.sessionId === selectedSessionId}
               className={clsx(css.tab, tab.sessionId === selectedSessionId && css.tabActive)}
               onClick={() => { actions.setSelectedSession(workspaceId, tab.sessionId) }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                setTabMenu({
+                  anchorSessionId: tab.sessionId,
+                  rect: event.currentTarget.getBoundingClientRect(),
+                })
+              }}
             >
-              <span className={css.tabTitle}>{tab.title}</span>
-              <button
-                type="button"
-                className={css.tabKill}
-                aria-label={t('terminal.tab.kill')}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  void killTab(tab.sessionId)
-                }}
-              >
-                <IconTrashOutline16 size={14} />
-              </button>
+              {renderTerminalTabTitle(tab)}
+              {tabs.length > 1 && (
+                <Tooltip
+                  label={t('terminal.tab.close', { name: terminalTabDisplayTitle(tab) })}
+                  side="bottom"
+                  delayMs={TOOLTIP_DELAY_MS}
+                >
+                  <button
+                    type="button"
+                    className={css.tabClose}
+                    aria-label={t('terminal.tab.close', { name: terminalTabDisplayTitle(tab) })}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      handleCloseTab(tab.sessionId)
+                    }}
+                  >
+                    <IconCloseOutline16 size={12} />
+                  </button>
+                </Tooltip>
+              )}
             </div>
           ))}
         </div>
+        {tabMenu !== null && (
+          <Menu
+            open
+            portal
+            compact
+            align="start"
+            side="bottom"
+            anchor={<span aria-hidden="true" />}
+            items={tabCloseMenuItems}
+            onSelect={(id) => {
+              handleCloseTabs(id as TerminalTabCloseScope, tabMenu.anchorSessionId)
+              setTabMenu(null)
+            }}
+            onClose={() => { setTabMenu(null) }}
+            getAnchorRect={() => tabMenu.rect}
+          />
+        )}
         <div className={css.tabBarActions}>
           <Menu
             open={addMenuOpen}
@@ -544,6 +748,25 @@ export function TerminalPanel({
           </>
         )}
       <span className={css.hidden}>{activeTab?.title ?? ''}</span>
+      <Modal
+        open={pendingClose !== null}
+        onClose={cancelPendingClose}
+        closeLabel={t('terminal.dialog.close')}
+        title={t('terminal.dialog.runningGuard.title')}
+        {...pendingClose === null
+          ? {}
+          : { description: t('terminal.dialog.runningGuard.desc', { names: pendingClose.runningTitles.join('、') }) }}
+        footer={(
+          <>
+            <Button variant="outline" onClick={cancelPendingClose}>
+              {t('terminal.dialog.runningGuard.cancel')}
+            </Button>
+            <Button variant="primary" onClick={confirmPendingClose}>
+              {t('terminal.dialog.runningGuard.confirm')}
+            </Button>
+          </>
+        )}
+      />
     </div>
   )
 }

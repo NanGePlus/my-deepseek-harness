@@ -256,7 +256,7 @@ describe('host.terminal.* integration seam', () => {
     const streamController = new AbortController()
     const streamPromise = collectStreamOutput(
       api.host.terminalStream(request({ workspaceId, sessionId: spawned.sessionId }), streamController.signal),
-      frames => frames.some(frame => frame.type === 'host/terminal-title' && frame.title === 'node'),
+      frames => frames.some(frame => frame.type === 'host/terminal-title' && frame.titleCommand === 'node'),
       15_000,
     )
     await new Promise(resolve => setTimeout(resolve, 500))
@@ -270,7 +270,7 @@ describe('host.terminal.* integration seam', () => {
     ))
     const frames = await streamPromise
     streamController.abort()
-    expect(frames.some(frame => frame.type === 'host/terminal-title' && frame.title === 'node')).toBe(true)
+    expect(frames.some(frame => frame.type === 'host/terminal-title' && frame.titleCommand === 'node')).toBe(true)
   })
 
   it('isolates sessions per workspace', async () => {

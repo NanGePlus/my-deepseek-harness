@@ -98,8 +98,8 @@ describe.skipIf(MODE === 'record')('web e2e: details segmented tab chrome', () =
     const editorSnapshot = await captureStableAria(page, '[data-surface="editor-surface"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(EDITOR_EXPECTED, editorSnapshot, MODE)
 
-    await page.getByRole('tab', { name: 'Git' }).click()
-    expect(await page.getByRole('tab', { name: 'Git' }).getAttribute('aria-selected')).toBe('true')
+    await page.getByRole('tab', { name: 'Git Panel' }).click()
+    expect(await page.getByRole('tab', { name: 'Git Panel' }).getAttribute('aria-selected')).toBe('true')
     expect(await page.getByRole('tab', { name: 'File editor' }).getAttribute('aria-selected')).toBe('false')
     expect(await page.getByRole('tab', { name: 'Terminal' }).getAttribute('aria-selected')).toBe('false')
     expect(await page.getByRole('tab', { name: 'Tool details' }).getAttribute('aria-selected')).toBe('false')

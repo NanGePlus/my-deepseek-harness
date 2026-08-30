@@ -1,9 +1,12 @@
 /** Imperative xterm viewport wrapper for tests and TerminalPanel. */
 
 import './xterm.css'
+import { attachXtermHostScrollReveal } from './xterm-scroll-reveal.ts'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { harnessXtermFont, harnessXtermTheme } from './xterm-theme.ts'
+import { filterXtermPtyInput } from './xterm-pty-input-filter.ts'
+import { attachXtermImeGate, collapseImeLatinSpacing, type XtermImeGate } from './xterm-ime-input.ts'
 
 /** Options for {@link createXtermViewport}. */
 export interface XtermViewportOptions {
@@ -30,10 +33,12 @@ export interface XtermViewportHandle {
   write(text: string): void
   /** Clear the screen and scrollback before a Host scrollback replay. */
   reset(): void
+  /** Gate keyboard/paste forwarding until scrollback replay finishes. */
+  setInputEnabled(enabled: boolean): void
   /** Apply a Harness theme refresh. */
   setDark(dark: boolean): void
-  /** Reflow to the host size and emit resize when dimensions change. */
-  fit(): void
+  /** Reflow to the host size, emit resize when dimensions change, and return the active size. */
+  fit(): { cols: number; rows: number } | null
   /** Release xterm resources. */
   dispose(): void
 }
@@ -49,14 +54,24 @@ export function createXtermViewport(options: XtermViewportOptions): XtermViewpor
     ...font,
     theme: harnessXtermTheme(options.dark),
     cursorBlink: true,
-    convertEol: true,
     scrollback: 5000,
+    disableStdin: true,
   })
   const fitAddon = new FitAddon()
   terminal.loadAddon(fitAddon)
-  terminal.onData(options.onInput)
+  let imeGate: XtermImeGate | undefined
+  const sendToPty = (data: string): void => {
+    const filtered = filterXtermPtyInput(data)
+    const normalized = collapseImeLatinSpacing(filtered)
+    if (normalized.length > 0) options.onInput(normalized)
+  }
+  terminal.onData((data) => {
+    if (imeGate?.isComposing() === true) return
+    sendToPty(data)
+  })
   let lastCols = 0
   let lastRows = 0
+  let scrollRevealDispose: (() => void) | undefined
   const emitResize = (): void => {
     const element = terminal.element
     if (element === undefined) return
@@ -77,18 +92,37 @@ export function createXtermViewport(options: XtermViewportOptions): XtermViewpor
   return {
     attach(host) {
       terminal.open(host)
+      imeGate?.dispose()
+      if (terminal.textarea !== undefined) {
+        imeGate = attachXtermImeGate(terminal.textarea)
+      }
+      scrollRevealDispose?.()
+      scrollRevealDispose = undefined
+      host.removeAttribute('data-dsh-scroll-reveal-active')
+      scrollRevealDispose = attachXtermHostScrollReveal(host)
     },
     write(text) {
       terminal.write(text)
     },
     reset() {
-      terminal.write('\x1bc')
+      terminal.reset()
+    },
+    setInputEnabled(enabled) {
+      terminal.options.disableStdin = !enabled
     },
     setDark(dark) {
       terminal.options.theme = harnessXtermTheme(dark)
     },
-    fit: emitResize,
+    fit() {
+      emitResize()
+      if (lastCols === 0 || lastRows === 0) return null
+      return { cols: lastCols, rows: lastRows }
+    },
     dispose() {
+      scrollRevealDispose?.()
+      scrollRevealDispose = undefined
+      imeGate?.dispose()
+      imeGate = undefined
       terminal.dispose()
     },
   }

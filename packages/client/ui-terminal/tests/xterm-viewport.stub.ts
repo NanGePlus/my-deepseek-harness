@@ -14,8 +14,9 @@ interface XtermViewportHandle {
   attach(host: HTMLElement): void
   write(text: string): void
   reset(): void
+  setInputEnabled(enabled: boolean): void
   setDark(dark: boolean): void
-  fit(): void
+  fit(): { cols: number; rows: number } | null
   dispose(): void
 }
 
@@ -23,7 +24,8 @@ export const createXtermViewport: Mock<(options: XtermViewportOptions) => XtermV
   attach: vi.fn(),
   write: vi.fn(),
   reset: vi.fn(),
+  setInputEnabled: vi.fn(),
   setDark: vi.fn(),
-  fit: vi.fn(),
+  fit: vi.fn((): { cols: number; rows: number } | null => ({ cols: 80, rows: 24 })),
   dispose: vi.fn(),
 }))

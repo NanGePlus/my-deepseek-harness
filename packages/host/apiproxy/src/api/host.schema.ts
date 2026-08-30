@@ -536,6 +536,8 @@ export const hostTerminalKillValueSchema = z.object({
 const terminalSessionSummarySchema = z.object({
   sessionId: z.string(),
   title: z.string(),
+  titlePath: z.string(),
+  titleCommand: z.string(),
   profileId: z.string(),
 })
 
@@ -559,6 +561,11 @@ export const hostTerminalStreamQuerySchema = z.object({
 export const terminalStreamFrameSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('host/terminal-scrollback'), text: z.string(), truncated: z.boolean() }),
   z.object({ type: z.literal('host/terminal-output'), text: z.string() }),
-  z.object({ type: z.literal('host/terminal-title'), title: z.string() }),
+  z.object({
+    type: z.literal('host/terminal-title'),
+    title: z.string(),
+    titlePath: z.string(),
+    titleCommand: z.string(),
+  }),
   z.object({ type: z.literal('stream/error'), error: rpcErrorSchema }),
 ])

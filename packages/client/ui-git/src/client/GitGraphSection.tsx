@@ -1,8 +1,12 @@
 /** Collapsible commit graph section, sibling of Changes. */
 
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import {
+  useCallback, useEffect, useRef, useState,
+  type KeyboardEvent, type MutableRefObject, type ReactNode,
+} from 'react'
 import {
   IconChevronDownOutline14, IconChevronRightOutline14, IconLoadingOutline16,
+  useScrollRevealScrollbar,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GitLogEntry } from '@deepseek-ai/dsh-client-runtime/client'
 import {
@@ -77,7 +81,12 @@ export function GitGraphSection({
   const [hover, setHover] = useState<HoverCardState | null>(null)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const listRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement | null>(null) as MutableRefObject<HTMLDivElement | null>
+  const { ref: scrollRevealRef, active: scrollActive } = useScrollRevealScrollbar()
+  const setListRef = useCallback((element: HTMLDivElement | null) => {
+    listRef.current = element
+    scrollRevealRef(element)
+  }, [scrollRevealRef])
   const title = t('git.section.graph')
   const toggleLabel = expanded ? t('git.section.collapse', { title }) : t('git.section.expand', { title })
   const toggleExpanded = useCallback(() => {
@@ -169,7 +178,12 @@ export function GitGraphSection({
         </div>
       </div>
       {expanded && (
-        <div id={listId} ref={listRef} className={css.graphList} aria-labelledby="git-section-graph-title">
+        <div
+          id={listId}
+          ref={setListRef}
+          className={scrollActive ? `${css.graphList} ${css.graphListActive}` : css.graphList}
+          aria-labelledby="git-section-graph-title"
+        >
           {loading && commits === null && (
             <div className={css.graphFeedback} role="status">
               {t('git.graph.loading')}

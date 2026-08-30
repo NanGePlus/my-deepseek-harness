@@ -1800,6 +1800,7 @@ function ChangesSection({
   children: ReactNode
 }) {
   const [expanded, setExpanded] = useState(true)
+  const { ref: scrollRevealRef, active: scrollActive } = useScrollRevealScrollbar()
   const title = t('git.section.changes')
   const toggleLabel = expanded ? t('git.section.collapse', { title }) : t('git.section.expand', { title })
   const toggleExpanded = useCallback(() => {
@@ -1839,7 +1840,12 @@ function ChangesSection({
         </div>
       </div>
       {expanded && (
-        <div id={bodyId} className={css.changesBody} aria-labelledby="git-section-changes-title">
+        <div
+          id={bodyId}
+          ref={scrollRevealRef}
+          className={scrollActive ? `${css.changesBody} ${css.changesBodyActive}` : css.changesBody}
+          aria-labelledby="git-section-changes-title"
+        >
           {children}
         </div>
       )}

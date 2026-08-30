@@ -9,6 +9,8 @@ import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-run
 export interface TerminalTabRow {
   sessionId: string
   title: string
+  titlePath?: string
+  titleCommand?: string
   profileId: string
 }
 
@@ -60,6 +62,8 @@ type TerminalPanelActions = {
     workspaceId: WorkspaceId,
     sessionId: string,
     title: string,
+    titlePath?: string,
+    titleCommand?: string,
   ) => void
   removeTab: (root: TerminalPanelState, workspaceId: WorkspaceId, sessionId: string) => void
   setDeferAutoSpawn: (root: TerminalPanelState, workspaceId: WorkspaceId, deferAutoSpawn: boolean) => void
@@ -131,11 +135,19 @@ export function createTerminalPanelStore(): EngineStoreHandle<TerminalPanelState
         const current = workspaceState(root, workspaceId)
         root.byWorkspace[workspaceId] = { ...current, inlineError }
       },
-      updateTabTitle: (root, workspaceId, sessionId, title) => {
+      updateTabTitle: (root, workspaceId, sessionId, title, titlePath, titleCommand) => {
         const current = workspaceState(root, workspaceId)
         root.byWorkspace[workspaceId] = {
           ...current,
-          tabs: current.tabs.map(row => (row.sessionId === sessionId ? { ...row, title } : row)),
+          tabs: current.tabs.map((row): TerminalTabRow => {
+            if (row.sessionId !== sessionId) return row
+            return {
+              ...row,
+              title,
+              ...(titlePath !== undefined ? { titlePath } : {}),
+              ...(titleCommand !== undefined ? { titleCommand } : {}),
+            }
+          }),
         }
       },
       removeTab: (root, workspaceId, sessionId) => {
