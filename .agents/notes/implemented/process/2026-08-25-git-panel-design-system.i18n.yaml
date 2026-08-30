@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-25-git-panel-design-system.md
-2026-08-25-git-panel-design-system.md: 3339af93298a536b1e8006784f9ccd711973a65e
-2026-08-25-git-panel-design-system.zh.md: f667854798f9389ffe2b4a368eaf5535b9d363ce
+2026-08-25-git-panel-design-system.md: 953cf3b97981af67532665547d310be10f0c1fa1
+2026-08-25-git-panel-design-system.zh.md: af18feac06e5dadb9ef2bf1ea8f0514e8efbf8a3

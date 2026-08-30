@@ -25,4 +25,4 @@ Git 面板 PRD「待扩展 DESIGN §5」保持为空。页面布局、空状态�
 
 ## Consequences
 
-app-shell、git-panel 与 human-terminal 的 UI 实现者引用 `DESIGN.md` §5/§6 与 PRD 页面清单。不得把 HEX 拷进功能 CSS，不得新增差异行原语，也不得为了落地某一页去改品牌板。若要新增 PRD 尚未复用的通用原语，应走 Design Issue 并写入 PRD「待扩展 DESIGN §5」。
+app-shell、git-panel、human-terminal 与 embedded-browser 的 UI 实现者引用 `DESIGN.md` §5/§6 与 PRD 页面清单。不得把 HEX 拷进功能 CSS，不得新增差异行原语，也不得为了落地某一页去改品牌板。若要新增 PRD 尚未复用的通用原语，应走 Design Issue 并写入 PRD「待扩展 DESIGN §5」。
