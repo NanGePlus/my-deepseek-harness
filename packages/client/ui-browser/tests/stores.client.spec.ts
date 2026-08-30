@@ -62,6 +62,24 @@ describe('browser panel store', () => {
     expect(browserWorkspaceState(store.getSnapshot(), WID).selectedTabId).toBe('b')
   })
 
+  it('marks external hosts once per workspace partition', () => {
+    const store = createBrowserPanelStore().create()
+    store.actions.markExternalHostSeen(WID, 'example.com')
+    store.actions.markExternalHostSeen(WID, 'example.com')
+    expect(browserWorkspaceState(store.getSnapshot(), WID).seenExternalHosts).toEqual(['example.com'])
+  })
+
+  it('stores external info and unavailable reasons per workspace', () => {
+    const store = createBrowserPanelStore().create()
+    store.actions.setExternalInfo(WID, '正在访问外部站点')
+    store.actions.setBrowserUnavailable(WID, 'Chromium 未安装')
+    store.actions.setNavError(WID, 'dns failed')
+    const state = browserWorkspaceState(store.getSnapshot(), WID)
+    expect(state.externalInfo).toBe('正在访问外部站点')
+    expect(state.browserUnavailable).toBe('Chromium 未安装')
+    expect(state.navError).toBe('dns failed')
+  })
+
   it('ignores removeTab for unknown tab ids and toggles connecting state', () => {
     const store = createBrowserPanelStore().create()
     store.actions.setWorkspaceTabs(WID, [tab()])

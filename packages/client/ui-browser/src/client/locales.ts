@@ -17,6 +17,15 @@ export type BrowserPanelKey =
   | 'browser.loading.connecting'
   | 'browser.empty.unbound.title'
   | 'browser.empty.unbound.body'
+  | 'browser.empty.unavailable.title'
+  | 'browser.empty.navFailure'
+  | 'browser.info.external'
+  | 'browser.nav.overflow'
+  | 'browser.nav.hardReload'
+  | 'browser.nav.copyUrl'
+  | 'browser.nav.zoomOut'
+  | 'browser.nav.zoomIn'
+  | 'browser.nav.zoomReset'
   | 'browser.error.retry'
   | 'browser.error.invalidUrl'
 
@@ -39,6 +48,15 @@ export const zh: Record<BrowserPanelKey, string> = {
   'browser.loading.connecting': '连接中…',
   'browser.empty.unbound.title': '无法使用浏览器',
   'browser.empty.unbound.body': '请先选择 Workspace 并开始会话。',
+  'browser.empty.unavailable.title': '浏览器不可用',
+  'browser.empty.navFailure': '无法加载此页',
+  'browser.info.external': '正在访问外部站点',
+  'browser.nav.overflow': '更多操作',
+  'browser.nav.hardReload': 'Hard Reload',
+  'browser.nav.copyUrl': 'Copy Current URL',
+  'browser.nav.zoomOut': '缩小',
+  'browser.nav.zoomIn': '放大',
+  'browser.nav.zoomReset': '重置',
   'browser.error.retry': '重试',
   'browser.error.invalidUrl': '仅支持 http:// 或 https:// 地址',
 }
@@ -62,6 +80,15 @@ export const en: Record<BrowserPanelKey, string> = {
   'browser.loading.connecting': 'Connecting…',
   'browser.empty.unbound.title': 'Browser unavailable',
   'browser.empty.unbound.body': 'Select a Workspace and start a session first.',
+  'browser.empty.unavailable.title': 'Browser unavailable',
+  'browser.empty.navFailure': 'This page could not be loaded',
+  'browser.info.external': 'Visiting an external site',
+  'browser.nav.overflow': 'More actions',
+  'browser.nav.hardReload': 'Hard Reload',
+  'browser.nav.copyUrl': 'Copy Current URL',
+  'browser.nav.zoomOut': 'Zoom out',
+  'browser.nav.zoomIn': 'Zoom in',
+  'browser.nav.zoomReset': 'Reset',
   'browser.error.retry': 'Retry',
   'browser.error.invalidUrl': 'Only http:// or https:// URLs are supported',
 }

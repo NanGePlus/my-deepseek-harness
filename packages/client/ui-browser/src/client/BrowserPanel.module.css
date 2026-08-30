@@ -50,6 +50,10 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+.emptyRetry {
+  margin-top: 4px;
+}
+
 .tabBar {
   display: flex;
   flex: none;
@@ -233,6 +237,53 @@
 
 .inlineErrorRetry:hover {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.inlineInfo {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 40%, transparent);
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.unavailableOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-base) 72%, transparent);
+}
+
+.navFailureOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  background: var(--dsw-alias-markdown-code-block);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 16px;
+  pointer-events: none;
+}
+
+.navFailureIcon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  color: var(--dsw-alias-label-caption);
 }
 
 .body {

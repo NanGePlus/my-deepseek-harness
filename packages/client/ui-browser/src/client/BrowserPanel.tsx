@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
+  Button,
   IconChevronLeftOutline14, IconChevronRightOutline14, IconCloseOutline16,
+  IconEllipsisOutline16,
   IconGlobeOutline14, IconLinkOutline16, IconLoadingOutline16, IconPlusOutline16, IconRefreshOutline16,
   Menu, type MenuEntry,
   Tooltip,
@@ -16,13 +18,18 @@ import type {
 import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { reportBrowserFailure } from './browser-failure.ts'
 import {
+  browserUrlHost, isExternalBrowserUrl, isLocalhostBrowserUrl, normalizeBrowserNavigateUrl,
+} from './browser-navigate-url.ts'
+import {
+  formatBrowserZoomLabel, isDefaultBrowserZoom, stepBrowserZoom,
+} from './browser-zoom.ts'
+import {
   browserTabCloseMenuState,
   type BrowserTabCloseScope,
   surviveTabIdAfterClose,
   tabIdsForCloseScope,
   wouldCloseEveryBrowserTab,
 } from './browser-tab-close-scope.ts'
-import { isExternalBrowserUrl, normalizeBrowserNavigateUrl } from './browser-navigate-url.ts'
 import {
   browserWorkspaceState, createBrowserPanelStore, rowsFromBrowserList,
 } from './stores.ts'
@@ -227,6 +234,18 @@ export function BrowserPanel({
   const inlineError = useStore(state => workspaceId === undefined
     ? undefined
     : browserWorkspaceState(state, workspaceId).inlineError)
+  const browserUnavailable = useStore(state => workspaceId === undefined
+    ? undefined
+    : browserWorkspaceState(state, workspaceId).browserUnavailable)
+  const navError = useStore(state => workspaceId === undefined
+    ? undefined
+    : browserWorkspaceState(state, workspaceId).navError)
+  const externalInfo = useStore(state => workspaceId === undefined
+    ? undefined
+    : browserWorkspaceState(state, workspaceId).externalInfo)
+  const seenExternalHosts = useStore(state => workspaceId === undefined
+    ? []
+    : browserWorkspaceState(state, workspaceId).seenExternalHosts)
   const deferAutoCreate = useStore(state => workspaceId === undefined
     ? false
     : browserWorkspaceState(state, workspaceId).deferAutoCreate)
@@ -242,6 +261,10 @@ export function BrowserPanel({
   const [streamAttempt, setStreamAttempt] = useState(0)
   const [navigating, setNavigating] = useState(false)
   const [tabMenu, setTabMenu] = useState<{ anchorTabId: string; rect: DOMRect } | null>(null)
+  const [overflowMenuOpen, setOverflowMenuOpen] = useState(false)
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
+  const overflowButtonRef = useRef<HTMLButtonElement>(null)
+  const navRetryRef = useRef<(() => void) | null>(null)
   const visibleRef = useRef(visible)
   visibleRef.current = visible
 
@@ -295,6 +318,24 @@ export function BrowserPanel({
     addressInputRef.current?.select()
   }, [])
 
+  const noteExternalVisit = useCallback((url: string) => {
+    /* v8 ignore next -- external-site info only runs while a bound Workspace tab is active. */
+    if (workspaceId === undefined) return
+    if (isLocalhostBrowserUrl(url)) {
+      actions.setExternalInfo(workspaceId, undefined)
+      return
+    }
+    const host = browserUrlHost(url)
+    /* v8 ignore next -- successful navigation always yields a parseable http(s) URL. */
+    if (host === undefined) return
+    if (seenExternalHosts.includes(host)) {
+      actions.setExternalInfo(workspaceId, undefined)
+      return
+    }
+    actions.markExternalHostSeen(workspaceId, host)
+    actions.setExternalInfo(workspaceId, t('browser.info.external'))
+  }, [actions, seenExternalHosts, t, workspaceId])
+
   const syncViewportSize = useCallback(async (signal?: AbortSignal) => {
     /* v8 ignore next 2 -- only runs while a bound Workspace tab is mounted. */
     if (workspaceId === undefined || selectedTabId === undefined) return
@@ -321,6 +362,7 @@ export function BrowserPanel({
       creatingRef.current = true
       actions.setCreating(workspaceId, true)
       actions.setInlineError(workspaceId, undefined)
+      actions.setBrowserUnavailable(workspaceId, undefined)
       const created = await browserCreateTab(workspaceId, DEFAULT_BROWSER_TAB_URL, ac.signal)
       /* v8 ignore next -- superseded create calls abort before settlement. */
       if (ac.signal.aborted) return
@@ -356,6 +398,7 @@ export function BrowserPanel({
     try {
       setNavigating(true)
       actions.setInlineError(workspaceId, undefined)
+      actions.setNavError(workspaceId, undefined)
       const metadata = await browserNavigate(workspaceId, selectedTabId, url, ac.signal)
       /* v8 ignore next -- superseded navigate calls abort before settlement. */
       if (ac.signal.aborted) return
@@ -367,15 +410,17 @@ export function BrowserPanel({
         metadata.canGoBack,
         metadata.canGoForward,
       )
+      noteExternalVisit(metadata.url)
     } catch (error: unknown) {
       /* v8 ignore next -- superseded navigate calls abort before settlement. */
       if (ac.signal.aborted) return
-      reportBrowserFailure(actions, workspaceId, error)
+      navRetryRef.current = () => { void handleNavigate() }
+      reportBrowserFailure(actions, workspaceId, error, 'nav')
     } finally {
       /* v8 ignore next -- aborted navigations leave navigating state to the replacement call. */
       if (!ac.signal.aborted) setNavigating(false)
     }
-  }, [actions, addressDraft, browserNavigate, selectedTabId, t, workspaceId])
+  }, [actions, addressDraft, browserNavigate, noteExternalVisit, selectedTabId, t, workspaceId])
 
   const handleSelectTab = useCallback(async (tabId: string) => {
     /* v8 ignore next -- tab rows only render after a bound Workspace bootstrap. */
@@ -443,10 +488,91 @@ export function BrowserPanel({
     requestCloseTabs(tabIds, surviveTabId)
   }, [requestCloseTabs])
 
+  const applyPageMetadata = useCallback((tabId: string, metadata: BrowserPageMetadata) => {
+    /* v8 ignore next -- metadata updates only run while a bound Workspace tab is active. */
+    if (workspaceId === undefined) return
+    actions.updateTabMetadata(
+      workspaceId,
+      tabId,
+      metadata.url,
+      metadata.title,
+      metadata.canGoBack,
+      metadata.canGoForward,
+    )
+  }, [actions, workspaceId])
+
   const openExternalBrowser = useCallback(() => {
     if (externalUrl === undefined) return
     window.open(externalUrl, '_blank', 'noopener,noreferrer')
   }, [externalUrl])
+
+  const retryNav = useCallback(() => {
+    /* v8 ignore next -- nav retry only renders while a bound Workspace tab is active. */
+    if (workspaceId === undefined) return
+    actions.setNavError(workspaceId, undefined)
+    navRetryRef.current?.()
+  }, [actions, workspaceId])
+
+  const retryUnavailable = useCallback(() => {
+    /* v8 ignore next -- unavailable retry only renders while a bound Workspace is mounted. */
+    if (workspaceId === undefined) return
+    actions.setBrowserUnavailable(workspaceId, undefined)
+    if (tabsRef.current.length === 0) {
+      setBootstrapAttempt(attempt => attempt + 1)
+    } else {
+      setStreamAttempt(attempt => attempt + 1)
+    }
+  }, [actions, workspaceId])
+
+  const copyCurrentUrl = useCallback(() => {
+    if (activeTab === undefined) return
+    void navigator.clipboard?.writeText(activeTab.url)
+    setOverflowMenuOpen(false)
+  }, [activeTab])
+
+  const hardReload = useCallback(() => {
+    /* v8 ignore next -- hard reload disables without a selected tab. */
+    if (workspaceId === undefined || selectedTabId === undefined) return
+    setOverflowMenuOpen(false)
+    setNavigating(true)
+    actions.setNavError(workspaceId, undefined)
+    void browserReload(workspaceId, selectedTabId, true).then((metadata) => {
+      applyPageMetadata(selectedTabId, metadata)
+      noteExternalVisit(metadata.url)
+    }).catch((error: unknown) => {
+      navRetryRef.current = hardReload
+      reportBrowserFailure(actions, workspaceId, error, 'nav')
+    }).finally(() => { setNavigating(false) })
+  }, [actions, applyPageMetadata, browserReload, noteExternalVisit, selectedTabId, workspaceId])
+
+  const runHistoryNav = useCallback((
+    run: () => Promise<BrowserPageMetadata>,
+  ) => {
+    /* v8 ignore next -- history nav buttons disable without a selected tab. */
+    if (workspaceId === undefined || selectedTabId === undefined) return
+    actions.setNavError(workspaceId, undefined)
+    navRetryRef.current = () => { runHistoryNav(run) }
+    void run().then((metadata) => {
+      applyPageMetadata(selectedTabId, metadata)
+      noteExternalVisit(metadata.url)
+    }).catch((error: unknown) => {
+      reportBrowserFailure(actions, workspaceId, error, 'nav')
+    })
+  }, [actions, applyPageMetadata, noteExternalVisit, selectedTabId, workspaceId])
+
+  const runSoftReload = useCallback(() => {
+    /* v8 ignore next -- reload disables without a selected tab. */
+    if (workspaceId === undefined || selectedTabId === undefined) return
+    setNavigating(true)
+    actions.setNavError(workspaceId, undefined)
+    navRetryRef.current = runSoftReload
+    void browserReload(workspaceId, selectedTabId).then((metadata) => {
+      applyPageMetadata(selectedTabId, metadata)
+      noteExternalVisit(metadata.url)
+    }).catch((error: unknown) => {
+      reportBrowserFailure(actions, workspaceId, error, 'nav')
+    }).finally(() => { setNavigating(false) })
+  }, [actions, applyPageMetadata, browserReload, noteExternalVisit, selectedTabId, workspaceId])
 
   const retryInline = useCallback(() => {
     /* v8 ignore next -- retry only renders while a bound Workspace tab is active. */
@@ -494,7 +620,7 @@ export function BrowserPanel({
     })()
     return () => { ac.abort() }
   }, [
-    actions, browserList, createBlankTab, deferAutoCreate, tabs.length, visible, workspaceId,
+    actions, browserList, bootstrapAttempt, createBlankTab, deferAutoCreate, tabs.length, visible, workspaceId,
   ])
 
   useEffect(() => {
@@ -513,7 +639,11 @@ export function BrowserPanel({
 
     browserWatchScreencast(workspaceId, selectedTabId, (frame) => {
       if (frame.type === 'stream/error') {
-        actions.setInlineError(workspaceId, frame.error.message)
+        if (frame.error.code === 'browser-unavailable') {
+          actions.setBrowserUnavailable(workspaceId, frame.error.message)
+        } else {
+          actions.setInlineError(workspaceId, frame.error.message)
+        }
         actions.setConnecting(workspaceId, false)
         return
       }
@@ -587,18 +717,52 @@ export function BrowserPanel({
     ]
   }, [tabMenu, tabs, t])
 
-  const applyPageMetadata = useCallback((tabId: string, metadata: BrowserPageMetadata) => {
-    /* v8 ignore next -- metadata updates only run while a bound Workspace tab is active. */
+  const overflowItems = useMemo((): readonly MenuEntry[] => [
+    {
+      id: 'hard-reload',
+      label: t('browser.nav.hardReload'),
+      disabled: selectedTabId === undefined || browserUnavailable !== undefined,
+    },
+    {
+      id: 'copy-url',
+      label: t('browser.nav.copyUrl'),
+      disabled: externalUrl === undefined,
+    },
+  ], [browserUnavailable, externalUrl, selectedTabId, t])
+
+  const overflowFooter = useMemo((): readonly MenuEntry[] => [
+    { type: 'label', id: 'zoom-label', text: 'Zoom' },
+    { id: 'zoom-out', label: '−', disabled: stepBrowserZoom(zoom, -1) === zoom },
+    { type: 'label', id: 'zoom-value', text: formatBrowserZoomLabel(zoom) },
+    { id: 'zoom-in', label: '+', disabled: stepBrowserZoom(zoom, 1) === zoom },
+    {
+      id: 'zoom-reset',
+      label: t('browser.nav.zoomReset'),
+      disabled: isDefaultBrowserZoom(zoom),
+    },
+  ], [t, zoom])
+
+  const handleOverflowSelect = useCallback((id: string) => {
+    if (id === 'hard-reload') {
+      hardReload()
+      return
+    }
+    if (id === 'copy-url') {
+      copyCurrentUrl()
+      return
+    }
+    /* v8 ignore next -- zoom controls only render while a bound Workspace is mounted. */
     if (workspaceId === undefined) return
-    actions.updateTabMetadata(
-      workspaceId,
-      tabId,
-      metadata.url,
-      metadata.title,
-      metadata.canGoBack,
-      metadata.canGoForward,
-    )
-  }, [actions, workspaceId])
+    if (id === 'zoom-out') {
+      actions.setZoom(workspaceId, stepBrowserZoom(zoom, -1))
+      return
+    }
+    if (id === 'zoom-in') {
+      actions.setZoom(workspaceId, stepBrowserZoom(zoom, 1))
+      return
+    }
+    if (id === 'zoom-reset') actions.setZoom(workspaceId, 1)
+  }, [actions, copyCurrentUrl, hardReload, workspaceId, zoom])
 
   if (workspaceId === undefined) {
     return (
@@ -610,6 +774,25 @@ export function BrowserPanel({
             </span>
             <div className={css.emptyTitle}>{t('browser.empty.unbound.title')}</div>
             <div className={css.emptyBody}>{t('browser.empty.unbound.body')}</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (browserUnavailable !== undefined && tabs.length === 0) {
+    return (
+      <div className={css.root} data-surface="embedded-browser">
+        <div className={css.overlay}>
+          <div className={css.emptyCard}>
+            <span className={css.emptyIcon} aria-hidden="true">
+              <IconGlobeOutline14 size={48} />
+            </span>
+            <div className={css.emptyTitle}>{t('browser.empty.unavailable.title')}</div>
+            <div className={css.emptyBody}>{browserUnavailable}</div>
+            <Button variant="primary" size="sm" className={css.emptyRetry} onClick={retryUnavailable}>
+              {t('browser.error.retry')}
+            </Button>
           </div>
         </div>
       </div>
@@ -694,11 +877,7 @@ export function BrowserPanel({
             onClick={() => {
               /* v8 ignore next -- nav buttons disable without a selected tab. */
               if (workspaceId === undefined || selectedTabId === undefined) return
-              void browserGoBack(workspaceId, selectedTabId).then((metadata) => {
-                applyPageMetadata(selectedTabId, metadata)
-              }).catch((error: unknown) => {
-                reportBrowserFailure(actions, workspaceId, error)
-              })
+              runHistoryNav(() => browserGoBack(workspaceId, selectedTabId))
             }}
           >
             <IconChevronLeftOutline14 size={14} />
@@ -713,11 +892,7 @@ export function BrowserPanel({
             onClick={() => {
               /* v8 ignore next -- nav buttons disable without a selected tab. */
               if (workspaceId === undefined || selectedTabId === undefined) return
-              void browserGoForward(workspaceId, selectedTabId).then((metadata) => {
-                applyPageMetadata(selectedTabId, metadata)
-              }).catch((error: unknown) => {
-                reportBrowserFailure(actions, workspaceId, error)
-              })
+              runHistoryNav(() => browserGoForward(workspaceId, selectedTabId))
             }}
           >
             <IconChevronRightOutline14 size={14} />
@@ -729,16 +904,7 @@ export function BrowserPanel({
             className={css.navButton}
             aria-label={t('browser.nav.reload')}
             disabled={selectedTabId === undefined || navigating}
-            onClick={() => {
-              /* v8 ignore next -- reload disables without a selected tab. */
-              if (workspaceId === undefined || selectedTabId === undefined) return
-              setNavigating(true)
-              void browserReload(workspaceId, selectedTabId).then((metadata) => {
-                applyPageMetadata(selectedTabId, metadata)
-              }).catch((error: unknown) => {
-                reportBrowserFailure(actions, workspaceId, error)
-              }).finally(() => { setNavigating(false) })
-            }}
+            onClick={() => { runSoftReload() }}
           >
             <span className={navigating ? css.spinner : undefined} aria-hidden="true">
               <IconRefreshOutline16 size={14} />
@@ -770,7 +936,46 @@ export function BrowserPanel({
             <IconLinkOutline16 size={14} />
           </button>
         </Tooltip>
+        <Menu
+          open={overflowMenuOpen}
+          portal
+          compact
+          align="end"
+          anchor={(
+            <Tooltip label={t('browser.nav.overflow')} delayMs={500}>
+              <button
+                ref={overflowButtonRef}
+                type="button"
+                className={css.navButton}
+                aria-label={t('browser.nav.overflow')}
+                aria-haspopup="menu"
+                aria-expanded={overflowMenuOpen}
+                onClick={() => { setOverflowMenuOpen(open => !open) }}
+              >
+                <IconEllipsisOutline16 size={14} />
+              </button>
+            </Tooltip>
+          )}
+          items={overflowItems}
+          footer={overflowFooter}
+          onSelect={handleOverflowSelect}
+          onClose={() => { setOverflowMenuOpen(false) }}
+          getAnchorRect={() => overflowButtonRef.current?.getBoundingClientRect() ?? null}
+        />
       </div>
+      {externalInfo !== undefined && (
+        <div className={css.inlineInfo} role="status">
+          {externalInfo}
+        </div>
+      )}
+      {navError !== undefined && (
+        <div className={css.inlineError} role="alert">
+          <span className={css.inlineErrorMessage}>{navError}</span>
+          <button type="button" className={css.inlineErrorRetry} onClick={retryNav}>
+            {t('browser.error.retry')}
+          </button>
+        </div>
+      )}
       {inlineError !== undefined && (
         <div className={css.inlineError} role="alert">
           <span className={css.inlineErrorMessage}>{inlineError}</span>
@@ -787,6 +992,28 @@ export function BrowserPanel({
           aria-label={t('browser.screencast.aria')}
           aria-busy={showLoading}
         />
+        {browserUnavailable !== undefined && (
+          <div className={css.unavailableOverlay}>
+            <div className={css.emptyCard}>
+              <span className={css.emptyIcon} aria-hidden="true">
+                <IconGlobeOutline14 size={48} />
+              </span>
+              <div className={css.emptyTitle}>{t('browser.empty.unavailable.title')}</div>
+              <div className={css.emptyBody}>{browserUnavailable}</div>
+              <Button variant="primary" size="sm" className={css.emptyRetry} onClick={retryUnavailable}>
+                {t('browser.error.retry')}
+              </Button>
+            </div>
+          </div>
+        )}
+        {navError !== undefined && browserUnavailable === undefined && (
+          <div className={css.navFailureOverlay} role="alert">
+            <span className={css.navFailureIcon} aria-hidden="true">
+              <IconGlobeOutline14 size={48} />
+            </span>
+            <div>{t('browser.empty.navFailure')}</div>
+          </div>
+        )}
         {showLoading
           ? (
             <div className={css.loadingOverlay}>

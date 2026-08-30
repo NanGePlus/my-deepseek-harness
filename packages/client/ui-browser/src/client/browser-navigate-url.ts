@@ -42,3 +42,31 @@ export function isExternalBrowserUrl(url: string): boolean {
     return false
   }
 }
+
+/**
+ * True when the URL host is localhost-like and does not warrant an external-site banner.
+ * @param url - live tab URL.
+ */
+export function isLocalhostBrowserUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return true
+    const host = parsed.hostname.toLowerCase()
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1'
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Return the URL host when parseable, otherwise undefined.
+ * @param url - live tab URL.
+ */
+export function browserUrlHost(url: string): string | undefined {
+  try {
+    const host = new URL(url).hostname.toLowerCase()
+    return host === '' ? undefined : host
+  } catch {
+    return undefined
+  }
+}
