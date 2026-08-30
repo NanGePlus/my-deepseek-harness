@@ -84,6 +84,7 @@ type BrowserPanelActions = {
   removeTab: (root: BrowserPanelState, workspaceId: WorkspaceId, tabId: string) => void
   setDeferAutoCreate: (root: BrowserPanelState, workspaceId: WorkspaceId, deferAutoCreate: boolean) => void
   setZoom: (root: BrowserPanelState, workspaceId: WorkspaceId, zoom: number) => void
+  clearTransientState: (root: BrowserPanelState, workspaceId: WorkspaceId) => void
 }
 
 /** Default Client zoom ratio for screencast display. */
@@ -118,6 +119,7 @@ function workspaceState(root: BrowserPanelState, workspaceId: WorkspaceId): Brow
 export function createBrowserPanelStore(): EngineStoreHandle<BrowserPanelState, BrowserPanelActions> {
   return defineStore({
     init: (): BrowserPanelState => ({ byWorkspace: {} }),
+    persist: 'dsh.browser.panel.v1',
     actions: {
       setWorkspaceTabs: (root, workspaceId, tabs, selectedTabId) => {
         const current = workspaceState(root, workspaceId)
@@ -208,6 +210,18 @@ export function createBrowserPanelStore(): EngineStoreHandle<BrowserPanelState, 
       setZoom: (root, workspaceId, zoom) => {
         const current = workspaceState(root, workspaceId)
         root.byWorkspace[workspaceId] = { ...current, zoom }
+      },
+      clearTransientState: (root, workspaceId) => {
+        const current = workspaceState(root, workspaceId)
+        root.byWorkspace[workspaceId] = {
+          ...current,
+          connecting: false,
+          creating: false,
+          inlineError: undefined,
+          browserUnavailable: undefined,
+          navError: undefined,
+          externalInfo: undefined,
+        }
       },
     },
   })

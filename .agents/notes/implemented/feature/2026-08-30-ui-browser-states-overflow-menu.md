@@ -17,4 +17,4 @@ Issue #98 completes the embedded-browser state variants and navigation overflow 
 
 ## Consequences
 
-Issue #99 owns segment hide/resume SSE polish and hard-refresh reconnect; zoom persistence already lives in the store from #96. UI tests in `browser-panel.client.spec.tsx` cover the four States-matrix rows for #98.
+Issue #99 shipped segment hide/resume SSE, hard-refresh reconnect, and Hard Reload loading semantics; zoom persistence uses `dsh.browser.panel.v1`.
