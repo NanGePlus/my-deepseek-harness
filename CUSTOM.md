@@ -82,6 +82,11 @@
 - 多 Tab 横向滚动、树切换时保持可用；**编辑区 scroll-reveal 滚动条**（Monaco / Markdown 预览 / textarea fallback：默认隐藏、滚动时显示，圆角 pill 与会话区一致）
 - 未打开文件**空状态**：设计系统图标 + 与文件树一致的轻量排版
 
+### Agent browser 工具（`@deepseek-ai/dsh-tool-browser`，Issue #100）
+- 注册 `browser_navigate` / `browser_snapshot` / `browser_click` / `browser_type` / `browser_scroll` / `browser_select_option` / `browser_tabs`；经 `host.browser*` 与人类 UI 共用 Workspace Tab
+- 每次 Agent 调用写入 Session 日志；`browser_snapshot` 对话区 **terminal** 卡（可折叠 accessibility 树；`snapshotMaxBytes` 截断 + 部署 spill 策略溢出至工具详情）
+- Host `browser-unavailable` / `workspace-not-found` 等错误与 UI 一致的用户可见文案；V4 范围外能力（截图菜单、清 Cookie 等）未注册
+
 ### Markdown / 预览增强（PR #37–38，`ui-primitives` 等）
 - Mermaid 代码块渲染 + **可缩放 lightbox**
 - Markdown / 图片 **ZoomPanLightbox**（与会话消息区共用组件）
@@ -99,7 +104,8 @@
 | `@deepseek-ai/dsh-client-ui-file-editor` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-file-editor` | 工具箱内文件编辑器 surface | 2026-08 |
 | `@deepseek-ai/dsh-client-ui-git` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-git` | 工具箱 Git 面板：仓库绑定、两段列表、空态、刷新与初始化；整文件暂存 / 取消暂存 / 丢弃（须确认）/ 提交；提交说明草稿按 Session；单击行在面板内差异预览；单击 Graph 提交在右栏只读多文件差异（文件头默认折叠；不自动打开最新提交）；已跟踪文本可按块暂存 / 取消暂存 / 丢弃；Git 操作守卫拦住 dirty 路径的暂存 / 丢弃 / 提交，取消暂存不受限；无 remote 时可添加 `origin` | 2026-08 |
 | `@deepseek-ai/dsh-client-ui-terminal` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-terminal` | 工具箱 **终端** 段：Workspace 级 Tab store、自动 spawn、多 Tab + Shell 下拉 + Kill、xterm 画布、未绑定空态、Host **终端不可用** 卡片 + inline 错误 + 重试、spawn 中禁用 `+`、SSE 连接 loading；切走段保持 SSE（不 Kill PTY）；硬刷新 `list` 恢复 Tab 栏并重连 scrollback→live；按 Workspace 切换 Session 展示对应 Tab 集 | 2026-08 |
-| `@deepseek-ai/dsh-lsp-editor` | Host 面新包 + apiproxy 接线 | 编辑器 LSP 文档 sync / hover / close | 2026-08 |
+| `@deepseek-ai/dsh-client-ui-browser` | `packages/bundle/web-app/cordis.patch.yml` 行 `ui-browser` | 工具箱 **浏览器** 段：Workspace Tab store + Client Zoom；screencast + 导航 + 多 Tab + 空态/不可用（见 ui-browser 行） | 2026-08 |
+| `@deepseek-ai/dsh-tool-browser` | Web agent preset（`standard` / `code` / `cordis`）行 `tool-browser` | Agent `browser_navigate` / `browser_snapshot` / `browser_click` / `browser_type` / `browser_scroll` / `browser_select_option` / `browser_tabs`；经 `host.browser*` 与人类 UI 共用 Tab；`browser_snapshot` 为 terminal 卡 + spill | 2026-08 |
 
 ## 我改过的官方文件（尽量为空）
 | 文件/目录 | 改了什么 | 日期 |
@@ -121,7 +127,9 @@
 | `packages/client/ui-layout/` | 工具箱栏宽度 / AppFrame 微调 | 2026-08 |
 | `packages/lsp/lsp-editor/` | **新包**：编辑器 LSP 类型与接线 | 2026-08 |
 | `packages/lsp/lsp-stdio/` | 编辑器实例诊断推送 | 2026-08 |
-| `packages/bundle/web-app/cordis.patch.yml` | 注册 ui-file-editor、ui-git、ui-terminal 与 LSP 相关插件 | 2026-08 |
+| `packages/browser/tool-browser/` | **新包**（#100）：Agent `browser_*` 工具 Consumer；`host.browser*` 桥接 + terminal/generic render intent | 2026-08 |
+| `apps/cli/config/agent-presets/*/agent.cordis.yml` | **2026-08-30** 注册 `tool-browser` | 2026-08 |
+| `apps/cli/package.json`、`packages/bundle/web-app/package.json` | **2026-08-30** 声明 `@deepseek-ai/dsh-tool-browser` 依赖 | 2026-08 |
 | `tsconfig.base.json` | 为 `ui-file-editor` / `ui-git` / `ui-terminal` 增加 source-plane `paths`（tsx 启动不依赖 built `lib/`） | 2026-08 |
 | `apps/web/` | Vite 构建含 Monaco workers / material icons 同步；**2026-08-29** 浏览器快照 `terminal-default.expected.md` 与 shell profile 名 `{{shell-profile}}` 归一化；**2026-08-30** #95 五段 Tab 快照 `tabs.expected.md` / `browser-selected.expected.md` | 2026-08 |
 | `CONTEXT.md`、`docs/adr/0001–0002`、`docs/prd/file-editor-v1.md` | 文件编辑器 V1 领域与 PRD | 2026-08 |
@@ -175,11 +183,12 @@
 | `issue/97-ui-browser-tabs-nav` | [#97](https://github.com/NanGePlus/my-deepseek-harness/issues/97) `ui-browser`：多 Tab + 导航顶栏 | 已合并入 `custom/main` |
 | `issue/98-ui-browser-states-menu` | [#98](https://github.com/NanGePlus/my-deepseek-harness/issues/98) `ui-browser`：不可用 + 错误 + 溢出菜单 | 已合并入 `custom/main` |
 | `issue/99-ui-browser-lifecycle` | [#99](https://github.com/NanGePlus/my-deepseek-harness/issues/99) `ui-browser`：SSE 生命周期 + Zoom + viewport | 进行中 |
-| `issue/100-tool-browser` | [#100](https://github.com/NanGePlus/my-deepseek-harness/issues/100) `tool-browser`：Agent `browser_*` 工具 | 待领取 |
+| `issue/100-tool-browser` | [#100](https://github.com/NanGePlus/my-deepseek-harness/issues/100) `tool-browser`：Agent `browser_*` 工具 | 进行中 |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-08-30 | 从最新 `origin/custom/main` 创建分支 `issue/100-tool-browser` | Issue [#100](https://github.com/NanGePlus/my-deepseek-harness/issues/100)：`@deepseek-ai/dsh-tool-browser` Agent `browser_*` 工具 + Session 日志 + preset 注册 |
 | 2026-08-30 | 从最新 `origin/custom/main` 创建分支 `issue/99-ui-browser-lifecycle` | Issue [#99](https://github.com/NanGePlus/my-deepseek-harness/issues/99)：切走暂停 SSE + 硬刷新 list 重连 + Zoom 不改 Host viewport + Hard Reload 不 dim |
 | 2026-08-30 | 从最新 `origin/custom/main` 创建分支 `issue/98-ui-browser-states-menu` | Issue [#98](https://github.com/NanGePlus/my-deepseek-harness/issues/98)：浏览器不可用卡片 + 导航错误 + 外部站点 inline info + 溢出菜单（Hard Reload / Copy URL / Zoom） |
 | 2026-08-30 | 从最新 `origin/custom/main` 创建分支 `issue/97-ui-browser-tabs-nav` | Issue [#97](https://github.com/NanGePlus/my-deepseek-harness/issues/97)：Tab 右键批量关闭、导航历史 disabled、外部打开、http(s) 地址栏；Host `BrowserPageMetadata` / list 增 `canGoBack` / `canGoForward` |

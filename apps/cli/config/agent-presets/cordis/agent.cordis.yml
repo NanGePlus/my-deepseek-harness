@@ -238,6 +238,9 @@
     fetch: false
     searchTimeoutMs: 60000
 
+- id: tool-browser
+  name: '@deepseek-ai/dsh-tool-browser'
+
 # ── self-modification ───────────────────────────────────────────────────────
 
 # Read the live runtime, mount a temporary plugin, unmount it. The toolset is a
