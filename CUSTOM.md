@@ -227,11 +227,12 @@
 | `issue/119-ui-browser-desktop-occupant` | [#119](https://github.com/NanGePlus/my-deepseek-harness/issues/119) ui-browser 桌面 occupant | 已合并入 `custom/main`（PR [#130](https://github.com/NanGePlus/my-deepseek-harness/pull/130)）；分支保留 |
 | `issue/120-electron-builder` | [#120](https://github.com/NanGePlus/my-deepseek-harness/issues/120) electron-builder + Chromium 捆绑 | 待领取 |
 | `issue/121-desktop-app-shell` | [#121](https://github.com/NanGePlus/my-deepseek-harness/issues/121) `[desktop] app-shell` | 已合并入 `custom/main`（PR [#132](https://github.com/NanGePlus/my-deepseek-harness/pull/132)）；分支保留 |
-| `issue/122-desktop-embedded-browser` | [#122](https://github.com/NanGePlus/my-deepseek-harness/issues/122) `[desktop] embedded-browser` | 进行中 |
+| `issue/122-desktop-embedded-browser` | [#122](https://github.com/NanGePlus/my-deepseek-harness/issues/122) `[desktop] embedded-browser` | 已合并入 `custom/main`（PR [#133](https://github.com/NanGePlus/my-deepseek-harness/pull/133)）；分支保留 |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-08-31 | 分支 `issue/122-desktop-embedded-browser` 合并入 `custom/main` | PR [#133](https://github.com/NanGePlus/my-deepseek-harness/pull/133)；Closes [#122](https://github.com/NanGePlus/my-deepseek-harness/issues/122)；分支保留 |
 | 2026-08-31 | 分支 `issue/122-desktop-embedded-browser`：Issue [#122](https://github.com/NanGePlus/my-deepseek-harness/issues/122) embedded-browser UI States 矩阵 | 自 `origin/custom/main`；桌面 loading「正在准备浏览器…」；15 项 desktop seam 测试全绿 |
 | 2026-08-31 | 分支 `issue/121-desktop-app-shell` 合并入 `custom/main` | PR [#132](https://github.com/NanGePlus/my-deepseek-harness/pull/132)；Closes [#121](https://github.com/NanGePlus/my-deepseek-harness/issues/121)；分支保留 |
 | 2026-08-31 | 分支 `issue/121-desktop-app-shell`：Issue [#121](https://github.com/NanGePlus/my-deepseek-harness/issues/121) desktop app-shell 集成验收 | 自 `origin/custom/main`；`spa-index` 提取；app-shell / exit-guard / boot-host / settings-focus / parity seam 测试全绿 |
