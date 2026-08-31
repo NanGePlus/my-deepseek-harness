@@ -22,7 +22,7 @@ describe('browser failure helpers', () => {
     expect(isBrowserTabNotFoundError(new DirectoryBrowseError({
       code: 'browser-tab-not-found',
       message: 'browser tab not found: stale-1',
-      details: { tabId: 'stale-1' },
+      details: { workspaceId: 'ws1', tabId: 'stale-1' },
     }))).toBe(true)
     expect(isBrowserTabNotFoundError(new Error('browser tab not found: stale-1'))).toBe(false)
   })

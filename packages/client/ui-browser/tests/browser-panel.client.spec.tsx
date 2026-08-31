@@ -295,9 +295,9 @@ describe('BrowserPanel', () => {
         ],
       }
     })
-    const browserCreateTab = vi.fn(async (_workspaceId: WorkspaceId, url: string) => {
+    const browserCreateTab = vi.fn(async (_workspaceId: WorkspaceId, url?: string) => {
       const tabId = `new-${String(created.length + 1)}`
-      created.push({ tabId, url })
+      created.push({ tabId, url: url ?? DEFAULT_BROWSER_TAB_URL })
       return { tabId }
     })
     mount({ browserList, browserCreateTab })
@@ -403,7 +403,7 @@ describe('BrowserPanel', () => {
     const browseError = new DirectoryBrowseError({
       code: 'browser-tab-not-found',
       message: 'gone',
-      details: {},
+      details: { workspaceId: WID, tabId: 'live-1' },
     })
     const { browserCloseTab, browserSelectTab } = mount({
       browserList: vi.fn(async () => ({

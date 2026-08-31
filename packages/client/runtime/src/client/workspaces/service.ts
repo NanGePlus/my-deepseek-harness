@@ -914,7 +914,14 @@ export class WorkspaceRuntime implements IWorkspaces {
     y?: number,
     signal?: AbortSignal,
   ): Promise<{ scrolled: true }> {
-    const response = await this.api.host.browserScroll({ workspaceId, tabId, deltaX, deltaY, x, y }, signal)
+    const response = await this.api.host.browserScroll({
+      workspaceId,
+      tabId,
+      deltaX,
+      deltaY,
+      ...(x === undefined ? {} : { x }),
+      ...(y === undefined ? {} : { y }),
+    }, signal)
     if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
     return response.result.value
   }
