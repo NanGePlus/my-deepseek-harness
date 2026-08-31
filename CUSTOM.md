@@ -226,12 +226,13 @@
 | `issue/118-browser-registry-cdp` | [#118](https://github.com/NanGePlus/my-deepseek-harness/issues/118) BrowserRegistry 桌面 CDP + bounds IPC | 已合并入 `custom/main`（PR [#129](https://github.com/NanGePlus/my-deepseek-harness/pull/129)）；分支保留 |
 | `issue/119-ui-browser-desktop-occupant` | [#119](https://github.com/NanGePlus/my-deepseek-harness/issues/119) ui-browser 桌面 occupant | 已合并入 `custom/main`（PR [#130](https://github.com/NanGePlus/my-deepseek-harness/pull/130)）；分支保留 |
 | `issue/120-electron-builder` | [#120](https://github.com/NanGePlus/my-deepseek-harness/issues/120) electron-builder + Chromium 捆绑 | 待领取 |
-| `issue/121-desktop-app-shell` | [#121](https://github.com/NanGePlus/my-deepseek-harness/issues/121) `[desktop] app-shell` | 进行中 |
+| `issue/121-desktop-app-shell` | [#121](https://github.com/NanGePlus/my-deepseek-harness/issues/121) `[desktop] app-shell` | 已合并入 `custom/main`（PR [#132](https://github.com/NanGePlus/my-deepseek-harness/pull/132)）；分支保留 |
 | `issue/122-desktop-embedded-browser` | [#122](https://github.com/NanGePlus/my-deepseek-harness/issues/122) `[desktop] embedded-browser` | 待领取 |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-08-31 | 分支 `issue/121-desktop-app-shell` 合并入 `custom/main` | PR [#132](https://github.com/NanGePlus/my-deepseek-harness/pull/132)；Closes [#121](https://github.com/NanGePlus/my-deepseek-harness/issues/121)；分支保留 |
 | 2026-08-31 | 分支 `issue/121-desktop-app-shell`：Issue [#121](https://github.com/NanGePlus/my-deepseek-harness/issues/121) desktop app-shell 集成验收 | 自 `origin/custom/main`；`spa-index` 提取；app-shell / exit-guard / boot-host / settings-focus / parity seam 测试全绿 |
 | 2026-08-31 | 分支 `issue/119-ui-browser-desktop-occupant` 合并入 `custom/main` | PR [#130](https://github.com/NanGePlus/my-deepseek-harness/pull/130)；Closes [#119](https://github.com/NanGePlus/my-deepseek-harness/issues/119)；分支保留 |
 | 2026-08-31 | 分支 `issue/119-ui-browser-desktop-occupant`：Issue [#119](https://github.com/NanGePlus/my-deepseek-harness/issues/119) ui-browser 桌面 occupant | `#browser-occupant` + bounds IPC；桌面移除「显示窗口」；8 项 seam 测试全绿 |
