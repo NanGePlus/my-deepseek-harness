@@ -17,8 +17,11 @@ import {
   screen,
 } from 'electron'
 import type { ApiProxy } from '@deepseek-ai/dsh-host-apiproxy/api'
+import { setDesktopBrowserSurface } from '@deepseek-ai/dsh-host-apiproxy'
 import { resolveDesktopAppIconPath } from './app-icon.ts'
 import { buildApplicationMenuTemplate } from './app-menu.ts'
+import { registerBrowserBoundsIpc } from './browser-bounds-ipc.ts'
+import { DesktopBrowserViewManager } from './browser-view-manager.ts'
 import { composeDesktopBootGraph } from './boot-graph.ts'
 import { createExitGuardCoordinator } from './exit-guard.ts'
 import { DesktopHostController } from './host-boot.ts'
@@ -45,6 +48,11 @@ import { loadWindowBounds, saveWindowBounds } from './window-bounds.ts'
 
 const repoRoot = fileURLToPath(new URL('../../..', import.meta.url))
 const bootGraphFile = join(repoRoot, '.sessions/desktop-boot-graph.json')
+const DESKTOP_CDP_PORT = Number(process.env.DSH_DESKTOP_CDP_PORT ?? 9222)
+
+if (!shouldSkipHostBoot()) {
+  app.commandLine.appendSwitch('remote-debugging-port', String(DESKTOP_CDP_PORT))
+}
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -58,11 +66,16 @@ let mainWindow: BrowserWindow | undefined
 let bootGraph: ReturnType<typeof composeDesktopBootGraph> | undefined
 let lastHostBootError: string | undefined
 let disposeIpcBridge: (() => void) | undefined
+let disposeBrowserBoundsIpc: (() => void) | undefined
+let browserViewManager: DesktopBrowserViewManager | undefined
 let quitting = false
 const exitGuard = createExitGuardCoordinator({
   sendExitRequest: () => { mainWindow?.webContents.send(IPC_EXIT_REQUEST) },
   teardownHost: () => {
     disposeIpcBridge?.()
+    disposeBrowserBoundsIpc?.()
+    browserViewManager?.destroy()
+    browserViewManager = undefined
     void hostController.teardown()
   },
   isAttachMode: () => shouldSkipHostBoot(),
@@ -92,8 +105,22 @@ function writeDevBootGraph(): void {
   writeFileSync(bootGraphFile, `${JSON.stringify(bootGraph.graph, null, 2)}\n`)
 }
 
+function ensureBrowserViewManager(): DesktopBrowserViewManager {
+  browserViewManager ??= new DesktopBrowserViewManager(() => mainWindow, DESKTOP_CDP_PORT)
+  return browserViewManager
+}
+
+function wireDesktopBrowserSurface(): void {
+  if (shouldSkipHostBoot()) return
+  const manager = ensureBrowserViewManager()
+  setDesktopBrowserSurface(manager)
+  disposeBrowserBoundsIpc?.()
+  disposeBrowserBoundsIpc = registerBrowserBoundsIpc(manager)
+}
+
 async function bootIntegratedHost(): Promise<void> {
   if (shouldSkipHostBoot()) return
+  wireDesktopBrowserSurface()
   try {
     await hostController.boot()
     lastHostBootError = undefined

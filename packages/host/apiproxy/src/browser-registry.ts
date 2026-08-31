@@ -5,9 +5,14 @@
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { chromium, type BrowserContext, type CDPSession, type Page } from 'playwright'
+import { chromium, type Browser, type BrowserContext, type CDPSession, type Page } from 'playwright'
 import type { WorkspaceId } from './api/workspace.ts'
 import type { BrowserScreencastFrame } from './api/host.ts'
+import {
+  type BrowserDelivery,
+  type DesktopBrowserSurface,
+  requireDesktopBrowserSurface,
+} from './browser-delivery.ts'
 import {
   APPLY_SCROLL_AT_POINT, DISPATCH_FOCUSED_INPUT, FOCUS_EDITABLE_AT_POINT, READ_CSS_CURSOR_AT_POINT,
   asPageFunction,
@@ -93,7 +98,12 @@ export class BrowserTabNotFoundError extends Error {
 export interface BrowserRegistryInternals {
   profilesRoot?: string
   launchPersistentContext?: typeof chromium.launchPersistentContext
+  connectOverCDP?: typeof chromium.connectOverCDP
   chromiumExecutablePath?: () => string
+  /** Browser delivery shape; web keeps the headed Playwright OS window. */
+  delivery?: BrowserDelivery
+  /** Desktop BrowserView surface; required when {@link delivery} is `desktop`. */
+  desktopSurface?: DesktopBrowserSurface
   /** When true, Chromium stays headless. Product default is a visible window. */
   headless?: boolean
 }
@@ -112,7 +122,7 @@ interface LiveTab {
 }
 
 interface WorkspaceBrowser {
-  context: BrowserContext
+  context?: BrowserContext
   tabs: Map<string, LiveTab>
   selectedTabId: string | undefined
   devicePixelRatio: number
@@ -132,8 +142,12 @@ export class BrowserRegistry {
   private readonly recreating = new Map<WorkspaceId, Promise<WorkspaceBrowser>>()
   private readonly profilesRoot: string
   private readonly launchPersistentContext: typeof chromium.launchPersistentContext
+  private readonly connectOverCDP: typeof chromium.connectOverCDP
   private readonly chromiumExecutablePath: () => string
+  private readonly delivery: BrowserDelivery
+  private readonly desktopSurface: DesktopBrowserSurface | undefined
   private readonly headless: boolean
+  private desktopBrowser: Browser | undefined
 
   /**
    * @param cwd - Host project directory; profiles live under `.sessions/browser-profiles/`.
@@ -142,7 +156,10 @@ export class BrowserRegistry {
   constructor(cwd: string, internals: BrowserRegistryInternals = {}) {
     this.profilesRoot = internals.profilesRoot ?? join(cwd, '.sessions', 'browser-profiles')
     this.launchPersistentContext = internals.launchPersistentContext ?? chromium.launchPersistentContext.bind(chromium)
+    this.connectOverCDP = internals.connectOverCDP ?? chromium.connectOverCDP.bind(chromium)
     this.chromiumExecutablePath = internals.chromiumExecutablePath ?? (() => chromium.executablePath())
+    this.delivery = internals.delivery ?? 'web'
+    this.desktopSurface = internals.desktopSurface
     this.headless = internals.headless ?? false
   }
 
@@ -169,15 +186,30 @@ export class BrowserRegistry {
    * @param url - initial document URL; defaults to `about:blank`.
    */
   async createTab(workspaceId: WorkspaceId, url = 'about:blank'): Promise<BrowserCreateTabResult> {
+    if (this.delivery === 'desktop') {
+      const workspace = await this.ensureWorkspace(workspaceId)
+      const surface = this.desktopSurface ?? requireDesktopBrowserSurface()
+      const tabId = randomUUID()
+      await surface.ensureTab(workspaceId, tabId, url)
+      const page = await surface.pageForTab(workspaceId, tabId)
+      if (url !== 'about:blank') {
+        await page.goto(url, { waitUntil: 'domcontentloaded' })
+      }
+      const tab = this.trackTab(workspace, tabId, page)
+      workspace.selectedTabId = tabId
+      await this.syncTabMetadata(tab)
+      return { tabId }
+    }
+
     let workspace = await this.ensureWorkspace(workspaceId)
     let page: Page
     try {
-      page = await workspace.context.newPage()
+      page = await this.requireContext(workspace).newPage()
     } catch (error: unknown) {
       if (!isTargetClosedError(error)) throw error
       this.forgetWorkspace(workspaceId, workspace)
       workspace = await this.launchWorkspace(workspaceId, workspace.devicePixelRatio)
-      page = await workspace.context.newPage()
+      page = await this.requireContext(workspace).newPage()
     }
     const tabId = randomUUID()
     if (url !== 'about:blank') {
@@ -236,6 +268,11 @@ export class BrowserRegistry {
     const workspace = this.requireWorkspace(workspaceId)
     const tab = this.requireTab(workspace, tabId)
     workspace.selectedTabId = tabId
+    if (this.delivery === 'desktop') {
+      const surface = this.desktopSurface ?? requireDesktopBrowserSurface()
+      await surface.selectTab?.(workspaceId, tabId)
+      return { shown: true }
+    }
     await this.revealTab(tab)
     return { shown: true }
   }
@@ -492,7 +529,7 @@ export class BrowserRegistry {
 
   /** Bring the headed Chromium window and tab to the front when the page is still open. */
   private async revealTab(tab: LiveTab): Promise<void> {
-    if (this.headless) return
+    if (this.delivery === 'desktop' || this.headless) return
     try {
       await tab.page.bringToFront()
     } catch (error: unknown) {
@@ -612,11 +649,11 @@ export class BrowserRegistry {
       viewportWidth: tab.viewportWidth,
       viewportHeight: tab.viewportHeight,
     }))
-    await existing.context.close()
+    await existing.context?.close()
     this.workspaces.delete(workspaceId)
     const workspace = await this.launchWorkspace(workspaceId, devicePixelRatio)
     for (const snapshot of snapshots) {
-      const page = await workspace.context.newPage()
+      const page = await this.requireContext(workspace).newPage()
       if (snapshot.url !== '' && snapshot.url !== 'about:blank') {
         await page.goto(snapshot.url, { waitUntil: 'domcontentloaded' })
       }
@@ -637,10 +674,30 @@ export class BrowserRegistry {
     workspaceId: WorkspaceId,
     devicePixelRatio: number,
   ): Promise<WorkspaceBrowser> {
+    const scale = clampBrowserDevicePixelRatio(devicePixelRatio)
+    if (this.delivery === 'desktop') {
+      this.assertChromiumAvailable()
+      const surface = this.desktopSurface ?? requireDesktopBrowserSurface()
+      if (this.desktopBrowser === undefined) {
+        try {
+          this.desktopBrowser = await this.connectOverCDP(surface.cdpEndpoint())
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error)
+          throw new BrowserUnavailableError(`failed to connect over CDP: ${message}`, 'context-start-failed')
+        }
+      }
+      const workspace: WorkspaceBrowser = {
+        tabs: new Map(),
+        selectedTabId: undefined,
+        devicePixelRatio: scale,
+      }
+      this.workspaces.set(workspaceId, workspace)
+      return workspace
+    }
+
     this.assertChromiumAvailable()
     const profileDir = join(this.profilesRoot, workspaceId)
     mkdirSync(profileDir, { recursive: true })
-    const scale = clampBrowserDevicePixelRatio(devicePixelRatio)
     let context: BrowserContext
     try {
       context = await this.launchPersistentContext(profileDir, {
@@ -665,6 +722,14 @@ export class BrowserRegistry {
       this.forgetWorkspace(workspaceId, workspace)
     })
     return workspace
+  }
+
+  private requireContext(workspace: WorkspaceBrowser): BrowserContext {
+    const context = workspace.context
+    if (context === undefined) {
+      throw new BrowserTabNotFoundError('workspace-browser-not-initialized')
+    }
+    return context
   }
 
   /** Drop a workspace pool only when it is still the mapped instance. */

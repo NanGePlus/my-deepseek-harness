@@ -16,7 +16,8 @@
     "@deepseek-ai/dsh-client-modules": "workspace:^",
     "@deepseek-ai/dsh-cmdline": "workspace:^",
     "@deepseek-ai/dsh-host-apiproxy": "workspace:^",
-    "@deepseek-ai/dsh-launch-environment": "workspace:^"
+    "@deepseek-ai/dsh-launch-environment": "workspace:^",
+    "playwright": "^1.49.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

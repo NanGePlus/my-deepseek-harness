@@ -382,6 +382,9 @@ importers:
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:^
         version: link:../../packages/util/launch-environment
+      playwright:
+        specifier: ^1.49.0
+        version: 1.61.1
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
