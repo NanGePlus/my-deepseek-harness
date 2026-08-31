@@ -295,6 +295,12 @@
   flex-direction: column;
 }
 
+.desktopOccupant {
+  flex: 1;
+  min-height: 200px;
+  min-width: 0;
+}
+
 .nativePane {
   display: flex;
   flex: 1;

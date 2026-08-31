@@ -34,6 +34,10 @@ import {
   browserWorkspaceState, createBrowserPanelStore, rowsFromBrowserList,
 } from './stores.ts'
 import { browserTabDisplayTitle, DEFAULT_BROWSER_TAB_URL } from './browser-tab-title.ts'
+import {
+  readDesktopBrowserOccupantReporter,
+  reportBrowserOccupantBounds,
+} from './browser-desktop-occupant.ts'
 import css from './BrowserPanel.module.css'
 
 /** How often the toolbox Tab bar rereads Host metadata while the segment is visible. */
@@ -214,6 +218,9 @@ export function BrowserPanel({
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
   const overflowButtonRef = useRef<HTMLButtonElement>(null)
   const navRetryRef = useRef<(() => void) | null>(null)
+  const occupantRef = useRef<HTMLDivElement>(null)
+  const desktopReporter = useMemo(() => readDesktopBrowserOccupantReporter(), [])
+  const isDesktopOccupant = desktopReporter !== undefined
 
   const activeTab = useMemo(
     () => tabs.find(tab => tab.tabId === selectedTabId),
@@ -644,6 +651,7 @@ export function BrowserPanel({
   ])
 
   useEffect(() => {
+    if (isDesktopOccupant) return
     if (!hostTabsReady || workspaceId === undefined || selectedTabId === undefined || !visible) {
       if (workspaceId !== undefined) actions.setConnecting(workspaceId, false)
       return
@@ -654,7 +662,26 @@ export function BrowserPanel({
       if (!ac.signal.aborted) actions.setConnecting(workspaceId, false)
     })
     return () => { ac.abort() }
-  }, [actions, hostTabsReady, revealAttempt, revealWindow, selectedTabId, visible, workspaceId])
+  }, [actions, hostTabsReady, isDesktopOccupant, revealAttempt, revealWindow, selectedTabId, visible, workspaceId])
+
+  useEffect(() => {
+    if (!isDesktopOccupant) return
+    const publish = (): void => {
+      reportBrowserOccupantBounds(desktopReporter, occupantRef.current, visible)
+    }
+    if (!visible) {
+      publish()
+      return
+    }
+    publish()
+    const element = occupantRef.current
+    if (element === null || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => { publish() })
+    observer.observe(element)
+    return () => { observer.disconnect() }
+  }, [
+    desktopReporter, hostTabsReady, isDesktopOccupant, revealAttempt, selectedTabId, visible,
+  ])
 
   useEffect(() => {
     if (!hostTabsReady || !visible || workspaceId === undefined) return
@@ -954,33 +981,46 @@ export function BrowserPanel({
         </div>
       )}
       <div className={css.body}>
-        <div
-          className={css.nativePane}
-          role="tabpanel"
-          aria-label={t('browser.native.aria')}
-          aria-busy={showLoading}
-        >
-          <div className={css.emptyCard}>
-            <span className={css.emptyIcon} aria-hidden="true">
-              <IconGlobeOutline14 size={48} />
-            </span>
-            <div className={css.emptyTitle}>{t('browser.native.title')}</div>
-            <div className={css.emptyBody}>{t('browser.native.body')}</div>
-            <Button
-              variant="primary"
-              size="sm"
-              className={css.emptyRetry}
-              disabled={selectedTabId === undefined || browserUnavailable !== undefined}
-              onClick={() => {
-                /* v8 ignore next -- the button disables without a selected tab. */
-                if (selectedTabId === undefined) return
-                setRevealAttempt(attempt => attempt + 1)
-              }}
+        {isDesktopOccupant
+          ? (
+            <div
+              id="browser-occupant"
+              ref={occupantRef}
+              className={css.desktopOccupant}
+              role="tabpanel"
+              aria-label={t('browser.native.aria')}
+              aria-busy={showLoading}
+            />
+          )
+          : (
+            <div
+              className={css.nativePane}
+              role="tabpanel"
+              aria-label={t('browser.native.aria')}
+              aria-busy={showLoading}
             >
-              {t('browser.native.show')}
-            </Button>
-          </div>
-        </div>
+              <div className={css.emptyCard}>
+                <span className={css.emptyIcon} aria-hidden="true">
+                  <IconGlobeOutline14 size={48} />
+                </span>
+                <div className={css.emptyTitle}>{t('browser.native.title')}</div>
+                <div className={css.emptyBody}>{t('browser.native.body')}</div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className={css.emptyRetry}
+                  disabled={selectedTabId === undefined || browserUnavailable !== undefined}
+                  onClick={() => {
+                    /* v8 ignore next -- the button disables without a selected tab. */
+                    if (selectedTabId === undefined) return
+                    setRevealAttempt(attempt => attempt + 1)
+                  }}
+                >
+                  {t('browser.native.show')}
+                </Button>
+              </div>
+            </div>
+          )}
         {browserUnavailable !== undefined && (
           <div className={css.unavailableOverlay}>
             <div className={css.emptyCard}>
