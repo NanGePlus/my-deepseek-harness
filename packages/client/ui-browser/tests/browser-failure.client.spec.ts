@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import {
-  browseErrorMessage, isIgnorableBrowseError, reportBrowserFailure,
+  browseErrorMessage, isBrowserTabNotFoundError, isIgnorableBrowseError, reportBrowserFailure,
 } from '../src/client/browser-failure.ts'
 
 const WID = 'ws1' as WorkspaceId
@@ -16,6 +16,15 @@ describe('browser failure helpers', () => {
     }))).toBe('no chromium')
     expect(browseErrorMessage(new Error('network'))).toBe('network')
     expect(browseErrorMessage('plain')).toBeUndefined()
+  })
+
+  it('detects browser-tab-not-found browse errors', () => {
+    expect(isBrowserTabNotFoundError(new DirectoryBrowseError({
+      code: 'browser-tab-not-found',
+      message: 'browser tab not found: stale-1',
+      details: { tabId: 'stale-1' },
+    }))).toBe(true)
+    expect(isBrowserTabNotFoundError(new Error('browser tab not found: stale-1'))).toBe(false)
   })
 
   it('ignores workspace-not-found browse errors', () => {

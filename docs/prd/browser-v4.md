@@ -10,7 +10,7 @@
 
 ## 解决方案
 
-在现有工具箱 segmented Tab 增加与资源管理器、Git面板、终端、工具详情平级的 **浏览器** 段。选中后展示内嵌浏览器：段内浏览器 Tab 栏 + 导航顶栏 + screencast 画布。Playwright `BrowserContext` 与 Tab 状态按 **绑定 Workspace** 归属（同一 Workspace 下多个 dsh Session 共用）；profile 目录持久 Cookie。V4 支持多 Tab、`+` 新建、`×` 关闭、Tab 右键批量关闭；导航 `http://` / `https://` 任意可达 URL；顶栏 ← → ↻、地址栏、溢出菜单（Hard Reload、Copy URL、Zoom）、在外部浏览器打开。Agent 通过 `browser_*` 工具操作同一 Registry；人类手动操作默认不进 Session 日志，Agent 操作 model-visible。切走 **浏览器** 段只隐藏视图、暂停 screencast，不销毁 Host Context；硬刷新后 Host Context 与 profile 仍在，Client 从 store 恢复 Tab 并重连 screencast。Session 切换守卫**仅**管 dirty 编辑器标签页，不因浏览器 Tab 阻断。V4 **不含** 截图菜单、清 Cookie/缓存/历史、Split、书签管理器、顶栏跳转终端快捷图标。
+在现有工具箱 segmented Tab 增加与资源管理器、Git面板、终端、工具详情平级的 **浏览器** 段。选中后展示内嵌浏览器：段内浏览器 Tab 栏 + 导航顶栏 + 「显示窗口」说明。Playwright `BrowserContext` 与 Tab 状态按 **绑定 Workspace** 归属（同一 Workspace 下多个 dsh Session 共用）；profile 目录持久 Cookie。人类操作面是 Host 拉起的**有头 Chromium 窗口**（与 Agent 同一 Context），输入手感与系统浏览器一致。V4 支持多 Tab、`+` 新建、`×` 关闭、Tab 右键批量关闭；导航 `http://` / `https://` 任意可达 URL；顶栏 ← → ↻、地址栏、溢出菜单（Hard Reload、Copy URL、Zoom）、在外部浏览器打开。Agent 通过 `browser_*` 工具操作同一 Registry；人类手动操作默认不进 Session 日志，Agent 操作 model-visible。切走 **浏览器** 段只隐藏工具箱视图，不销毁 Host Context 与有头窗口；硬刷新后 Host Context 与 profile 仍在，Client 从 store 恢复 Tab 并再次唤起窗口。Session 切换守卫**仅**管 dirty 编辑器标签页，不因浏览器 Tab 阻断。V4 **不含** 截图菜单、清 Cookie/缓存/历史、Split、书签管理器、顶栏跳转终端快捷图标。
 
 ## 用户故事
 
@@ -22,7 +22,7 @@ US-2：作为 Web 开发者，我想在「资源管理器 | Git面板 | 终端 |
 
 US-3：作为 Web 开发者，当我切走 **浏览器** 段时，我想只隐藏视图、不销毁 Host 页面，以便 dev server 预览不被打断。
 
-US-4：作为 Web 开发者，我想拖宽工具箱，以便给 screencast 更多水平空间。
+US-4：作为 Web 开发者，我想拖宽工具箱，以便给浏览器 Tab 栏与导航更多水平空间。
 
 US-5：作为 Web 开发者，我想让浏览器 Tab 与 Playwright Context 跟随当前 **绑定 Workspace**，以便同一 Workspace 下换 Session 仍看到同一套浏览器 Tab。
 
@@ -54,11 +54,11 @@ US-18：作为 Web 开发者，当页面加载失败时，我想在导航栏下�
 
 US-19：作为 Web 开发者，当我硬刷新 dsh Web 时，我想 Host 上该 Workspace 的 Context 仍在，且 Tab 栏从 store 恢复并重连 screencast。
 
-US-20：作为 Web 开发者，我想 Zoom 只改变我看到的 screencast 缩放，而不改变 Agent snapshot 的 viewport 语义。
+US-20：作为 Web 开发者，我想工具箱 Zoom 菜单不改变 Agent snapshot 的 viewport 语义；页面缩放使用有头 Chromium 自身能力。
 
-US-21：作为 Web 开发者，我想 screencast  viewport 随工具箱浏览器段内容区尺寸变化，以便拖宽工具箱时看到更多页面宽度。
+US-21：作为 Web 开发者，我想有头窗口可按系统窗口方式调整大小，而不把工具箱内容区尺寸写成页面 viewport。
 
-US-22：作为 Web 开发者，我想 Agent 调用 `browser_*` 工具后，内嵌浏览器 screencast 同步更新，以便人类看见 Agent 刚点的页面。
+US-22：作为 Web 开发者，我想 Agent 调用 `browser_*` 工具后，对应有头窗口与 Tab 提到前台，以便人类看见并继续操作同一页。
 
 US-23：作为 Web 开发者，我想我手动在浏览器里的导航 **不** 写入 Session 日志，以便对话区不被刷屏。
 
@@ -77,7 +77,7 @@ US-25：作为 Web 开发者，我想明确 V4 **不做** 截图菜单、清 Coo
 | 用户故事编号 | 端 | page-id | 该页承担的故事范围 | UI 设计描述要点 |
 | --- | --- | --- | --- | --- |
 | US-1~US-4 | Web | app-shell | 打开浏览器、五段切换、切走不销毁、工具箱拖宽 | 三栏壳 + 工具箱五段 Tab |
-| US-5~US-25 | Web | embedded-browser | Workspace 绑定、多 Tab、导航、screencast、空态/不可用、Zoom、Agent 共用 | Tab 栏 + 导航栏 + screencast 画布 |
+| US-5~US-25 | Web | embedded-browser | Workspace 绑定、多 Tab、导航、有头窗口、空态/不可用、Zoom、Agent 共用 | Tab 栏 + 导航栏 + 显示窗口 |
 
 - 无孤立故事：有 UI 的用户故事均已映射。
 - 无孤立页面：`embedded-browser` 支撑 US-5~US-25；`app-shell` 为壳层（US-1~US-4）。
@@ -89,7 +89,7 @@ US-25：作为 Web 开发者，我想明确 V4 **不做** 截图菜单、清 Coo
 
 | 状态 | 处理方式 |
 | --- | --- |
-| 加载中 | 保留上一帧并 dim 遮罩 + 画布中央 24px spinner；↻ 同步转圈。Hard Reload 时不 dim 旧帧。首次进入自动 Tab 至 screencast 就绪前同加载变体。 |
+| 加载中 | 导航进行中内容区中央 24px spinner；↻ 同步转圈。唤起有头窗口期间可短暂 connecting。 |
 | 空状态 | **未绑定 Workspace**：整页居中卡片，标题「无法使用浏览器」，说明「请先选择 Workspace 并开始会话。」，无 Tab 栏。**浏览器不可用**：卡片标题「浏览器不可用」，说明 Host 原因，主按钮「重试」；Tab 栏仍可见（若有 store 记录）。 |
 | 错误 | 导航失败：导航栏下 12px `semantic-error` +「重试」；画布居中空态图标 +「无法加载此页」。不关闭 Tab。 |
 | 禁用 | 未绑定：无 Tab 栏/导航。← → 在无历史时 disabled。最后一 Tab 隐藏 `×`、禁用「关闭 / 关闭全部」。 |
@@ -113,10 +113,10 @@ US-25：作为 Web 开发者，我想明确 V4 **不做** 截图菜单、清 Coo
 - **端 / 运行环境**：Web
 - **page-id**：`embedded-browser`
 - **页面标题**：内嵌浏览器
-- **主任务**：在绑定 Workspace 上预览与交互 Web 页面（多 Tab、导航、screencast）
+- **主任务**：在绑定 Workspace 上预览与交互 Web 页面（多 Tab、导航、有头窗口）
 - **覆盖的用户故事**：US-5~US-25
 - **DESIGN 复用**：§5 导航（段内 Tab 栏对齐终端/文件 Tab：32px、底边 2px 选中线、20×20 ×）；§5 图标按钮（← → ↻、外部打开、… 菜单 24×24 ghost）；§5 输入（地址栏）；§5 空状态、Loading；§2 `semantic-error` / `semantic-info`
-- **UI 设计描述**：纵向 flex 三区。① **Tab 栏**（32px，水平滚动）：标题为 `document.title` 或 URL 主机名；`+` 24×24 ghost；`×` 20×20；右键菜单：关闭 / 关闭其他 / 关闭左侧 / 关闭右侧 / 关闭全部。② **导航栏**（~40px）：← → ↻ | 地址栏 flex 1（Enter 导航，聚焦 `semantic-info` 描边）| 外部打开 | … 下拉（Hard Reload、Copy Current URL、Zoom 行：− / 百分比 / + / 重置）。③ **提示条**（可选）：非 localhost 首次访问 inline info；导航错误 `semantic-error` + 重试。④ **screencast 画布**（flex 1，min-height 0）：JPEG 帧贴满内容区；Client Zoom 为 CSS scale；指针/键盘转发 Host；scroll-reveal 滚动条若画布溢出容器。首次进入无 Tab：自动 `about:blank` + 地址栏 focus。Hard Reload / 导航 / Agent 操作共用同一加载状态机。Zoom 比例按 workspaceId 持久化，不进 Session 日志。
+- **UI 设计描述**：纵向 flex 三区。① **Tab 栏**（32px，水平滚动）：标题为 `document.title` 或 URL 主机名；`+` 24×24 ghost；`×` 20×20；右键菜单：关闭 / 关闭其他 / 关闭左侧 / 关闭右侧 / 关闭全部。② **导航栏**（~40px）：← → ↻ | 地址栏 flex 1（Enter 导航，聚焦 `semantic-info` 描边）| 外部打开 | … 下拉（Hard Reload、Copy Current URL、Zoom 行：− / 百分比 / + / 重置）。③ **提示条**（可选）：非 localhost 首次访问 inline info；导航错误 `semantic-error` + 重试。④ **本机窗口说明**（flex 1）：居中卡片「在本机浏览器窗口中查看」+ 说明人与 Agent 共用该窗口 + **显示窗口**。首次进入无 Tab：自动 `about:blank` + 地址栏 focus，并唤起有头窗口。Hard Reload / 导航 / Agent 操作把对应页提到前台。Zoom 比例按 workspaceId 持久化，不进 Session 日志。
 
 ### Agent 工具对话区展示
 
@@ -151,7 +151,7 @@ US-25：作为 Web 开发者，我想明确 V4 **不做** 截图菜单、清 Coo
 
 ### Host 内嵌浏览器 RPC 契约
 
-在 `packages/host/apiproxy` 扩展 **有类型的** `host.browser.*` RPC。Playwright `BrowserRegistry` 按 **workspaceId** 索引；profile 目录 `.sessions/browser-profiles/<workspaceId>/`。建议操作：`list`（tabId、url、title、selected）、`createTab` / `closeTab` / `selectTab`、`navigate` / `goBack` / `goForward` / `reload`（含 hard）、`snapshot`（accessibility tree）、`click` / `type` / `scroll` / `selectOption`、`resizeViewport`（cols 像素宽高）、`sendPointer` / `sendKeyboard`、`watchScreencast`（SSE JPEG 帧）。须区分 **浏览器不可用** 与 **未绑定 Workspace**。
+在 `packages/host/apiproxy` 扩展 **有类型的** `host.browser.*` RPC。Playwright `BrowserRegistry` 按 **workspaceId** 索引；profile 目录 `.sessions/browser-profiles/<workspaceId>/`。产品 Context 默认有头。建议操作：`list`（tabId、url、title、selected）、`createTab` / `closeTab` / `selectTab` / `showWindow`、`navigate` / `goBack` / `goForward` / `reload`（含 hard）、`snapshot`（accessibility tree）、`click` / `type` / `scroll` / `selectOption`。人类不经工具箱画布输入。须区分 **浏览器不可用** 与 **未绑定 Workspace**。关掉有头窗口后 Registry 丢掉死 Context；`createTab` 重建，`closeTab` 对已消失 Tab 成功，`showWindow` 走 `browser-tab-not-found` 以便按 store 恢复。
 
 ### tool-browser
 
@@ -159,7 +159,7 @@ US-25：作为 Web 开发者，我想明确 V4 **不做** 截图菜单、清 Coo
 
 ### ui-browser
 
-新建 Client 插件 `@deepseek-ai/dsh-client-ui-browser`，槽位 `conversation.details.browser`；Tab store、导航顶栏、screencast 画布、SSE 重连、Client Zoom、viewport debounce 测量。切走段暂停 SSE；硬刷新 `list` + 重连。
+新建 Client 插件 `@deepseek-ai/dsh-client-ui-browser`，槽位 `conversation.details.browser`；Tab store、导航顶栏、「显示窗口」、Client Zoom 持久化。切走段不关有头窗口；硬刷新 `list` + `showWindow`。
 
 ### 工具箱五段 Tab
 
@@ -171,11 +171,11 @@ US-25：作为 Web 开发者，我想明确 V4 **不做** 截图菜单、清 Coo
 
 ### Host 浏览器 RPC 集成 seam
 
-断言：`createTab` 后 `list` 含 tab；`navigate` 后 title/url 更新；`snapshot` 返回树；screencast SSE 收到帧；`closeTab` 后 tab 消失；Workspace A/B Context 隔离；缺 Chromium 时 `browser-unavailable`；硬刷新场景 Host Context 在 Client 断开期间仍存活。
+断言：`createTab` 后 `list` 含 tab；`navigate` 后 title/url 更新；`snapshot` 返回树；`showWindow` 成功；`closeTab` 后 tab 消失；关掉 Context 后再 `createTab` 成功、`closeTab` 幂等、`showWindow` 报 tab-not-found；Workspace A/B Context 隔离；缺 Chromium 时 `browser-unavailable`；硬刷新场景 Host Context 在 Client 断开期间仍存活。
 
 ### ui-browser 组件 seam
 
-Fake Host API 驱动，断言：首次进入 `about:blank`；`+` 新建 Tab；关闭与最后一 Tab 规则；未绑定空态；不可用 + 重试；切走 `visible=false` 不调用 destroy；Zoom 不改变发往 Host 的 viewport（仅 Client scale）；导航失败 inline 错误。
+Fake Host API 驱动，断言：首次进入 `about:blank` 并 `showWindow`；`+` 新建 Tab；关闭与最后一 Tab 规则；未绑定空态；不可用 + 重试；切走 `visible=false` 不关闭 Host Tab；导航失败 inline 错误。
 
 ### Web browser snapshot seam
 
@@ -203,6 +203,6 @@ V4 不做（Not now）：
 
 依赖：V1–V3 工具箱能力、Workspace 绑定、Session 切换守卫已存在。Host 须 `npx playwright install chromium`（见 ADR-0007）。
 
-风险：screencast 高频帧可能影响 CPU；须限制帧率与隐藏 Tab 暂停推帧。共用实例下 Agent 与人类并发可能产生竞态；产品决策为不加锁。Playwright 以 OS 用户权限运行，用户须自知浏览行为边界。
+风险：有头窗口出现在跑 Host 的机器上，远程打开 dsh Web 时操作者看不到该窗。共用实例下 Agent 与人类并发可能产生竞态；产品决策为不加锁。Playwright 以 OS 用户权限运行，用户须自知浏览行为边界。
 
 开放问题：无。实现切片见 GitHub 父 PRD Issue #92（`NanGePlus/my-deepseek-harness`）。文案与状态机以本 PRD 与 `CONTEXT.md` 为准。

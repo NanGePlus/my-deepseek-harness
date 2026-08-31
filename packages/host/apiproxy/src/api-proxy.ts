@@ -4037,7 +4037,30 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const workspace = ctx.workspaceRegistry.get(workspaceId)
         if (workspace === undefined) return workspaceNotFound(request, workspaceId)
         try {
-          return ok(request, browserRegistry.selectTab(workspaceId, tabId))
+          return ok(request, await browserRegistry.selectTab(workspaceId, tabId))
+        } catch (error: unknown) {
+          if (error instanceof BrowserTabNotFoundError) {
+            return err(request, {
+              code: 'browser-tab-not-found',
+              message: error.message,
+              details: { workspaceId, tabId },
+            })
+          }
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async browserShowWindow(request, signal) {
+        signal.throwIfAborted()
+        const { workspaceId, tabId } = request.payload
+        const workspace = ctx.workspaceRegistry.get(workspaceId)
+        if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+        try {
+          return ok(request, await browserRegistry.showWindow(workspaceId, tabId))
         } catch (error: unknown) {
           if (error instanceof BrowserTabNotFoundError) {
             return err(request, {
@@ -4217,11 +4240,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async browserScroll(request, signal) {
         signal.throwIfAborted()
-        const { workspaceId, tabId, deltaX, deltaY } = request.payload
+        const { workspaceId, tabId, deltaX, deltaY, x, y } = request.payload
         const workspace = ctx.workspaceRegistry.get(workspaceId)
         if (workspace === undefined) return workspaceNotFound(request, workspaceId)
         try {
-          return ok(request, await browserRegistry.scroll(workspaceId, tabId, deltaX, deltaY))
+          return ok(request, await browserRegistry.scroll(workspaceId, tabId, deltaX, deltaY, x, y))
         } catch (error: unknown) {
           if (error instanceof BrowserTabNotFoundError) {
             return err(request, {
@@ -4263,11 +4286,17 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async browserResizeViewport(request, signal) {
         signal.throwIfAborted()
-        const { workspaceId, tabId, width, height } = request.payload
+        const { workspaceId, tabId, width, height, devicePixelRatio } = request.payload
         const workspace = ctx.workspaceRegistry.get(workspaceId)
         if (workspace === undefined) return workspaceNotFound(request, workspaceId)
         try {
-          return ok(request, await browserRegistry.resizeViewport(workspaceId, tabId, width, height))
+          return ok(request, await browserRegistry.resizeViewport(
+            workspaceId,
+            tabId,
+            width,
+            height,
+            devicePixelRatio,
+          ))
         } catch (error: unknown) {
           if (error instanceof BrowserTabNotFoundError) {
             return err(request, {

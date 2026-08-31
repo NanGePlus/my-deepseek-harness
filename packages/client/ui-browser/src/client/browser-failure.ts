@@ -26,6 +26,11 @@ export function isBrowserUnavailableError(error: unknown): boolean {
   return error instanceof DirectoryBrowseError && error.rpcError.code === 'browser-unavailable'
 }
 
+/** True when a Host browser RPC names a tab id that is no longer in the Registry. */
+export function isBrowserTabNotFoundError(error: unknown): boolean {
+  return error instanceof DirectoryBrowseError && error.rpcError.code === 'browser-tab-not-found'
+}
+
 /** Map a Host failure to the inline error surface. */
 export function reportBrowserFailure(
   actions: BrowserFailureActions,

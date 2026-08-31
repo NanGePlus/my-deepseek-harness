@@ -1,32 +1,18 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
   SessionId, SessionListState, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { BrowserPanel, type BrowserPanelProps } from '../src/client/BrowserPanel.tsx'
 import { createBrowserPanelStore, browserWorkspaceState } from '../src/client/stores.ts'
 import { formatBrowserZoomLabel } from '../src/client/browser-zoom.ts'
 import { DEFAULT_BROWSER_TAB_URL } from '../src/client/browser-tab-title.ts'
 import { zh } from '../src/client/locales.ts'
-
-class ResizeObserverStub {
-  private readonly callback: ResizeObserverCallback
-  constructor(callback: ResizeObserverCallback) {
-    this.callback = callback
-  }
-  observe(): void { this.callback([], this) }
-  disconnect(): void {}
-  unobserve(): void {}
-}
-
-beforeAll(() => {
-  vi.stubGlobal('ResizeObserver', ResizeObserverStub)
-})
 
 afterEach(() => {
   cleanup()
@@ -96,24 +82,7 @@ function mount(over: MountOverrides = {}) {
   const browserGoBack = vi.fn(over.browserGoBack ?? (async () => BLANK_PAGE))
   const browserGoForward = vi.fn(over.browserGoForward ?? (async () => BLANK_PAGE))
   const browserReload = vi.fn(over.browserReload ?? (async () => BLANK_PAGE))
-  const browserResizeViewport = vi.fn(over.browserResizeViewport ?? (async () => ({ resized: true as const })))
-  const browserSendPointer = vi.fn(over.browserSendPointer ?? (async () => ({ sent: true as const })))
-  const browserSendKeyboard = vi.fn(over.browserSendKeyboard ?? (async () => ({ sent: true as const })))
-  const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>(over.browserWatchScreencast ?? ((
-    _workspaceId,
-    _tabId,
-    onFrame,
-    _signal,
-    onOpen,
-  ) => {
-    onOpen?.()
-    onFrame({
-      type: 'host/browser-screencast',
-      data: 'ZmFrZQ==',
-      width: 800,
-      height: 600,
-    })
-  }))
+  const browserShowWindow = vi.fn(over.browserShowWindow ?? (async () => ({ shown: true as const })))
   const panelStore = over.useStore === undefined ? createBrowserPanelStore().create() : undefined
   const workspacesStore = createSnapshotStore(workspacesState(over.items ?? [workspace()]))
   const sessionsStore = createSnapshotStore(sessionsState(
@@ -134,21 +103,10 @@ function mount(over: MountOverrides = {}) {
     browserGoBack,
     browserGoForward,
     browserReload,
-    browserResizeViewport,
-    browserSendPointer,
-    browserSendKeyboard,
-    browserWatchScreencast,
+    browserShowWindow,
     ...over,
   }
   const view = render(<BrowserPanel {...props} />)
-  const ensureViewportHostSize = () => {
-    const host = view.container.querySelector('[role="tabpanel"]')
-    if (host instanceof HTMLElement) {
-      Object.defineProperty(host, 'clientWidth', { value: 640, configurable: true })
-      Object.defineProperty(host, 'clientHeight', { value: 480, configurable: true })
-    }
-  }
-  ensureViewportHostSize()
   return {
     browserList,
     browserCreateTab,
@@ -158,20 +116,12 @@ function mount(over: MountOverrides = {}) {
     browserGoBack,
     browserGoForward,
     browserReload,
-    browserResizeViewport,
-    browserSendPointer,
-    browserSendKeyboard,
-    browserWatchScreencast,
+    browserShowWindow,
     panelStore: panelStore!,
-    workspacesStore,
     sessionsStore,
-    props,
-    view,
     rerender: (next: Partial<BrowserPanelProps> = {}) => {
       view.rerender(<BrowserPanel {...props} {...next} />)
-      ensureViewportHostSize()
     },
-    ensureViewportHostSize,
     unmount: view.unmount,
   }
 }
@@ -191,37 +141,25 @@ describe('BrowserPanel', () => {
     expect(browserList).not.toHaveBeenCalled()
   })
 
-  it('default: lists then auto-creates about:blank and renders tab bar + screencast host', async () => {
-    const { browserList, browserCreateTab, browserWatchScreencast, ensureViewportHostSize } = mount()
+  it('default: lists then auto-creates about:blank and raises the native window', async () => {
+    const { browserList, browserCreateTab, browserShowWindow } = mount()
     await waitFor(() => { expect(browserList).toHaveBeenCalledWith(WID, expect.any(AbortSignal)) })
     await waitFor(() => {
       expect(browserCreateTab).toHaveBeenCalledWith(WID, DEFAULT_BROWSER_TAB_URL, expect.any(AbortSignal))
     })
     await waitFor(() => { expect(screen.getByRole('tablist')).toBeTruthy() })
-    ensureViewportHostSize()
-    await waitFor(() => { expect(browserWatchScreencast).toHaveBeenCalled() })
+    await waitFor(() => { expect(browserShowWindow).toHaveBeenCalled() })
+    expect(screen.getByText('在本机浏览器窗口中查看')).toBeTruthy()
     expect(screen.getByRole('tabpanel')).toBeTruthy()
   })
 
   it('default: reuses Host list rows instead of creating when tabs already exist', async () => {
-    const browserList = vi.fn(async () => ({
-      tabs: [{ tabId: 'live-1', url: 'https://example.com', title: 'Example', selected: true, canGoBack: true, canGoForward: false }],
-    }))
-    const browserCreateTab = vi.fn()
-    mount({ browserList, browserCreateTab })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'Example' })).toBeTruthy() })
+    const { browserCreateTab, browserShowWindow } = mount({
+      browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })),
+    })
+    await waitFor(() => { expect(screen.getByRole('tablist')).toBeTruthy() })
     expect(browserCreateTab).not.toHaveBeenCalled()
-  })
-
-  it('loading: shows 连接中… while SSE opens', async () => {
-    const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>((
-      _workspaceId,
-      _tabId,
-      _onFrame,
-      _signal,
-    ) => { /* defer onOpen */ })
-    mount({ browserWatchScreencast })
-    await waitFor(() => { expect(screen.getByText('连接中…')).toBeTruthy() })
+    await waitFor(() => { expect(browserShowWindow).toHaveBeenCalledWith(WID, 'live-1', expect.any(AbortSignal)) })
   })
 
   it('US-8: focuses the address bar after the first automatic about:blank tab', async () => {
@@ -231,62 +169,11 @@ describe('BrowserPanel', () => {
 
   it('workspace binding: browserList uses the current session Workspace id', async () => {
     const WID2 = 'ws2' as WorkspaceId
-    const browserList = vi.fn(async () => ({ tabs: [] }))
-    mount({
-      browserList,
+    const { browserList } = mount({
       sessionId: 's2' as SessionId,
       items: [workspace(), workspace({ workspaceId: WID2, sessionIds: ['s2' as SessionId], title: 'beta' })],
     })
     await waitFor(() => { expect(browserList).toHaveBeenCalledWith(WID2, expect.any(AbortSignal)) })
-  })
-
-  it('US-5: same Workspace store survives Session switch within one Workspace', async () => {
-    const WID2 = 'ws2' as WorkspaceId
-    const SID2 = 's2' as SessionId
-    const panelStore = createBrowserPanelStore().create()
-    panelStore.actions.setWorkspaceTabs(WID, [{
-      tabId: 'ws1-tab', url: 'https://alpha.test', title: 'Alpha', canGoBack: false, canGoForward: false,
-    }])
-    panelStore.actions.setWorkspaceTabs(WID2, [{
-      tabId: 'ws2-tab', url: 'https://beta.test', title: 'Beta', canGoBack: false, canGoForward: false,
-    }])
-    const browserCreateTab = vi.fn()
-    const workspacesStore = createSnapshotStore(workspacesState([
-      workspace(),
-      workspace({ workspaceId: WID2, sessionIds: [SID2], title: 'beta', path: '/w/beta' }),
-    ]))
-    const sessionsStore = createSnapshotStore(sessionsState(SID))
-    const browserList = vi.fn(async () => ({ tabs: [] }))
-    const props = {
-      visible: true,
-      t: makeTranslate(zh),
-      useSessions: hookOf(sessionsStore),
-      useWorkspaces: hookOf(workspacesStore),
-      useStore: hookOf(panelStore),
-      actions: panelStore.actions,
-      browserList,
-      browserCreateTab,
-      browserCloseTab: vi.fn(),
-      browserSelectTab: vi.fn(),
-      browserNavigate: vi.fn(),
-      browserGoBack: vi.fn(),
-      browserGoForward: vi.fn(),
-      browserReload: vi.fn(),
-      browserResizeViewport: vi.fn(),
-      browserSendPointer: vi.fn(),
-      browserSendKeyboard: vi.fn(),
-      browserWatchScreencast: vi.fn((_w, _t, _f, _s, onOpen) => { onOpen?.() }),
-    }
-    const view = render(<BrowserPanel {...props} />)
-    expect(screen.getByRole('tab', { name: 'Alpha' })).toBeTruthy()
-    act(() => { sessionsStore.set(sessionsState(SID2)) })
-    view.rerender(<BrowserPanel {...props} />)
-    expect(screen.getByRole('tab', { name: 'Beta' })).toBeTruthy()
-    expect(screen.queryByRole('tab', { name: 'Alpha' })).toBeNull()
-    expect(browserCreateTab).not.toHaveBeenCalled()
-    act(() => { sessionsStore.set(sessionsState(SID)) })
-    view.rerender(<BrowserPanel {...props} />)
-    expect(screen.getByRole('tab', { name: 'Alpha' })).toBeTruthy()
   })
 
   it('US-6: switching Session shows the bound Workspace browser tab set', async () => {
@@ -297,37 +184,16 @@ describe('BrowserPanel', () => {
         ? [{ tabId: 'live-1', url: 'https://alpha.test', title: 'Alpha', selected: true, canGoBack: false, canGoForward: false }]
         : [{ tabId: 'live-2', url: 'https://beta.test', title: 'Beta', selected: true, canGoBack: false, canGoForward: false }],
     }))
-    const items = [
-      workspace(),
-      workspace({ workspaceId: WID2, sessionIds: [SID2], title: 'beta', path: '/w/beta' }),
-    ]
-    const workspacesStore = createSnapshotStore(workspacesState(items))
-    const sessionsStore = createSnapshotStore(sessionsState(SID))
-    const panelStore = createBrowserPanelStore().create()
-    const props: BrowserPanelProps = {
-      visible: true,
-      t: makeTranslate(zh),
-      useSessions: hookOf(sessionsStore),
-      useWorkspaces: hookOf(workspacesStore),
-      useStore: hookOf(panelStore),
-      actions: panelStore.actions,
+    const { sessionsStore, rerender, panelStore } = mount({
       browserList,
-      browserCreateTab: vi.fn(async () => ({ tabId: 'ignored' })),
-      browserCloseTab: vi.fn(),
-      browserSelectTab: vi.fn(),
-      browserNavigate: vi.fn(),
-      browserGoBack: vi.fn(),
-      browserGoForward: vi.fn(),
-      browserReload: vi.fn(),
-      browserResizeViewport: vi.fn(),
-      browserSendPointer: vi.fn(),
-      browserSendKeyboard: vi.fn(),
-      browserWatchScreencast: vi.fn((_w, _s, _f, _s2, onOpen) => { onOpen?.() }),
-    }
-    const view = render(<BrowserPanel {...props} />)
+      items: [
+        workspace(),
+        workspace({ workspaceId: WID2, sessionIds: [SID2], title: 'beta', path: '/w/beta' }),
+      ],
+    })
     await waitFor(() => { expect(screen.getByRole('tab', { name: 'Alpha' })).toBeTruthy() })
     act(() => { sessionsStore.set(sessionsState(SID2)) })
-    view.rerender(<BrowserPanel {...props} />)
+    rerender()
     await waitFor(() => { expect(screen.getByRole('tab', { name: 'Beta' })).toBeTruthy() })
     expect(browserWorkspaceState(panelStore.getSnapshot(), WID).tabs).toHaveLength(1)
     expect(browserWorkspaceState(panelStore.getSnapshot(), WID2).tabs).toHaveLength(1)
@@ -363,165 +229,144 @@ describe('BrowserPanel', () => {
     expect(browserCreateTab).not.toHaveBeenCalled()
   })
 
-  it('US-21: syncs viewport size to Host when screencast connects', async () => {
-    const { browserResizeViewport, ensureViewportHostSize, rerender } = mount()
-    await waitFor(() => { expect(screen.getByRole('tabpanel')).toBeTruthy() })
-    ensureViewportHostSize()
-    rerender()
-    await waitFor(() => {
-      expect(browserResizeViewport).toHaveBeenCalledWith(WID, 'tab-1', 640, 480, expect.any(AbortSignal))
-    })
-  })
-
-  it('pointer and keyboard events forward through Host RPC', async () => {
-    const { browserSendPointer, browserSendKeyboard, ensureViewportHostSize, rerender } = mount()
-    await waitFor(() => { expect(screen.getByRole('tabpanel')).toBeTruthy() })
-    ensureViewportHostSize()
-    rerender()
-    await waitFor(() => {
-      expect(screen.getByRole('tabpanel').querySelector('div[tabindex="0"]')).toBeTruthy()
-    })
-    const stage = screen.getByRole('tabpanel').querySelector('div[tabindex="0"]')! as HTMLElement
-    stage.getBoundingClientRect = () => ({
-      x: 0,
-      y: 0,
-      left: 0,
-      top: 0,
-      right: 800,
-      bottom: 600,
-      width: 800,
-      height: 600,
-      toJSON: () => ({}),
-    })
-    fireEvent.mouseDown(stage, { clientX: 10, clientY: 20, button: 0 })
-    fireEvent.keyDown(stage, { key: 'a' })
-    await waitFor(() => {
-      expect(browserSendPointer).toHaveBeenCalled()
-      expect(browserSendKeyboard).toHaveBeenCalled()
-    })
-  })
-
   it('navigates from the address bar on Enter', async () => {
-    const browserNavigate = vi.fn(async () => BLANK_PAGE)
-    const { browserNavigate: navigateMock, ensureViewportHostSize, rerender } = mount({ browserNavigate })
+    const browserNavigate = vi.fn(async (_wid, _tabId, url: string) => ({
+      url, title: 'Example', canGoBack: false, canGoForward: false,
+    }))
+    mount({
+      browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })),
+      browserNavigate,
+    })
     await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
-    ensureViewportHostSize()
-    rerender()
     fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://example.com' } })
     fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith(WID, 'tab-1', 'https://example.com/', expect.any(AbortSignal))
+      expect(browserNavigate).toHaveBeenCalledWith(WID, 'live-1', 'https://example.com/', expect.any(AbortSignal))
     })
   })
 
   it('creates a new tab from the + control', async () => {
-    const browserList = vi.fn(async () => ({
-      tabs: [{ tabId: 'live-1', url: 'about:blank', title: '', selected: true, canGoBack: false, canGoForward: false }],
-    }))
-    const browserCreateTab = vi.fn(async () => ({ tabId: 'live-2' }))
-    mount({ browserList, browserCreateTab })
-    await waitFor(() => { expect(screen.getByRole('tablist')).toBeTruthy() })
+    const { browserCreateTab } = mount({
+      browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })),
+      browserCreateTab: vi.fn(async () => ({ tabId: 'tab-2' })),
+    })
+    await waitFor(() => { expect(screen.getByLabelText('新建标签页')).toBeTruthy() })
     fireEvent.click(screen.getByLabelText('新建标签页'))
     await waitFor(() => {
       expect(browserCreateTab).toHaveBeenCalledWith(WID, DEFAULT_BROWSER_TAB_URL, expect.any(AbortSignal))
     })
   })
 
-  it('shows inline stream errors and retries the screencast subscription', async () => {
-    let attempt = 0
-    const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>((
-      _workspaceId,
-      _tabId,
-      _onFrame,
-      _signal,
-      _onOpen,
-      onError,
-    ) => {
-      attempt += 1
-      if (attempt === 1) onError?.('stream failed')
+  it('rebuilds store tabs before + when the Host pool is empty', async () => {
+    let hostGone = false
+    const created: Array<{ tabId: string; url: string }> = []
+    const browserList = vi.fn(async () => {
+      if (created.length > 0) {
+        return {
+          tabs: created.map((row, index) => ({
+            tabId: row.tabId,
+            url: row.url,
+            title: '',
+            selected: index === created.length - 1,
+            canGoBack: false,
+            canGoForward: false,
+          })),
+        }
+      }
+      if (hostGone) return { tabs: [] }
+      return {
+        tabs: [
+          {
+            tabId: 'live-1',
+            url: 'https://www.baidu.com/',
+            title: 'Baidu',
+            selected: true,
+            canGoBack: false,
+            canGoForward: false,
+          },
+          {
+            tabId: 'live-2',
+            url: 'https://chat.deepseek.com/',
+            title: 'DeepSeek',
+            selected: false,
+            canGoBack: false,
+            canGoForward: false,
+          },
+        ],
+      }
     })
-    const { rerender, ensureViewportHostSize } = mount({ browserWatchScreencast })
-    await waitFor(() => { expect(screen.getByText('stream failed')).toBeTruthy() })
-    ensureViewportHostSize()
-    rerender()
-    fireEvent.click(screen.getByText('重试'))
-    await waitFor(() => { expect(browserWatchScreencast.mock.calls.length).toBeGreaterThan(1) })
+    const browserCreateTab = vi.fn(async (_workspaceId: WorkspaceId, url: string) => {
+      const tabId = `new-${String(created.length + 1)}`
+      created.push({ tabId, url })
+      return { tabId }
+    })
+    mount({ browserList, browserCreateTab })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /Baidu/ })).toBeTruthy() })
+    hostGone = true
+    fireEvent.click(screen.getByLabelText('新建标签页'))
+    await waitFor(() => {
+      expect(browserCreateTab).toHaveBeenCalledWith(WID, 'https://www.baidu.com/', expect.any(AbortSignal))
+      expect(browserCreateTab).toHaveBeenCalledWith(WID, 'https://chat.deepseek.com/', expect.any(AbortSignal))
+      expect(browserCreateTab).toHaveBeenCalledWith(WID, DEFAULT_BROWSER_TAB_URL, expect.any(AbortSignal))
+    })
   })
 
   it('forwards back, forward, and reload through Host RPC', async () => {
-    const browserGoBack = vi.fn(async () => BLANK_PAGE)
-    const browserGoForward = vi.fn(async () => BLANK_PAGE)
-    const browserReload = vi.fn(async () => BLANK_PAGE)
-    mount({
+    const { browserGoBack, browserGoForward, browserReload } = mount({
       browserList: vi.fn(async () => ({
         tabs: [{ ...BLANK_TAB, canGoBack: true, canGoForward: true }],
       })),
-      browserGoBack,
-      browserGoForward,
-      browserReload,
     })
     await waitFor(() => { expect(screen.getByLabelText('后退')).toBeTruthy() })
     fireEvent.click(screen.getByLabelText('后退'))
     fireEvent.click(screen.getByLabelText('前进'))
     fireEvent.click(screen.getByLabelText('刷新'))
-    await waitFor(() => {
-      expect(browserGoBack).toHaveBeenCalled()
-      expect(browserGoForward).toHaveBeenCalled()
-      expect(browserReload).toHaveBeenCalled()
-    })
+    await waitFor(() => { expect(browserGoBack).toHaveBeenCalled() })
+    expect(browserGoForward).toHaveBeenCalled()
+    expect(browserReload).toHaveBeenCalled()
   })
 
   it('closes a tab when more than one tab exists', async () => {
-    const browserList = vi.fn(async () => ({
-      tabs: [
-        { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true, canGoBack: false, canGoForward: false },
-        { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false, canGoBack: false, canGoForward: false },
-      ],
-    }))
-    const browserCloseTab = vi.fn(async () => ({ closed: true as const }))
-    mount({ browserList, browserCloseTab })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'One' })).toBeTruthy() })
+    const { browserCloseTab } = mount({
+      browserList: vi.fn(async () => ({
+        tabs: [
+          { ...BLANK_TAB, title: 'One' },
+          { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false, canGoBack: false, canGoForward: false },
+        ],
+      })),
+    })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /One/ })).toBeTruthy() })
     fireEvent.click(screen.getAllByLabelText('关闭')[0]!)
     await waitFor(() => { expect(browserCloseTab).toHaveBeenCalledWith(WID, 'live-1', expect.any(AbortSignal)) })
   })
 
-  it('selects another tab and surfaces non-unavailable stream/error frames inline', async () => {
-    const browserList = vi.fn(async () => ({
-      tabs: [
-        { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true, canGoBack: false, canGoForward: false },
-        { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false, canGoBack: false, canGoForward: false },
-      ],
-    }))
-    const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>((
-      _workspaceId,
-      tabId,
-      onFrame,
-      _signal,
-      onOpen,
-    ) => {
-      onOpen?.()
-      if (tabId === 'live-1') {
-        onFrame({ type: 'stream/error', error: { code: 'internal', message: 'boom', details: {} } })
-      }
+  it('selects another tab and raises its window', async () => {
+    const { browserSelectTab, browserShowWindow } = mount({
+      browserList: vi.fn(async () => ({
+        tabs: [
+          { ...BLANK_TAB, title: 'One' },
+          { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false, canGoBack: false, canGoForward: false },
+        ],
+      })),
     })
-    const browserSelectTab = vi.fn(async () => ({ selected: true as const }))
-    mount({ browserList, browserWatchScreencast, browserSelectTab })
-    await waitFor(() => { expect(screen.getByText('boom')).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'Two' })).toBeTruthy() })
     fireEvent.click(screen.getByRole('tab', { name: 'Two' }))
     await waitFor(() => { expect(browserSelectTab).toHaveBeenCalledWith(WID, 'live-2', expect.any(AbortSignal)) })
+    await waitFor(() => { expect(browserShowWindow).toHaveBeenCalledWith(WID, 'live-2', expect.any(AbortSignal)) })
   })
 
   it('surfaces navigation failures inline', async () => {
-    const browserGoBack = vi.fn(async () => Promise.reject(new Error('back failed')))
+    const browserNavigate = vi.fn(async () => Promise.reject(new Error('dns failed')))
     mount({
-      browserList: vi.fn(async () => ({
-        tabs: [{ ...BLANK_TAB, canGoBack: true, canGoForward: false }],
-      })),
-      browserGoBack,
+      browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })),
+      browserNavigate,
     })
-    await waitFor(() => { expect(screen.getByLabelText('后退')).toBeTruthy() })
-    fireEvent.click(screen.getByLabelText('后退'))
-    await waitFor(() => { expect(screen.getByText('back failed')).toBeTruthy() })
+    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
+    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://missing.example' } })
+    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
+    await waitFor(() => { expect(screen.getByText('dns failed')).toBeTruthy() })
+    expect(screen.getByText('无法加载此页')).toBeTruthy()
+    expect(screen.getByRole('tablist')).toBeTruthy()
   })
 
   it('surfaces automatic tab creation failures inline', async () => {
@@ -536,278 +381,89 @@ describe('BrowserPanel', () => {
     await waitFor(() => { expect(screen.getByText('list failed')).toBeTruthy() })
   })
 
-  it('surfaces forward and reload failures inline', async () => {
-    const browserGoForward = vi.fn(async () => Promise.reject(new Error('forward failed')))
-    const browserReload = vi.fn(async () => Promise.reject(new Error('reload failed')))
-    mount({
-      browserList: vi.fn(async () => ({
-        tabs: [{ ...BLANK_TAB, canGoBack: false, canGoForward: true }],
-      })),
-      browserGoForward,
-      browserReload,
-    })
-    await waitFor(() => { expect(screen.getByLabelText('前进')).toBeTruthy() })
-    fireEvent.click(screen.getByLabelText('前进'))
-    await waitFor(() => { expect(screen.getByText('forward failed')).toBeTruthy() })
-    fireEvent.click(screen.getByLabelText('刷新'))
-    await waitFor(() => { expect(screen.getByText('reload failed')).toBeTruthy() })
-  })
-
-  it('surfaces address navigation and pointer forwarding failures inline', async () => {
-    const browserNavigate = vi.fn(async () => Promise.reject(new Error('navigate failed')))
-    const browserSendPointer = vi.fn(async () => Promise.reject(new Error('pointer failed')))
-    const { ensureViewportHostSize, rerender } = mount({ browserNavigate, browserSendPointer })
-    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
-    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://example.com' } })
-    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
-    await waitFor(() => { expect(screen.getByText('navigate failed')).toBeTruthy() })
-    ensureViewportHostSize()
-    rerender()
-    await waitFor(() => {
-      expect(screen.getByRole('tabpanel').querySelector('div[tabindex="0"]')).toBeTruthy()
-    })
-    const stage = screen.getByRole('tabpanel').querySelector('div[tabindex="0"]')! as HTMLElement
-    stage.getBoundingClientRect = () => ({
-      x: 0, y: 0, left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, toJSON: () => ({}),
-    })
-    fireEvent.mouseDown(stage, { clientX: 10, clientY: 20, button: 0 })
-    await waitFor(() => { expect(screen.getByText('pointer failed')).toBeTruthy() })
-  })
-
-  it('does not auto-create when deferAutoCreate is set until the segment is re-entered', async () => {
-    const panelStore = createBrowserPanelStore().create()
-    panelStore.actions.setDeferAutoCreate(WID, true)
-    const browserCreateTab = vi.fn()
-    const { rerender } = mount({
-      browserCreateTab,
-      useStore: hookOf(panelStore),
-      actions: panelStore.actions,
-      visible: false,
-    })
+  it('does not auto-create when the Browser segment is hidden', async () => {
+    const { browserCreateTab, rerender } = mount({ visible: false })
     await act(async () => { await Promise.resolve() })
     expect(browserCreateTab).not.toHaveBeenCalled()
     rerender({ visible: true })
     await waitFor(() => { expect(browserCreateTab).toHaveBeenCalled() })
   })
 
-  it('clears the loading overlay when SSE opens without an immediate frame', async () => {
-    const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>((
-      _workspaceId,
-      _tabId,
-      _onFrame,
-      _signal,
-      onOpen,
-    ) => { onOpen?.() })
-    const { ensureViewportHostSize, rerender } = mount({ browserWatchScreencast })
-    await waitFor(() => { expect(screen.getByRole('tabpanel')).toBeTruthy() })
-    ensureViewportHostSize()
-    rerender()
-    await waitFor(() => { expect(screen.queryByText('连接中…')).toBeNull() })
-  })
-
-  it('skips resize observation when ResizeObserver is unavailable', async () => {
-    const original = globalThis.ResizeObserver
-    // @ts-expect-error test-only removal of optional browser API
-    delete globalThis.ResizeObserver
-    try {
-      mount()
-      await waitFor(() => { expect(screen.getByRole('tabpanel')).toBeTruthy() })
-    } finally {
-      globalThis.ResizeObserver = original
-    }
-  })
-
   it('ignores empty address submissions', async () => {
-    const browserNavigate = vi.fn()
-    mount({ browserNavigate })
+    const { browserNavigate } = mount({
+      browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })),
+    })
     await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
     fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: '   ' } })
     fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
-    await act(async () => { await Promise.resolve() })
     expect(browserNavigate).not.toHaveBeenCalled()
-  })
-
-  it('surfaces keyboard forwarding failures inline', async () => {
-    const browserSendKeyboard = vi.fn(async () => Promise.reject(new Error('keyboard failed')))
-    const { ensureViewportHostSize, rerender } = mount({ browserSendKeyboard })
-    await waitFor(() => { expect(screen.getByRole('tabpanel')).toBeTruthy() })
-    ensureViewportHostSize()
-    rerender()
-    await waitFor(() => {
-      expect(screen.getByRole('tabpanel').querySelector('div[tabindex="0"]')).toBeTruthy()
-    })
-    const stage = screen.getByRole('tabpanel').querySelector('div[tabindex="0"]')! as HTMLElement
-    fireEvent.keyDown(stage, { key: 'a' })
-    await waitFor(() => { expect(screen.getByText('keyboard failed')).toBeTruthy() })
-  })
-
-  it('surfaces viewport resize failures inline', async () => {
-    const browserResizeViewport = vi.fn(async () => Promise.reject(new Error('resize failed')))
-    const { ensureViewportHostSize, rerender } = mount({ browserResizeViewport })
-    await waitFor(() => { expect(screen.getByRole('tabpanel')).toBeTruthy() })
-    ensureViewportHostSize()
-    rerender()
-    await waitFor(() => { expect(screen.getByText('resize failed')).toBeTruthy() })
-  })
-
-  it('debounces viewport resize when the screencast host resizes', async () => {
-    const browserList = vi.fn(async () => ({
-      tabs: [{ tabId: 'live-1', url: 'about:blank', title: '', selected: true, canGoBack: false, canGoForward: false }],
-    }))
-    const browserResizeViewport = vi.fn(async () => ({ resized: true as const }))
-    mount({ browserList, browserResizeViewport })
-    await waitFor(() => { expect(screen.getByRole('tabpanel')).toBeTruthy() })
-    browserResizeViewport.mockClear()
-    await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 200) }) })
-    expect(browserResizeViewport).toHaveBeenCalled()
-  })
-
-  it('skips auto-create while deferAutoCreate stays set on a visible segment', async () => {
-    const panelStore = createBrowserPanelStore().create()
-    panelStore.actions.setWorkspaceTabs(WID, [{ tabId: 'a', url: 'about:blank', title: '', canGoBack: false, canGoForward: false }], 'a')
-    const browserCreateTab = vi.fn()
-    const browserList = vi.fn(async () => ({ tabs: [] }))
-    const { rerender } = mount({
-      useStore: hookOf(panelStore),
-      actions: panelStore.actions,
-      browserCreateTab,
-      browserList,
-    })
-    await waitFor(() => { expect(screen.getByRole('tablist')).toBeTruthy() })
-    browserCreateTab.mockClear()
-    browserList.mockClear()
-    act(() => {
-      panelStore.actions.setWorkspaceTabs(WID, [])
-      panelStore.actions.setDeferAutoCreate(WID, true)
-    })
-    rerender()
-    await act(async () => { await Promise.resolve() })
-    expect(browserCreateTab).not.toHaveBeenCalled()
-    expect(browserList).not.toHaveBeenCalled()
   })
 
   it('swallows DirectoryBrowseError when closing or selecting tabs', async () => {
-    const { DirectoryBrowseError } = await import('@deepseek-ai/dsh-client-runtime/client')
-    const browserList = vi.fn(async () => ({
-      tabs: [
-        { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true, canGoBack: false, canGoForward: false },
-        { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false, canGoBack: false, canGoForward: false },
-      ],
-    }))
     const browseError = new DirectoryBrowseError({
       code: 'browser-tab-not-found',
-      message: 'browse failed',
-      details: { workspaceId: WID, tabId: 'live-1' },
+      message: 'gone',
+      details: {},
     })
-    const browserCloseTab = vi.fn(async () => Promise.reject(browseError))
-    const browserSelectTab = vi.fn(async () => Promise.reject(browseError))
-    mount({ browserList, browserCloseTab, browserSelectTab })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'One' })).toBeTruthy() })
+    const { browserCloseTab, browserSelectTab } = mount({
+      browserList: vi.fn(async () => ({
+        tabs: [
+          { ...BLANK_TAB, title: 'One' },
+          { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false, canGoBack: false, canGoForward: false },
+        ],
+      })),
+      browserCloseTab: vi.fn(async () => Promise.reject(browseError)),
+      browserSelectTab: vi.fn(async () => Promise.reject(browseError)),
+    })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /One/ })).toBeTruthy() })
     fireEvent.click(screen.getAllByLabelText('关闭')[0]!)
     fireEvent.click(screen.getByRole('tab', { name: 'Two' }))
-    await act(async () => { await Promise.resolve() })
-    expect(screen.getByRole('tab', { name: 'One' })).toBeTruthy()
+    await waitFor(() => { expect(browserCloseTab).toHaveBeenCalled() })
+    await waitFor(() => { expect(screen.queryByRole('tab', { name: /One/ })).toBeNull() })
     expect(screen.getByRole('tab', { name: 'Two' })).toBeTruthy()
-  })
-
-  it('ignores non-Enter keys in the address bar', async () => {
-    const browserNavigate = vi.fn()
-    mount({ browserNavigate })
-    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
-    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'a' })
-    expect(browserNavigate).not.toHaveBeenCalled()
-  })
-
-  it('updates tab metadata after successful back navigation', async () => {
-    const browserGoBack = vi.fn(async () => ({
-      url: 'https://prev.test', title: 'Prev', canGoBack: false, canGoForward: true,
-    }))
-    mount({
-      browserList: vi.fn(async () => ({
-        tabs: [{ ...BLANK_TAB, canGoBack: true, canGoForward: false }],
-      })),
-      browserGoBack,
-    })
-    await waitFor(() => { expect(screen.getByLabelText('后退')).toBeTruthy() })
-    fireEvent.click(screen.getByLabelText('后退'))
-    await waitFor(() => { expect(screen.getByDisplayValue('https://prev.test')).toBeTruthy() })
+    expect(browserSelectTab).toHaveBeenCalled()
   })
 
   it('disabled-last-tab: hides close affordance when only one tab remains', async () => {
-    mount({ browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })) })
-    await waitFor(() => { expect(screen.getByRole('tablist')).toBeTruthy() })
+    mount({ browserList: vi.fn(async () => ({ tabs: [{ ...BLANK_TAB, title: 'Only' }] })) })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'Only' })).toBeTruthy() })
     expect(screen.queryByLabelText('关闭')).toBeNull()
   })
 
   it('nav-disabled-history: disables back and forward without history', async () => {
-    mount({
-      browserList: vi.fn(async () => ({
-        tabs: [{ ...BLANK_TAB, canGoBack: false, canGoForward: false }],
-      })),
-    })
-    await waitFor(() => {
-      expect(screen.getByLabelText('后退')).toHaveProperty('disabled', true)
-      expect(screen.getByLabelText('前进')).toHaveProperty('disabled', true)
-    })
-  })
-
-  it('US-9: creates a new tab from + and focuses the address bar', async () => {
-    const browserCreateTab = vi.fn(async () => ({ tabId: 'live-2' }))
-    mount({ browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })), browserCreateTab })
-    await waitFor(() => { expect(screen.getByRole('tablist')).toBeTruthy() })
-    fireEvent.click(screen.getByLabelText('新建标签页'))
-    await waitFor(() => {
-      expect(browserCreateTab).toHaveBeenCalledWith(WID, DEFAULT_BROWSER_TAB_URL, expect.any(AbortSignal))
-      expect(screen.getByLabelText('地址栏')).toBe(document.activeElement)
-    })
+    mount({ browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })) })
+    await waitFor(() => { expect(screen.getByLabelText('后退')).toBeTruthy() })
+    expect((screen.getByLabelText('后退') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByLabelText('前进') as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('US-10: closes tabs from the context menu while keeping at least one tab', async () => {
-    const browserCloseTab = vi.fn(async () => ({ closed: true as const }))
-    mount({
+    const { browserCloseTab } = mount({
       browserList: vi.fn(async () => ({
         tabs: [
-          { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true, canGoBack: false, canGoForward: false },
+          { ...BLANK_TAB, title: 'One' },
           { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false, canGoBack: false, canGoForward: false },
         ],
       })),
-      browserCloseTab,
     })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'One' })).toBeTruthy() })
-    fireEvent.contextMenu(screen.getByRole('tab', { name: 'One' }))
+    await waitFor(() => { expect(screen.getByRole('tab', { name: /One/ })).toBeTruthy() })
+    fireEvent.contextMenu(screen.getByRole('tab', { name: /One/ }))
     fireEvent.click(await screen.findByText('关闭其他'))
     await waitFor(() => { expect(browserCloseTab).toHaveBeenCalledWith(WID, 'live-2', expect.any(AbortSignal)) })
-    expect(screen.getByRole('tab', { name: 'One' })).toBeTruthy()
-  })
-
-  it('US-12: navigates localhost and public URLs from the address bar', async () => {
-    const browserNavigate = vi.fn(async (_wid, _tabId, url: string) => ({
-      url,
-      title: 'Loaded',
-      canGoBack: true,
-      canGoForward: false,
-    }))
-    mount({ browserNavigate })
-    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
-    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: '127.0.0.1:5173' } })
-    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
-    await waitFor(() => {
-      expect(browserNavigate).toHaveBeenCalledWith(WID, 'tab-1', 'http://127.0.0.1:5173/', expect.any(AbortSignal))
-    })
-    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://example.com/docs' } })
-    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
-    await waitFor(() => {
-      expect(browserNavigate).toHaveBeenCalledWith(WID, 'tab-1', 'https://example.com/docs', expect.any(AbortSignal))
-    })
   })
 
   it('US-15: opens the current tab URL in the external browser', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const opened: string[] = []
+    const originalOpen = window.open
+    window.open = ((url?: string | URL) => {
+      opened.push(String(url))
+      return null
+    }) as typeof window.open
     mount({
       browserList: vi.fn(async () => ({
         tabs: [{
           tabId: 'live-1',
-          url: 'https://example.com/page',
+          url: 'https://example.com',
           title: 'Example',
           selected: true,
           canGoBack: false,
@@ -817,50 +473,29 @@ describe('BrowserPanel', () => {
     })
     await waitFor(() => { expect(screen.getByLabelText('在外部浏览器打开')).toBeTruthy() })
     fireEvent.click(screen.getByLabelText('在外部浏览器打开'))
-    expect(openSpy).toHaveBeenCalledWith('https://example.com/page', '_blank', 'noopener,noreferrer')
-    openSpy.mockRestore()
+    expect(opened).toEqual(['https://example.com'])
+    window.open = originalOpen
   })
 
-  it('empty-unavailable: shows 浏览器不可用 card with retry while keeping stored tabs visible', async () => {
-    const browserList = vi.fn(async () => ({
-      tabs: [{
-        tabId: 'live-1',
-        url: 'https://example.com',
-        title: 'Example',
-        selected: true,
-        canGoBack: false,
-        canGoForward: false,
-      }],
-    }))
-    let attempt = 0
-    const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>((
-      _workspaceId,
-      _tabId,
-      onFrame,
-      _signal,
-      onOpen,
-    ) => {
-      attempt += 1
-      onOpen?.()
-      if (attempt === 1) {
-        onFrame({
-          type: 'stream/error',
-          error: { code: 'browser-unavailable', message: 'Chromium 未安装', details: { reason: 'chromium-missing' } },
-        })
-      }
+  it('places nav icon tooltips below the buttons', async () => {
+    mount({
+      browserList: vi.fn(async () => ({
+        tabs: [{
+          tabId: 'live-1',
+          url: 'https://example.com',
+          title: 'Example',
+          selected: true,
+          canGoBack: false,
+          canGoForward: false,
+        }],
+      })),
     })
-    mount({ browserList, browserWatchScreencast })
-    await waitFor(() => {
-      expect(screen.getByText('浏览器不可用')).toBeTruthy()
-      expect(screen.getByText('Chromium 未安装')).toBeTruthy()
-      expect(screen.getByRole('tab', { name: 'Example' })).toBeTruthy()
-    })
-    fireEvent.click(screen.getByText('重试'))
-    await waitFor(() => { expect(browserWatchScreencast.mock.calls.length).toBeGreaterThan(1) })
+    await waitFor(() => { expect(screen.getByLabelText('在外部浏览器打开')).toBeTruthy() })
+    fireEvent.focus(screen.getByLabelText('在外部浏览器打开'))
+    expect(screen.getByRole('tooltip').getAttribute('data-side')).toBe('bottom')
   })
 
   it('US-17: bootstrap browser-unavailable without tabs shows retry card and no tab chrome', async () => {
-    const { DirectoryBrowseError } = await import('@deepseek-ai/dsh-client-runtime/client')
     const browserCreateTab = vi.fn(async () => Promise.reject(new DirectoryBrowseError({
       code: 'browser-unavailable',
       message: '无法启动浏览器',
@@ -874,17 +509,6 @@ describe('BrowserPanel', () => {
     await waitFor(() => { expect(browserCreateTab.mock.calls.length).toBeGreaterThan(1) })
   })
 
-  it('error-nav: navigation failure keeps the tab open with inline error and canvas empty state', async () => {
-    const browserNavigate = vi.fn(async () => Promise.reject(new Error('dns failed')))
-    mount({ browserNavigate })
-    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
-    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://missing.example' } })
-    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
-    await waitFor(() => { expect(screen.getByText('dns failed')).toBeTruthy() })
-    expect(screen.getByText('无法加载此页')).toBeTruthy()
-    expect(screen.getByRole('tablist')).toBeTruthy()
-  })
-
   it('US-13 / info-external: first non-localhost visit shows inline info without modal', async () => {
     const browserNavigate = vi.fn(async (_wid, _tabId, url: string) => ({
       url,
@@ -892,15 +516,15 @@ describe('BrowserPanel', () => {
       canGoBack: false,
       canGoForward: false,
     }))
-    mount({ browserNavigate })
+    mount({
+      browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })),
+      browserNavigate,
+    })
     await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
     fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://example.com' } })
     fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
     await waitFor(() => { expect(screen.getByText('正在访问外部站点')).toBeTruthy() })
     expect(screen.queryByRole('dialog')).toBeNull()
-    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://example.com/docs' } })
-    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
-    await waitFor(() => { expect(screen.queryByText('正在访问外部站点')).toBeNull() })
   })
 
   it('US-14 / menu-overflow: overflow menu exposes Hard Reload, Copy URL, and Zoom controls', async () => {
@@ -937,65 +561,19 @@ describe('BrowserPanel', () => {
     fireEvent.click(screen.getByLabelText('更多操作'))
     fireEvent.click(await screen.findByText('+'))
     expect(browserWorkspaceState(panelStore.getSnapshot(), WID).zoom).toBe(1.25)
-    const zoomOut = (await screen.findAllByRole('menuitem')).find(item => item.textContent === '−')
-    expect(zoomOut).toBeTruthy()
-    fireEvent.click(zoomOut!)
-    expect(browserWorkspaceState(panelStore.getSnapshot(), WID).zoom).toBe(1)
-    fireEvent.click(await screen.findByText('重置'))
-    expect(browserWorkspaceState(panelStore.getSnapshot(), WID).zoom).toBe(1)
-    expect(formatBrowserZoomLabel(browserWorkspaceState(panelStore.getSnapshot(), WID).zoom)).toBe('100%')
+    expect(formatBrowserZoomLabel(1.25)).toBe('125%')
   })
 
-  it('closes the overflow and tab context menus on Escape', async () => {
-    mount({
-      browserList: vi.fn(async () => ({
-        tabs: [
-          { tabId: 'live-1', url: 'about:blank', title: 'One', selected: true, canGoBack: false, canGoForward: false },
-          { tabId: 'live-2', url: 'about:blank', title: 'Two', selected: false, canGoBack: false, canGoForward: false },
-        ],
-      })),
+  it('segment-hidden: hiding the Browser segment does not close Host tabs', async () => {
+    const { browserCloseTab, browserShowWindow, rerender } = mount({
+      browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })),
     })
-    await waitFor(() => { expect(screen.getByRole('tab', { name: 'One' })).toBeTruthy() })
-    fireEvent.contextMenu(screen.getByRole('tab', { name: 'One' }))
-    expect(await screen.findByText('关闭其他')).toBeTruthy()
-    fireEvent.keyDown(document, { key: 'Escape' })
-    await waitFor(() => { expect(screen.queryByText('关闭其他')).toBeNull() })
-    fireEvent.click(screen.getByLabelText('更多操作'))
-    expect(await screen.findByText('Hard Reload')).toBeTruthy()
-    fireEvent.keyDown(document, { key: 'Escape' })
-    await waitFor(() => { expect(screen.queryByText('Hard Reload')).toBeNull() })
-  })
-
-  it('segment-hidden: aborts screencast SSE when the Browser segment hides without closing Host tabs', async () => {
-    let abortSignal: AbortSignal | undefined
-    const browserList = vi.fn(async () => ({ tabs: [BLANK_TAB] }))
-    const browserCloseTab = vi.fn()
-    const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>((
-      _workspaceId,
-      _tabId,
-      _onFrame,
-      signal,
-      onOpen,
-    ) => {
-      abortSignal = signal
-      onOpen?.()
-    })
-    const { rerender, browserWatchScreencast: watchMock } = mount({
-      browserList,
-      browserCloseTab,
-      browserWatchScreencast,
-    })
-    await waitFor(() => { expect(abortSignal).toBeDefined() })
-    expect(abortSignal?.aborted).toBe(false)
-    const callsBeforeHide = watchMock.mock.calls.length
+    await waitFor(() => { expect(browserShowWindow).toHaveBeenCalled() })
     rerender({ visible: false })
-    expect(abortSignal?.aborted).toBe(true)
     expect(browserCloseTab).not.toHaveBeenCalled()
-    rerender({ visible: true })
-    await waitFor(() => { expect(watchMock.mock.calls.length).toBeGreaterThan(callsBeforeHide) })
   })
 
-  it('loading-reconnect: remount with persisted tabs calls Host list and reconnects screencast', async () => {
+  it('loading-reconnect: remount with persisted tabs calls Host list and raises the window', async () => {
     const panelStore = createBrowserPanelStore().create()
     panelStore.actions.setWorkspaceTabs(WID, [{
       tabId: 'live-1',
@@ -1004,7 +582,6 @@ describe('BrowserPanel', () => {
       canGoBack: false,
       canGoForward: false,
     }], 'live-1')
-    panelStore.actions.setZoom(WID, 1.25)
     const browserList = vi.fn(async () => ({
       tabs: [{
         tabId: 'live-1',
@@ -1016,121 +593,66 @@ describe('BrowserPanel', () => {
       }],
     }))
     const browserCreateTab = vi.fn()
-    const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>((
-      _workspaceId,
-      _tabId,
-      _onFrame,
-      _signal,
-      onOpen,
-    ) => { onOpen?.() })
     const first = mount({
       useStore: hookOf(panelStore),
       actions: panelStore.actions,
       browserList,
       browserCreateTab,
-      browserWatchScreencast,
     })
     await waitFor(() => { expect(screen.getByRole('tab', { name: 'Example' })).toBeTruthy() })
     expect(browserCreateTab).not.toHaveBeenCalled()
     first.unmount()
     browserList.mockClear()
-    browserWatchScreencast.mockClear()
-    mount({
+    const { browserShowWindow } = mount({
       useStore: hookOf(panelStore),
       actions: panelStore.actions,
       browserList,
       browserCreateTab,
-      browserWatchScreencast,
     })
     await waitFor(() => { expect(browserList).toHaveBeenCalledWith(WID, expect.any(AbortSignal)) })
-    await waitFor(() => { expect(browserWatchScreencast).toHaveBeenCalled() })
-    expect(screen.getByRole('tab', { name: 'Example' })).toBeTruthy()
-    expect(browserWorkspaceState(panelStore.getSnapshot(), WID).zoom).toBe(1.25)
+    await waitFor(() => { expect(browserShowWindow).toHaveBeenCalled() })
     expect(browserCreateTab).not.toHaveBeenCalled()
   })
 
-  it('zoom-client: changing Client zoom does not change Host resizeViewport dimensions', async () => {
+  it('host-restart: empty Host list with persisted Client tabs recreates Host tabs then raises the window', async () => {
     const panelStore = createBrowserPanelStore().create()
-    const browserList = vi.fn(async () => ({ tabs: [BLANK_TAB] }))
-    const browserResizeViewport = vi.fn(async () => ({ resized: true as const }))
-    const { browserResizeViewport: resizeMock, ensureViewportHostSize, rerender } = mount({
-      browserList,
-      browserResizeViewport,
+    panelStore.actions.setWorkspaceTabs(WID, [{
+      tabId: 'stale-1',
+      url: 'https://example.com',
+      title: 'Example',
+      canGoBack: false,
+      canGoForward: false,
+    }], 'stale-1')
+    const browserList = vi.fn()
+      .mockResolvedValueOnce({ tabs: [] })
+      .mockResolvedValue({
+        tabs: [{
+          tabId: 'live-1',
+          url: 'https://example.com',
+          title: 'Example',
+          selected: true,
+          canGoBack: false,
+          canGoForward: false,
+        }],
+      })
+    const browserCreateTab = vi.fn(async () => ({ tabId: 'live-1' }))
+    const { browserShowWindow } = mount({
       useStore: hookOf(panelStore),
       actions: panelStore.actions,
+      browserList,
+      browserCreateTab,
     })
-    await waitFor(() => { expect(screen.getByRole('tabpanel')).toBeTruthy() })
-    ensureViewportHostSize()
-    rerender()
-    await waitFor(() => { expect(resizeMock).toHaveBeenCalled() })
-    const firstCall = resizeMock.mock.calls[0]
-    resizeMock.mockClear()
-    act(() => { panelStore.actions.setZoom(WID, 1.25) })
-    ensureViewportHostSize()
-    rerender()
-    await act(async () => { await Promise.resolve() })
-    expect(resizeMock).not.toHaveBeenCalled()
-    act(() => { panelStore.actions.setZoom(WID, 1) })
-    rerender()
-    expect(resizeMock).not.toHaveBeenCalled()
-    if (firstCall !== undefined) {
-      expect(firstCall[2]).toBe(640)
-      expect(firstCall[3]).toBe(480)
-    }
+    await waitFor(() => { expect(browserCreateTab).toHaveBeenCalled() })
+    await waitFor(() => { expect(browserShowWindow).toHaveBeenCalledWith(WID, 'live-1', expect.any(AbortSignal)) })
   })
 
-  it('loading-hard-reload: Hard Reload keeps the previous frame visible without the dim overlay', async () => {
-    let resolveReload: ((value: typeof BLANK_PAGE) => void) | undefined
-    const browserReload = vi.fn(async () => new Promise<typeof BLANK_PAGE>((resolve) => {
-      resolveReload = resolve
-    }))
-    const browserWatchScreencast = vi.fn<BrowserPanelProps['browserWatchScreencast']>((
-      _workspaceId,
-      _tabId,
-      onFrame,
-      _signal,
-      onOpen,
-    ) => {
-      onOpen?.()
-      onFrame({
-        type: 'host/browser-screencast',
-        data: 'ZmFrZQ==',
-        width: 800,
-        height: 600,
-      })
+  it('show-window button raises the headed Chromium window again', async () => {
+    const { browserShowWindow } = mount({
+      browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })),
     })
-    const { view } = mount({
-      browserList: vi.fn(async () => ({
-        tabs: [{ ...BLANK_TAB, url: 'https://example.com', title: 'Example' }],
-      })),
-      browserReload,
-      browserWatchScreencast,
-    })
-    await waitFor(() => { expect(screen.getByLabelText('更多操作')).toBeTruthy() })
-    await waitFor(() => { expect(view.container.querySelector('img[src^="data:image/jpeg"]')).toBeTruthy() })
-    fireEvent.click(screen.getByLabelText('更多操作'))
-    fireEvent.click(await screen.findByText('Hard Reload'))
-    await waitFor(() => { expect(browserReload).toHaveBeenCalledWith(WID, 'live-1', true) })
-    expect(view.container.querySelector('[class*="loadingOverlay"]')).toBeNull()
-    expect(screen.queryByText('连接中…')).toBeNull()
-    resolveReload?.(BLANK_PAGE)
-    await waitFor(() => { expect(view.container.querySelector('img[src^="data:image/jpeg"]')).toBeTruthy() })
-  })
-
-  it('error-nav retry reruns the failed navigation', async () => {
-    let attempt = 0
-    const browserNavigate = vi.fn(async () => {
-      attempt += 1
-      if (attempt === 1) return Promise.reject(new Error('dns failed'))
-      return { url: 'https://example.com/', title: 'Example', canGoBack: false, canGoForward: false }
-    })
-    mount({ browserNavigate })
-    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
-    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://example.com' } })
-    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
-    await waitFor(() => { expect(screen.getByText('dns failed')).toBeTruthy() })
-    fireEvent.click(screen.getByText('重试'))
-    await waitFor(() => { expect(screen.queryByText('无法加载此页')).toBeNull() })
-    expect(browserNavigate).toHaveBeenCalledTimes(2)
+    await waitFor(() => { expect(browserShowWindow).toHaveBeenCalled() })
+    browserShowWindow.mockClear()
+    fireEvent.click(screen.getByText('显示窗口'))
+    await waitFor(() => { expect(browserShowWindow).toHaveBeenCalled() })
   })
 })

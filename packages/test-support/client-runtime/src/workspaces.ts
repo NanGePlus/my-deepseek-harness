@@ -765,6 +765,13 @@ export class TestWorkspaces implements IWorkspaces {
     return { selected: true }
   }
 
+  async browserShowWindow(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<{ shown: true }> {
+    this.calls.push({ method: 'browserShowWindow', args: [workspaceId, tabId, signal] })
+    const stub = this.stubs.get('browserShowWindow')
+    if (stub !== undefined) return await (stub(workspaceId, tabId, signal) as Promise<{ shown: true }>)
+    return { shown: true }
+  }
+
   async browserNavigate(
     workspaceId: WorkspaceId,
     tabId: string,
@@ -835,12 +842,14 @@ export class TestWorkspaces implements IWorkspaces {
     tabId: string,
     deltaX: number,
     deltaY: number,
+    x?: number,
+    y?: number,
     signal?: AbortSignal,
   ): Promise<{ scrolled: true }> {
-    this.calls.push({ method: 'browserScroll', args: [workspaceId, tabId, deltaX, deltaY, signal] })
+    this.calls.push({ method: 'browserScroll', args: [workspaceId, tabId, deltaX, deltaY, x, y, signal] })
     const stub = this.stubs.get('browserScroll')
     if (stub !== undefined) {
-      return await (stub(workspaceId, tabId, deltaX, deltaY, signal) as Promise<{ scrolled: true }>)
+      return await (stub(workspaceId, tabId, deltaX, deltaY, x, y, signal) as Promise<{ scrolled: true }>)
     }
     return { scrolled: true }
   }
@@ -865,12 +874,16 @@ export class TestWorkspaces implements IWorkspaces {
     tabId: string,
     width: number,
     height: number,
+    devicePixelRatio: number,
     signal?: AbortSignal,
   ): Promise<{ resized: true }> {
-    this.calls.push({ method: 'browserResizeViewport', args: [workspaceId, tabId, width, height, signal] })
+    this.calls.push({
+      method: 'browserResizeViewport',
+      args: [workspaceId, tabId, width, height, devicePixelRatio, signal],
+    })
     const stub = this.stubs.get('browserResizeViewport')
     if (stub !== undefined) {
-      return await (stub(workspaceId, tabId, width, height, signal) as Promise<{ resized: true }>)
+      return await (stub(workspaceId, tabId, width, height, devicePixelRatio, signal) as Promise<{ resized: true }>)
     }
     return { resized: true }
   }
@@ -885,10 +898,12 @@ export class TestWorkspaces implements IWorkspaces {
       button?: 'left' | 'right' | 'middle'
     },
     signal?: AbortSignal,
-  ): Promise<{ sent: true }> {
+  ): Promise<{ sent: true; cursor?: string }> {
     this.calls.push({ method: 'browserSendPointer', args: [workspaceId, tabId, event, signal] })
     const stub = this.stubs.get('browserSendPointer')
-    if (stub !== undefined) return await (stub(workspaceId, tabId, event, signal) as Promise<{ sent: true }>)
+    if (stub !== undefined) {
+      return await (stub(workspaceId, tabId, event, signal) as Promise<{ sent: true; cursor?: string }>)
+    }
     return { sent: true }
   }
 

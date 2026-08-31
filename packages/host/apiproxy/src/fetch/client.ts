@@ -51,6 +51,7 @@ import {
   hostBrowserCreateTabValueSchema,
   hostBrowserCloseTabValueSchema,
   hostBrowserSelectTabValueSchema,
+  hostBrowserShowWindowValueSchema,
   hostBrowserNavigateValueSchema,
   hostBrowserGoBackValueSchema,
   hostBrowserGoForwardValueSchema,
@@ -202,6 +203,7 @@ export interface IApiClient {
     browserCreateTab(payload: RequestPayload<'host.browserCreateTab'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserCreateTab'>>>
     browserCloseTab(payload: RequestPayload<'host.browserCloseTab'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserCloseTab'>>>
     browserSelectTab(payload: RequestPayload<'host.browserSelectTab'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserSelectTab'>>>
+    browserShowWindow(payload: RequestPayload<'host.browserShowWindow'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserShowWindow'>>>
     browserNavigate(payload: RequestPayload<'host.browserNavigate'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserNavigate'>>>
     browserGoBack(payload: RequestPayload<'host.browserGoBack'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserGoBack'>>>
     browserGoForward(payload: RequestPayload<'host.browserGoForward'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.browserGoForward'>>>
@@ -332,6 +334,7 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'host.browserCreateTab': hostBrowserCreateTabValueSchema,
   'host.browserCloseTab': hostBrowserCloseTabValueSchema,
   'host.browserSelectTab': hostBrowserSelectTabValueSchema,
+  'host.browserShowWindow': hostBrowserShowWindowValueSchema,
   'host.browserNavigate': hostBrowserNavigateValueSchema,
   'host.browserGoBack': hostBrowserGoBackValueSchema,
   'host.browserGoForward': hostBrowserGoForwardValueSchema,
@@ -669,6 +672,7 @@ export abstract class AbstractApiClient implements IApiClient {
     browserCreateTab: (payload, signal) => this.callUnary('host.browserCreateTab', payload, signal),
     browserCloseTab: (payload, signal) => this.callUnary('host.browserCloseTab', payload, signal),
     browserSelectTab: (payload, signal) => this.callUnary('host.browserSelectTab', payload, signal),
+    browserShowWindow: (payload, signal) => this.callUnary('host.browserShowWindow', payload, signal),
     browserNavigate: (payload, signal) => this.callUnary('host.browserNavigate', payload, signal),
     browserGoBack: (payload, signal) => this.callUnary('host.browserGoBack', payload, signal),
     browserGoForward: (payload, signal) => this.callUnary('host.browserGoForward', payload, signal),

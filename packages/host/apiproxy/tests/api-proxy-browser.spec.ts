@@ -105,7 +105,7 @@ async function harness(
   const api = createApiProxy(ctx, {
     defaultModelSelection: () => ({ provider: 'test', model: 'test-model' }),
     cwd: root,
-    ...(browserRegistry === undefined ? {} : { browserRegistry }),
+    browserRegistry: { headless: true, ...browserRegistry },
   })
   return { api, root }
 }
@@ -137,6 +137,27 @@ async function collectScreencastFrames(
   return frames
 }
 
+/** Read width and height from a baseline JPEG buffer. */
+function readJpegDimensions(buffer: Buffer): { width: number; height: number } | null {
+  let offset = 2
+  while (offset + 1 < buffer.length) {
+    if (buffer[offset] !== 0xff) return null
+    const marker = buffer[offset + 1]
+    if (marker === 0xd9) return null
+    if (offset + 3 >= buffer.length) return null
+    const length = buffer.readUInt16BE(offset + 2)
+    if (marker === 0xc0 || marker === 0xc2) {
+      if (offset + 9 >= buffer.length) return null
+      return {
+        height: buffer.readUInt16BE(offset + 5),
+        width: buffer.readUInt16BE(offset + 7),
+      }
+    }
+    offset += 2 + length
+  }
+  return null
+}
+
 describe('host.browser.* integration seam', () => {
   it('createTab adds a tab to list with tabId, url, title, and selected', async () => {
     if (!chromiumAvailable()) return
@@ -149,6 +170,10 @@ describe('host.browser.* integration seam', () => {
     expect(row).toBeDefined()
     expect(row?.selected).toBe(true)
     expect(row?.url).toContain('about:blank')
+    expectOk(await api.host.browserShowWindow(
+      request({ workspaceId, tabId: created.tabId }),
+      controller.signal,
+    ))
   })
 
   it('navigate updates title and url; snapshot returns an accessibility tree', async () => {
@@ -198,6 +223,384 @@ describe('host.browser.* integration seam', () => {
     const frames = await streamPromise
     streamController.abort()
     expect(frames.some(frame => frame.type === 'host/browser-screencast')).toBe(true)
+  }, 25_000)
+
+  it('resizeViewport with devicePixelRatio captures HiDPI JPEG screencast frames', async () => {
+    if (!chromiumAvailable()) return
+    const { api, root } = await harness()
+    const fixtureDir = join(root, 'hidpi')
+    mkdirSync(fixtureDir, { recursive: true })
+    const fixturePath = join(fixtureDir, 'page.html')
+    writeFileSync(fixturePath, '<!doctype html><html><body style="margin:0;background:blue;width:200px;height:150px"></body></html>')
+    const workspaceId = await createWorkspace(api, root)
+    const controller = new AbortController()
+    const created = expectOk(await api.host.browserCreateTab(request({ workspaceId }), controller.signal))
+    expectOk(await api.host.browserNavigate(
+      request({ workspaceId, tabId: created.tabId, url: `file://${fixturePath}` }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserResizeViewport(
+      request({ workspaceId, tabId: created.tabId, width: 200, height: 150, devicePixelRatio: 2 }),
+      controller.signal,
+    ))
+    const streamController = new AbortController()
+    const frames = await collectScreencastFrames(
+      api.host.browserWatchScreencast(request({ workspaceId, tabId: created.tabId }), streamController.signal),
+      collected => collected.some(frame => frame.type === 'host/browser-screencast' && frame.data.length > 0),
+      20_000,
+    )
+    streamController.abort()
+    const frame = frames.find(item => item.type === 'host/browser-screencast' && item.data.length > 0)
+    expect(frame).toBeDefined()
+    if (frame === undefined || frame.type !== 'host/browser-screencast') throw new Error('unreachable')
+    expect(frame.width).toBe(200)
+    expect(frame.height).toBe(150)
+    const jpegDimensions = readJpegDimensions(Buffer.from(frame.data, 'base64'))
+    expect(jpegDimensions).toEqual({ width: 400, height: 300 })
+  }, 25_000)
+
+  it('browserScroll at coordinates scrolls nested overflow containers', async () => {
+    if (!chromiumAvailable()) return
+    const { api, root } = await harness()
+    const fixtureDir = join(root, 'nested-scroll')
+    mkdirSync(fixtureDir, { recursive: true })
+    const fixturePath = join(fixtureDir, 'page.html')
+    writeFileSync(fixturePath, `<!doctype html><html><head><title>top</title></head><body style="margin:0;overflow:hidden">
+<div id="panel" style="width:180px;height:120px;overflow:auto">
+<div style="height:400px"></div>
+<div id="marker">below</div>
+<div style="height:200px"></div>
+</div>
+<script>
+new IntersectionObserver(([entry]) => {
+  if (entry.isIntersecting) document.title = 'panel-scrolled'
+}).observe(document.getElementById('marker'))
+</script>
+</body></html>`)
+    const workspaceId = await createWorkspace(api, root)
+    const controller = new AbortController()
+    const created = expectOk(await api.host.browserCreateTab(request({ workspaceId }), controller.signal))
+    expectOk(await api.host.browserNavigate(
+      request({ workspaceId, tabId: created.tabId, url: `file://${fixturePath}` }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserResizeViewport(
+      request({ workspaceId, tabId: created.tabId, width: 240, height: 180 }),
+      controller.signal,
+    ))
+    const before = expectOk(await api.host.browserList(request({ workspaceId }), controller.signal))
+    expect(before.tabs[0]?.title).toBe('top')
+    expectOk(await api.host.browserScroll(
+      request({ workspaceId, tabId: created.tabId, deltaX: 0, deltaY: 400, x: 90, y: 60 }),
+      controller.signal,
+    ))
+    await new Promise(resolve => setTimeout(resolve, 250))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mouseReleased', x: 90, y: 60 }),
+      controller.signal,
+    ))
+    const after = expectOk(await api.host.browserList(request({ workspaceId }), controller.signal))
+    expect(after.tabs[0]?.title).toBe('panel-scrolled')
+  }, 25_000)
+
+  it('browserScroll at coordinates does not move a sibling overflow container', async () => {
+    if (!chromiumAvailable()) return
+    const { api, root } = await harness()
+    const fixtureDir = join(root, 'sibling-scroll')
+    mkdirSync(fixtureDir, { recursive: true })
+    const fixturePath = join(fixtureDir, 'page.html')
+    writeFileSync(fixturePath, `<!doctype html><html><head><title>top</title></head>
+<body style="margin:0;overflow:hidden">
+<div id="left" style="position:absolute;left:0;top:0;width:120px;height:120px;overflow:auto">
+<div style="height:400px"></div>
+<div id="left-mark">L</div>
+</div>
+<div id="right" style="position:absolute;left:140px;top:0;width:120px;height:120px;overflow:auto">
+<div style="height:400px"></div>
+<div id="right-mark">R</div>
+</div>
+<script>
+new IntersectionObserver(([entry]) => {
+  if (entry.isIntersecting) document.title = 'left-only'
+}).observe(document.getElementById('left-mark'))
+new IntersectionObserver(([entry]) => {
+  if (entry.isIntersecting) document.title = 'right-moved'
+}).observe(document.getElementById('right-mark'))
+</script>
+</body></html>`)
+    const workspaceId = await createWorkspace(api, root)
+    const controller = new AbortController()
+    const created = expectOk(await api.host.browserCreateTab(request({ workspaceId }), controller.signal))
+    expectOk(await api.host.browserNavigate(
+      request({ workspaceId, tabId: created.tabId, url: `file://${fixturePath}` }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserResizeViewport(
+      request({ workspaceId, tabId: created.tabId, width: 280, height: 160 }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserScroll(
+      request({ workspaceId, tabId: created.tabId, deltaX: 0, deltaY: 400, x: 60, y: 60 }),
+      controller.signal,
+    ))
+    await new Promise(resolve => setTimeout(resolve, 250))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mouseReleased', x: 60, y: 60 }),
+      controller.signal,
+    ))
+    const after = expectOk(await api.host.browserList(request({ workspaceId }), controller.signal))
+    expect(after.tabs[0]?.title).toBe('left-only')
+  }, 25_000)
+
+  it('browserSendPointer returns the computed CSS cursor at the pointer', async () => {
+    if (!chromiumAvailable()) return
+    const { api, root } = await harness()
+    const fixtureDir = join(root, 'cursor-styles')
+    mkdirSync(fixtureDir, { recursive: true })
+    const fixturePath = join(fixtureDir, 'page.html')
+    writeFileSync(fixturePath, `<!doctype html><html><head><title>cursors</title></head>
+<body style="margin:0">
+<a id="link" href="#ok" style="position:absolute;left:10px;top:10px;width:80px;height:40px;cursor:pointer">link</a>
+<input id="field" style="position:absolute;left:10px;top:70px;width:100px;height:24px;cursor:text">
+</body></html>`)
+    const workspaceId = await createWorkspace(api, root)
+    const controller = new AbortController()
+    const created = expectOk(await api.host.browserCreateTab(request({ workspaceId }), controller.signal))
+    expectOk(await api.host.browserNavigate(
+      request({ workspaceId, tabId: created.tabId, url: `file://${fixturePath}` }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserResizeViewport(
+      request({ workspaceId, tabId: created.tabId, width: 240, height: 180 }),
+      controller.signal,
+    ))
+    const overLink = expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mouseMoved', x: 40, y: 30 }),
+      controller.signal,
+    ))
+    expect(overLink.cursor).toBe('pointer')
+    const overField = expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mouseMoved', x: 40, y: 80 }),
+      controller.signal,
+    ))
+    expect(overField.cursor).toBe('text')
+  }, 25_000)
+
+  it('browserSendPointer press and release clicks a button', async () => {
+    if (!chromiumAvailable()) return
+    const { api, root } = await harness()
+    const fixtureDir = join(root, 'click-button')
+    mkdirSync(fixtureDir, { recursive: true })
+    const fixturePath = join(fixtureDir, 'page.html')
+    writeFileSync(fixturePath, `<!doctype html><html><head><title>idle</title></head>
+<body style="margin:0">
+<button id="go" style="position:absolute;left:10px;top:10px;width:80px;height:32px" onclick="document.title='clicked'">Go</button>
+</body></html>`)
+    const workspaceId = await createWorkspace(api, root)
+    const controller = new AbortController()
+    const created = expectOk(await api.host.browserCreateTab(request({ workspaceId }), controller.signal))
+    expectOk(await api.host.browserNavigate(
+      request({ workspaceId, tabId: created.tabId, url: `file://${fixturePath}` }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserResizeViewport(
+      request({ workspaceId, tabId: created.tabId, width: 240, height: 120 }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mouseMoved', x: 50, y: 26 }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mousePressed', x: 50, y: 26, button: 'left' }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mouseReleased', x: 50, y: 26, button: 'left' }),
+      controller.signal,
+    ))
+    const listed = expectOk(await api.host.browserList(request({ workspaceId }), controller.signal))
+    expect(listed.tabs[0]?.title).toBe('clicked')
+  }, 25_000)
+
+  it('browserSendPointer press and release clicks a button at devicePixelRatio 2', async () => {
+    if (!chromiumAvailable()) return
+    const { api, root } = await harness()
+    const fixtureDir = join(root, 'click-button-hidpi')
+    mkdirSync(fixtureDir, { recursive: true })
+    const fixturePath = join(fixtureDir, 'page.html')
+    writeFileSync(fixturePath, `<!doctype html><html><head><title>idle</title></head>
+<body style="margin:0">
+<button id="go" style="position:absolute;left:120px;top:40px;width:80px;height:32px" onclick="document.title='clicked'">Go</button>
+</body></html>`)
+    const workspaceId = await createWorkspace(api, root)
+    const controller = new AbortController()
+    const created = expectOk(await api.host.browserCreateTab(request({ workspaceId }), controller.signal))
+    expectOk(await api.host.browserNavigate(
+      request({ workspaceId, tabId: created.tabId, url: `file://${fixturePath}` }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserResizeViewport(
+      request({ workspaceId, tabId: created.tabId, width: 240, height: 120, devicePixelRatio: 2 }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mouseMoved', x: 160, y: 56 }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mousePressed', x: 160, y: 56, button: 'left' }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mouseReleased', x: 160, y: 56, button: 'left' }),
+      controller.signal,
+    ))
+    const listed = expectOk(await api.host.browserList(request({ workspaceId }), controller.signal))
+    expect(listed.tabs[0]?.title).toBe('clicked')
+  }, 25_000)
+
+  it('browserSendPointer click still works after a burst of mouseMoved events', async () => {
+    if (!chromiumAvailable()) return
+    const { api, root } = await harness()
+    const fixtureDir = join(root, 'click-after-moves')
+    mkdirSync(fixtureDir, { recursive: true })
+    const fixturePath = join(fixtureDir, 'page.html')
+    writeFileSync(fixturePath, `<!doctype html><html><head><title>idle</title></head>
+<body style="margin:0">
+<button id="go" style="position:absolute;left:10px;top:10px;width:80px;height:32px" onclick="document.title='clicked'">Go</button>
+</body></html>`)
+    const workspaceId = await createWorkspace(api, root)
+    const controller = new AbortController()
+    const created = expectOk(await api.host.browserCreateTab(request({ workspaceId }), controller.signal))
+    expectOk(await api.host.browserNavigate(
+      request({ workspaceId, tabId: created.tabId, url: `file://${fixturePath}` }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserResizeViewport(
+      request({ workspaceId, tabId: created.tabId, width: 240, height: 120 }),
+      controller.signal,
+    ))
+    for (const x of [12, 24, 36, 48, 50]) {
+      expectOk(await api.host.browserSendPointer(
+        request({ workspaceId, tabId: created.tabId, type: 'mouseMoved', x, y: 26 }),
+        controller.signal,
+      ))
+    }
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mousePressed', x: 50, y: 26, button: 'left' }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mouseReleased', x: 50, y: 26, button: 'left' }),
+      controller.signal,
+    ))
+    const listed = expectOk(await api.host.browserList(request({ workspaceId }), controller.signal))
+    expect(listed.tabs[0]?.title).toBe('clicked')
+  }, 25_000)
+
+  it('pointer click then keyboard char types into a focused input', async () => {
+    if (!chromiumAvailable()) return
+    const { api, root } = await harness()
+    const fixtureDir = join(root, 'type-input')
+    mkdirSync(fixtureDir, { recursive: true })
+    const fixturePath = join(fixtureDir, 'page.html')
+    writeFileSync(fixturePath, `<!doctype html><html><head><title>type</title></head>
+<body style="margin:0">
+<input id="field" style="position:absolute;left:10px;top:10px;width:160px;height:28px" oninput="document.title=this.value">
+</body></html>`)
+    const workspaceId = await createWorkspace(api, root)
+    const controller = new AbortController()
+    const created = expectOk(await api.host.browserCreateTab(request({ workspaceId }), controller.signal))
+    expectOk(await api.host.browserNavigate(
+      request({ workspaceId, tabId: created.tabId, url: `file://${fixturePath}` }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserResizeViewport(
+      request({ workspaceId, tabId: created.tabId, width: 240, height: 120 }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mousePressed', x: 80, y: 24, button: 'left' }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mouseReleased', x: 80, y: 24, button: 'left' }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendKeyboard(
+      request({ workspaceId, tabId: created.tabId, type: 'char', text: 'hi你好' }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendKeyboard(
+      request({ workspaceId, tabId: created.tabId, type: 'keyDown', key: 'Control' }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendKeyboard(
+      request({ workspaceId, tabId: created.tabId, type: 'keyUp', key: 'Control' }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendKeyboard(
+      request({ workspaceId, tabId: created.tabId, type: 'keyDown' }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendKeyboard(
+      request({ workspaceId, tabId: created.tabId, type: 'char' }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendKeyboard(
+      request({ workspaceId, tabId: created.tabId, type: 'keyUp', key: '' }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mouseReleased', x: 80, y: 24, button: 'left' }),
+      controller.signal,
+    ))
+    const listed = expectOk(await api.host.browserList(request({ workspaceId }), controller.signal))
+    expect(listed.tabs[0]?.title).toBe('hi你好')
+  }, 25_000)
+
+  it('pointer click focuses an input that prevents default mousedown and accepts CJK', async () => {
+    if (!chromiumAvailable()) return
+    const { api, root } = await harness()
+    const fixtureDir = join(root, 'type-prevent-mousedown')
+    mkdirSync(fixtureDir, { recursive: true })
+    const fixturePath = join(fixtureDir, 'page.html')
+    writeFileSync(fixturePath, `<!doctype html><html><head><title>idle</title></head>
+<body style="margin:0">
+<input id="field" style="position:absolute;left:10px;top:10px;width:160px;height:28px;outline:none"
+  onmousedown="event.preventDefault()" onfocus="document.title='focused'" oninput="document.title=this.value">
+<div id="ce" contenteditable="true"
+  style="position:absolute;left:10px;top:50px;width:160px;height:28px;outline:none"
+  onmousedown="event.preventDefault()"></div>
+</body></html>`)
+    const workspaceId = await createWorkspace(api, root)
+    const controller = new AbortController()
+    const created = expectOk(await api.host.browserCreateTab(request({ workspaceId }), controller.signal))
+    expectOk(await api.host.browserNavigate(
+      request({ workspaceId, tabId: created.tabId, url: `file://${fixturePath}` }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserResizeViewport(
+      request({ workspaceId, tabId: created.tabId, width: 240, height: 120 }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mousePressed', x: 80, y: 24, button: 'left' }),
+      controller.signal,
+    ))
+    expectOk(await api.host.browserSendPointer(
+      request({ workspaceId, tabId: created.tabId, type: 'mouseReleased', x: 80, y: 24, button: 'left' }),
+      controller.signal,
+    ))
+    const afterClick = expectOk(await api.host.browserList(request({ workspaceId }), controller.signal))
+    expect(afterClick.tabs[0]?.title).toBe('focused')
+    expectOk(await api.host.browserSendKeyboard(
+      request({ workspaceId, tabId: created.tabId, type: 'char', text: '你好' }),
+      controller.signal,
+    ))
+    const listed = expectOk(await api.host.browserList(request({ workspaceId }), controller.signal))
+    expect(listed.tabs[0]?.title).toBe('你好')
   }, 25_000)
 
   it('closeTab removes the tab from list', async () => {

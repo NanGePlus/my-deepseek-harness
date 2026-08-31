@@ -115,6 +115,7 @@ function scriptedApi(overrides: {
       browserCreateTab: r => ok(r, { tabId: 'browser-1' }),
       browserCloseTab: r => ok(r, { closed: true as const }),
       browserSelectTab: r => ok(r, { selected: true as const }),
+      browserShowWindow: r => ok(r, { shown: true as const }),
       browserNavigate: r => ok(r, { url: 'about:blank', title: '', canGoBack: false, canGoForward: false }),
       browserGoBack: r => ok(r, { url: 'about:blank', title: '', canGoBack: false, canGoForward: false }),
       browserGoForward: r => ok(r, { url: 'about:blank', title: '', canGoBack: false, canGoForward: false }),

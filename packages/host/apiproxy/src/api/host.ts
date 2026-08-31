@@ -802,7 +802,7 @@ export interface HostApi {
     signal: AbortSignal,
   ): Promise<RpcResponse<BrowserCreateTabResult>>
 
-  /** Close one browser tab. Fails with `browser-tab-not-found` when absent. */
+  /** Close one browser tab. Succeeds when the tab or Context is already gone. */
   browserCloseTab(
     request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string }>,
     signal: AbortSignal,
@@ -813,6 +813,15 @@ export interface HostApi {
     request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<{ selected: true }>>
+
+  /**
+   * Raise the headed Chromium window for one tab so a human can operate it.
+   * Also marks the tab selected.
+   */
+  browserShowWindow(
+    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ shown: true }>>
 
   /** Navigate one tab to an http(s) URL and return updated metadata. */
   browserNavigate(
@@ -858,7 +867,14 @@ export interface HostApi {
 
   /** Scroll one tab by pixel deltas. */
   browserScroll(
-    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string; deltaX: number; deltaY: number }>,
+    request: RpcRequest<{
+      workspaceId: WorkspaceId
+      tabId: string
+      deltaX: number
+      deltaY: number
+      x?: number
+      y?: number
+    }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<{ scrolled: true }>>
 
@@ -870,11 +886,17 @@ export interface HostApi {
 
   /** Resize the Playwright viewport for one tab. */
   browserResizeViewport(
-    request: RpcRequest<{ workspaceId: WorkspaceId; tabId: string; width: number; height: number }>,
+    request: RpcRequest<{
+      workspaceId: WorkspaceId
+      tabId: string
+      width: number
+      height: number
+      devicePixelRatio?: number
+    }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<{ resized: true }>>
 
-  /** Forward one pointer event to one tab through CDP. */
+  /** Forward one pointer event to one tab through CDP and return the computed CSS cursor. */
   browserSendPointer(
     request: RpcRequest<{
       workspaceId: WorkspaceId
@@ -885,7 +907,7 @@ export interface HostApi {
       button?: 'left' | 'right' | 'middle'
     }>,
     signal: AbortSignal,
-  ): Promise<RpcResponse<{ sent: true }>>
+  ): Promise<RpcResponse<{ sent: true; cursor?: string }>>
 
   /** Forward one keyboard event to one tab through CDP. */
   browserSendKeyboard(
