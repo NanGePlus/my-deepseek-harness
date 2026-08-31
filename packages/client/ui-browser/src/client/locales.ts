@@ -18,6 +18,7 @@ export type BrowserPanelKey =
   | 'browser.native.body'
   | 'browser.native.show'
   | 'browser.loading.connecting'
+  | 'browser.loading.preparing'
   | 'browser.empty.unbound.title'
   | 'browser.empty.unbound.body'
   | 'browser.empty.unavailable.title'
@@ -52,6 +53,7 @@ export const zh: Record<BrowserPanelKey, string> = {
   'browser.native.body': 'Agent 打开的页面会出现在本机 Chromium 窗口。请在该窗口内直接点击和输入，操作方式与系统浏览器相同。',
   'browser.native.show': '显示窗口',
   'browser.loading.connecting': '连接中…',
+  'browser.loading.preparing': '正在准备浏览器…',
   'browser.empty.unbound.title': '无法使用浏览器',
   'browser.empty.unbound.body': '请先选择 Workspace 并开始会话。',
   'browser.empty.unavailable.title': '浏览器不可用',
@@ -87,6 +89,7 @@ export const en: Record<BrowserPanelKey, string> = {
   'browser.native.body': 'Pages the Agent opens appear in the local Chromium window. Click and type there; input matches the system browser.',
   'browser.native.show': 'Show window',
   'browser.loading.connecting': 'Connecting…',
+  'browser.loading.preparing': 'Preparing browser…',
   'browser.empty.unbound.title': 'Browser unavailable',
   'browser.empty.unbound.body': 'Select a Workspace and start a session first.',
   'browser.empty.unavailable.title': 'Browser unavailable',
