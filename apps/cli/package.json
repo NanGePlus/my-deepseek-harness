@@ -98,6 +98,7 @@
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@types/js-yaml": "^4.0.9",
+    "electron": "^35.0.0",
     "execa": "^10.0.0"
   }
 }

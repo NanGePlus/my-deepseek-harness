@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib",
+    "noEmit": false,
+    "declaration": false
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../packages/boot/app-boot" },
+    { "path": "../../packages/client/modules" },
+    { "path": "../../packages/host/apiproxy" },
+    { "path": "../../apps/cli" }
+  ]
+}
