@@ -8,6 +8,8 @@ import type { HostDescription, IApiClient } from './api.ts'
 import { ConnectionController, type ConnectionConfig, type ConnectionSinks, type ConnectionState } from './connection.ts'
 import { FixtureApiClient } from './fixture.ts'
 import { WebApiClient } from './web-api-client.ts'
+import { IpcApiClient } from './ipc-api-client.ts'
+import { readDesktopIpcBridge } from './ipc-bridge.ts'
 import { createWebConnectionRpc } from './rpc.ts'
 import { isLoopbackHostname } from '../loopback-hostname.ts'
 import type { ClientConnectionRpc } from '../rpc.ts'
@@ -96,7 +98,8 @@ export function apply(ctx: Context): void {
   const pageLocation = typeof location === 'undefined' ? undefined : location
   const fixture = pageLocation !== undefined && new URLSearchParams(pageLocation.search).has('fixture')
   const fixtureClient = fixture ? new FixtureApiClient() : undefined
-  const api: IApiClient = fixtureClient ?? new WebApiClient()
+  const ipcBridge = fixtureClient === undefined ? readDesktopIpcBridge() : undefined
+  const api: IApiClient = fixtureClient ?? (ipcBridge !== undefined ? new IpcApiClient(ipcBridge) : new WebApiClient())
   const rpc = fixtureClient?.rpc ?? createWebConnectionRpc()
   let started = false
   let description: HostDescription | undefined

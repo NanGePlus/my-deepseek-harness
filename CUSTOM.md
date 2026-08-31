@@ -17,7 +17,7 @@
 - **V2 定制重点（进行中）**：工具箱增加 **Git 面板**（工作区变更 + 差异预览 + Git 操作守卫）；PRD 见 `docs/prd/git-panel-v2.md` 与 Issue [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)。Host Git 只读 RPC 见 Issue [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53)；写 RPC（暂存 / 取消暂存 / 丢弃 / 提交）见 Issue [#54](https://github.com/NanGePlus/my-deepseek-harness/issues/54)；工具箱三段 Tab 见 Issue [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55)；Git 面板绑定/列表/空态/初始化见 Issue [#56](https://github.com/NanGePlus/my-deepseek-harness/issues/56)；整文件暂存/丢弃/提交见 Issue [#57](https://github.com/NanGePlus/my-deepseek-harness/issues/57)；差异预览与按块操作见 Issue [#58](https://github.com/NanGePlus/my-deepseek-harness/issues/58)；Git 操作守卫见 Issue [#59](https://github.com/NanGePlus/my-deepseek-harness/issues/59)
 - **V3 定制重点（进行中，分支 `feat/v3`）**：工具箱增加 **人类终端**（多 Tab + Shell 选择 + xterm；与 Agent PTY 分离）；PRD 见 `docs/prd/terminal-v3.md` 与 Issue [#73](https://github.com/NanGePlus/my-deepseek-harness/issues/73)。`#D-global` 见 [#74](https://github.com/NanGePlus/my-deepseek-harness/issues/74)；Host `host.terminal.*` RPC 见 [#75](https://github.com/NanGePlus/my-deepseek-harness/issues/75)；工具箱四段 Tab 见 [#76](https://github.com/NanGePlus/my-deepseek-harness/issues/76)；`ui-terminal` 最小通路见 [#77](https://github.com/NanGePlus/my-deepseek-harness/issues/77)；多 Tab / Shell / Kill 见 [#78](https://github.com/NanGePlus/my-deepseek-harness/issues/78)；不可用 / 错误态见 [#79](https://github.com/NanGePlus/my-deepseek-harness/issues/79)；切走持久 / 硬刷新重连见 [#80](https://github.com/NanGePlus/my-deepseek-harness/issues/80)；改盘刷新协调见 [#81](https://github.com/NanGePlus/my-deepseek-harness/issues/81)
 - **V4 定制重点（规格已锁定，分支 `feat/v4`）**：工具箱增加 **内嵌浏览器**（多 Tab + 导航顶栏；人类在 Host 有头 Chromium 窗口操作；Agent `browser_*` 工具与人类共用同一 Playwright 实例）；PRD 见 `docs/prd/browser-v4.md`；ADR 见 `docs/adr/0007-embedded-browser-host-playwright.md`、`docs/adr/0008-embedded-browser-client-and-tools.md`。工具箱五段 Tab：**资源管理器 | Git面板 | 终端 | 浏览器 | 工具详情**。实现切片：GitHub [#92](https://github.com/NanGePlus/my-deepseek-harness/issues/92)（#93–#100）。
-- **V5 定制重点（规格已锁定，分支 `feat/v5`）**：将现有 Web GUI **包装为桌面壳**（Electron），与 **浏览器交付** 并存、功能对等；首版 macOS + Windows。PRD 见 `docs/prd/desktop-v5.md` 与 Issue [#111](https://github.com/NanGePlus/my-deepseek-harness/issues/111)。ADR 见 `docs/adr/0009-desktop-shell-electron-delivery.md`、`docs/adr/0010-desktop-browser-electron-cdp.md`；领域词汇见 `CONTEXT.md`（**桌面壳**、**面板内 WebView** 等）。实现切片：GitHub [#111](https://github.com/NanGePlus/my-deepseek-harness/issues/111)（#113–#122；#112 重复已关闭）。**`desktop` profile**（`dsh --profile desktop --dump-config`）已落地：Host 能力与 web 对等（apiproxy、Playwright、终端/Git/浏览器 client roster），**不含** `dsh-host-webserver` 与 loopback HTTP 传输行（`connection` / `modules` / `client-hmr`）；IPC carrier 见 Issue [#116](https://github.com/NanGePlus/my-deepseek-harness/issues/116)。
+- **V5 定制重点（规格已锁定，分支 `feat/v5`）**：将现有 Web GUI **包装为桌面壳**（Electron），与 **浏览器交付** 并存、功能对等；首版 macOS + Windows。PRD 见 `docs/prd/desktop-v5.md` 与 Issue [#111](https://github.com/NanGePlus/my-deepseek-harness/issues/111)。ADR 见 `docs/adr/0009-desktop-shell-electron-delivery.md`、`docs/adr/0010-desktop-browser-electron-cdp.md`；领域词汇见 `CONTEXT.md`（**桌面壳**、**面板内 WebView** 等）。实现切片：GitHub [#111](https://github.com/NanGePlus/my-deepseek-harness/issues/111)（#113–#122；#112 重复已关闭）。**`desktop` profile**（`dsh --profile desktop --dump-config`）已落地：Host 能力与 web 对等（apiproxy、Playwright、终端/Git/浏览器 client roster），**不含** `dsh-host-webserver` 与 loopback HTTP 传输行。**Issue [#116](https://github.com/NanGePlus/my-deepseek-harness/issues/116)**：`IpcApiClient` 统一 IPC carrier（`callUnary`/`respond` + mux/host/watchPath 下行）；integrated 模式 preload 暴露 `window.dsh` IPC 桥；attach 模式仍用 `WebApiClient`。
 ## 已实现定制功能（相对上游 master）
 
 ### 工具箱与壳层（details 栏，PR #28–29 及后续）
@@ -116,7 +116,10 @@
 | `apps/cli/src/args.ts` | **2026-08-31**（#115）`dsh desktop` 子命令 | 2026-08-31 |
 | `apps/cli/src/bin.ts` | **2026-08-31**（#115）desktop 模式 spawn Electron | 2026-08-31 |
 | `apps/cli/src/desktop-launcher.ts` | **新文件**（#115）：解析 Electron 可执行文件与 Main 入口并 spawn | 2026-08-31 |
-| `apps/desktop/` | **新包**（#115）：Electron Main Host boot / teardown、`dsh://` SPA 加载、preload 骨架、`DSH_DESKTOP_ATTACH`、Host 启动失败 loud error + 重试 | 2026-08-31 |
+| `apps/desktop/` | **新包**（#115）：Electron Main Host boot / teardown、`dsh://` SPA 加载、preload 骨架、`DSH_DESKTOP_ATTACH`、Host 启动失败 loud error + 重试；**#116** `registerIpcApiBridge` + preload IPC carrier | 2026-08-31 |
+| `packages/client/connection/src/client/ipc-api-client.ts` | **新文件**（#116）：`IpcApiClient` desktop carrier | 2026-08-31 |
+| `packages/client/connection/src/client/ipc-bridge.ts` | **新文件**（#116）：preload 桥类型 + `readDesktopIpcBridge` | 2026-08-31 |
+| `packages/client/connection/src/client/index.ts` | **#116**：integrated desktop 选用 `IpcApiClient` | 2026-08-31 |
 | `apps/web/vite.config.ts` | **2026-08-31**（#115）`DSH_DESKTOP_DEV=1` 时允许 Vite serve（dev:desktop） | 2026-08-31 |
 | `apps/web/vite.desktop-dev.config.ts` | **新文件**（#115）：dev:desktop 注入 boot graph | 2026-08-31 |
 | `packages/client/web/src/boot.tsx` | **2026-08-31**（#115）`__DSH_HOST_BOOT__` 失败路径 + preload 重试 | 2026-08-31 |
@@ -206,7 +209,7 @@
 | `issue/113-d-global-desktop-design-close` | [#113](https://github.com/NanGePlus/my-deepseek-harness/issues/113) `#D-global`：验收关闭桌面壳 V5 DESIGN.md | 已合并入 `custom/main`（PR [#124](https://github.com/NanGePlus/my-deepseek-harness/pull/124)）；分支保留 |
 | `issue/114-desktop-profile` | [#114](https://github.com/NanGePlus/my-deepseek-harness/issues/114) desktop profile + bundle | 已合并入 `custom/main`（PR #125） |
 | `issue/115-apps-desktop-boot` | [#115](https://github.com/NanGePlus/my-deepseek-harness/issues/115) apps/desktop Host boot + dsh:// + dev:desktop | 已合并入 `custom/main`（PR [#126](https://github.com/NanGePlus/my-deepseek-harness/pull/126)）；分支保留 |
-| `issue/116-ipc-api-client` | [#116](https://github.com/NanGePlus/my-deepseek-harness/issues/116) IpcApiClient + preload | 待领取 |
+| `issue/116-ipc-api-client` | [#116](https://github.com/NanGePlus/my-deepseek-harness/issues/116) IpcApiClient + preload | 进行中（分支 `issue/116-ipc-api-client`） |
 | `issue/117-standard-shell` | [#117](https://github.com/NanGePlus/my-deepseek-harness/issues/117) 单实例 / 退出守卫 / 窗口持久化 / 菜单 | 待领取 |
 | `issue/118-browser-registry-cdp` | [#118](https://github.com/NanGePlus/my-deepseek-harness/issues/118) BrowserRegistry 桌面 CDP + bounds IPC | 待领取 |
 | `issue/119-ui-browser-desktop-occupant` | [#119](https://github.com/NanGePlus/my-deepseek-harness/issues/119) ui-browser 桌面 occupant | 待领取 |
@@ -217,6 +220,7 @@
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-08-31 | 分支 `issue/116-ipc-api-client`：Issue [#116](https://github.com/NanGePlus/my-deepseek-harness/issues/116) IpcApiClient + preload IPC carrier | `IpcApiClient` / Main `registerIpcApiBridge` / preload `window.dsh`；5 项 seam 测试 |
 | 2026-08-31 | 分支 `issue/115-apps-desktop-boot` 合并入 `custom/main` | PR [#126](https://github.com/NanGePlus/my-deepseek-harness/pull/126)；Closes [#115](https://github.com/NanGePlus/my-deepseek-harness/issues/115)；分支保留 |
 | 2026-08-31 | 分支 `issue/115-apps-desktop-boot`：Issue [#115](https://github.com/NanGePlus/my-deepseek-harness/issues/115) apps/desktop Host boot + dsh:// + dev:desktop + attach | `DesktopHostController`；`dsh desktop`；18 项 seam 测试全绿 |
 | 2026-08-31 | 分支 `issue/114-desktop-profile`：Issue [#114](https://github.com/NanGePlus/my-deepseek-harness/issues/114) desktop profile + `@deepseek-ai/dsh-desktop-app` | `dsh --profile desktop --dump-config`；Node boot + `host.describe` seam 测试 |

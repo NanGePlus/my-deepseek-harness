@@ -8,9 +8,11 @@
   "files": [
     "src/api-path.ts",
     "src/api-request-trust.ts",
+    "src/downlink-frame.ts",
     "src/http-bridge.ts",
     "src/index.ts",
     "src/invariant.ts",
+    "src/ipc-channels.ts",
     "src/loopback-hostname.ts",
     "src/rpc-host.ts",
     "src/rpc.ts",

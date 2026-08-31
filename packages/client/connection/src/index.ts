@@ -22,6 +22,16 @@ export type {
 export { HostConnectionService } from './rpc-host.ts'
 
 export { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH, WATCH_PATH_PATH } from './api-path.ts'
+export {
+  IPC_API_FETCH,
+  IPC_API_FETCH_CANCEL,
+  IPC_API_STREAM_CLOSE,
+  IPC_API_STREAM_END,
+  IPC_API_STREAM_FRAME,
+  IPC_API_STREAM_OPEN,
+  IPC_API_STREAM_OPENED,
+} from './ipc-channels.ts'
+export { toServerRequestWire } from './downlink-frame.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'client-connection'
