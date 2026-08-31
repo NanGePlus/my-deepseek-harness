@@ -7,7 +7,7 @@
 - 运行方式：从源码 `pnpm install` / `pnpm run build:lib:host` + client bundle + `pnpm run build:web` / `pnpm dsh web`
 - Node：^22.19 或 >=24；pnpm@11.7.0（Corepack）
 - 扩展策略：V1 文件编辑器因需改 Host RPC 与 **工具箱**（details 栏）壳层，**直接改 `packages/`**；长期仍优先树外插件 / 组合包，不改 `vendor/`
-- 领域与决策：`CONTEXT.md`、`docs/adr/0001–0002`（文件编辑器）、`docs/adr/0003–0004`（Git 面板）、`docs/adr/0005–0006`（人类终端 V3）、`docs/adr/0007–0008`（内嵌浏览器 V4）、`docs/prd/file-editor-v1.md`、`docs/prd/git-panel-v2.md`、`docs/prd/terminal-v3.md`、`docs/prd/browser-v4.md`
+- 领域与决策：`CONTEXT.md`、`docs/adr/0001–0002`（文件编辑器）、`docs/adr/0003–0004`（Git 面板）、`docs/adr/0005–0006`（人类终端 V3）、`docs/adr/0007–0008`（内嵌浏览器 V4）、`docs/adr/0009–0010`（桌面壳 V5）、`docs/prd/file-editor-v1.md`、`docs/prd/git-panel-v2.md`、`docs/prd/terminal-v3.md`、`docs/prd/browser-v4.md`、`docs/prd/desktop-v5.md`
 
 ## 产品
 - 产品名：（待填写）
@@ -17,7 +17,7 @@
 - **V2 定制重点（进行中）**：工具箱增加 **Git 面板**（工作区变更 + 差异预览 + Git 操作守卫）；PRD 见 `docs/prd/git-panel-v2.md` 与 Issue [#51](https://github.com/NanGePlus/my-deepseek-harness/issues/51)。Host Git 只读 RPC 见 Issue [#53](https://github.com/NanGePlus/my-deepseek-harness/issues/53)；写 RPC（暂存 / 取消暂存 / 丢弃 / 提交）见 Issue [#54](https://github.com/NanGePlus/my-deepseek-harness/issues/54)；工具箱三段 Tab 见 Issue [#55](https://github.com/NanGePlus/my-deepseek-harness/issues/55)；Git 面板绑定/列表/空态/初始化见 Issue [#56](https://github.com/NanGePlus/my-deepseek-harness/issues/56)；整文件暂存/丢弃/提交见 Issue [#57](https://github.com/NanGePlus/my-deepseek-harness/issues/57)；差异预览与按块操作见 Issue [#58](https://github.com/NanGePlus/my-deepseek-harness/issues/58)；Git 操作守卫见 Issue [#59](https://github.com/NanGePlus/my-deepseek-harness/issues/59)
 - **V3 定制重点（进行中，分支 `feat/v3`）**：工具箱增加 **人类终端**（多 Tab + Shell 选择 + xterm；与 Agent PTY 分离）；PRD 见 `docs/prd/terminal-v3.md` 与 Issue [#73](https://github.com/NanGePlus/my-deepseek-harness/issues/73)。`#D-global` 见 [#74](https://github.com/NanGePlus/my-deepseek-harness/issues/74)；Host `host.terminal.*` RPC 见 [#75](https://github.com/NanGePlus/my-deepseek-harness/issues/75)；工具箱四段 Tab 见 [#76](https://github.com/NanGePlus/my-deepseek-harness/issues/76)；`ui-terminal` 最小通路见 [#77](https://github.com/NanGePlus/my-deepseek-harness/issues/77)；多 Tab / Shell / Kill 见 [#78](https://github.com/NanGePlus/my-deepseek-harness/issues/78)；不可用 / 错误态见 [#79](https://github.com/NanGePlus/my-deepseek-harness/issues/79)；切走持久 / 硬刷新重连见 [#80](https://github.com/NanGePlus/my-deepseek-harness/issues/80)；改盘刷新协调见 [#81](https://github.com/NanGePlus/my-deepseek-harness/issues/81)
 - **V4 定制重点（规格已锁定，分支 `feat/v4`）**：工具箱增加 **内嵌浏览器**（多 Tab + 导航顶栏；人类在 Host 有头 Chromium 窗口操作；Agent `browser_*` 工具与人类共用同一 Playwright 实例）；PRD 见 `docs/prd/browser-v4.md`；ADR 见 `docs/adr/0007-embedded-browser-host-playwright.md`、`docs/adr/0008-embedded-browser-client-and-tools.md`。工具箱五段 Tab：**资源管理器 | Git面板 | 终端 | 浏览器 | 工具详情**。实现切片：GitHub [#92](https://github.com/NanGePlus/my-deepseek-harness/issues/92)（#93–#100）。
-
+- **V5 定制重点（规格已锁定，分支 `feat/v5`）**：将现有 Web GUI **包装为桌面壳**（Electron），与 **浏览器交付** 并存、功能对等；首版 macOS + Windows。PRD 见 `docs/prd/desktop-v5.md` 与 Issue [#111](https://github.com/NanGePlus/my-deepseek-harness/issues/111)。ADR 见 `docs/adr/0009-desktop-shell-electron-delivery.md`、`docs/adr/0010-desktop-browser-electron-cdp.md`；领域词汇见 `CONTEXT.md`（**桌面壳**、**面板内 WebView** 等）。实现切片：GitHub [#111](https://github.com/NanGePlus/my-deepseek-harness/issues/111)（#113–#122；#112 重复已关闭）。
 ## 已实现定制功能（相对上游 master）
 
 ### 工具箱与壳层（details 栏，PR #28–29 及后续）
@@ -135,6 +135,8 @@
 | `CONTEXT.md`、`docs/adr/0001–0002`、`docs/prd/file-editor-v1.md` | 文件编辑器 V1 领域与 PRD | 2026-08 |
 | `CONTEXT.md`、`docs/adr/0005–0006`、`docs/prd/terminal-v3.md` | 人类终端 V3 领域、PRD 与 ADR（`feat/v3`） | 2026-08-29 |
 | `CONTEXT.md`、`docs/adr/0007–0008`、`docs/prd/browser-v4.md` | 内嵌浏览器 V4 领域、PRD 与 ADR（`feat/v4`） | 2026-08-30 |
+| `CONTEXT.md`、`docs/adr/0009–0010`、`docs/adr/0007`（Consequences 分叉引用） | 桌面壳 V5 领域与 ADR（`feat/v5`） | 2026-08-31 |
+| `docs/prd/desktop-v5.md` | 桌面壳 V5 PRD（`feat/v5`） | 2026-08-31 |
 | `AGENTS.md`（Agent skills 块） | Issue 跟踪 / triage / domain / wiki 工作流说明 | 2026-08 |
 | `scripts/translation-pairing.manifest.json`、`scripts/build-exe-for-python-sdk.ts`、`scripts/verify-translation-prompt.ts` | 根 README 排除 upstream 双语配对 / 部署文档列表 | 2026-08-22 |
 | `scripts/agent-note-tree.ts` | Agent Note 生命周期根 allowlist 仅保留 `AGENTS.md` | 2026-08-22 |
@@ -185,10 +187,25 @@
 | `issue/99-ui-browser-lifecycle` | [#99](https://github.com/NanGePlus/my-deepseek-harness/issues/99) `ui-browser`：SSE 生命周期 + Zoom + viewport | 已合并入 `custom/main`（PR [#108](https://github.com/NanGePlus/my-deepseek-harness/pull/108)） |
 | `issue/100-tool-browser` | [#100](https://github.com/NanGePlus/my-deepseek-harness/issues/100) `tool-browser`：Agent `browser_*` 工具 | 已合并入 `custom/main`（PR [#109](https://github.com/NanGePlus/my-deepseek-harness/pull/109)） |
 | `fix/browser-v4-qa-validation` | V4 内嵌浏览器：有头窗口人类主表面 + 关窗恢复 | 开 PR 合并入 `custom/main`；分支保留；基线 `origin/custom/main`（`000ca32d56`） |
+| `feat/v5` | V5 桌面壳：父 PRD [#111](https://github.com/NanGePlus/my-deepseek-harness/issues/111)；切片 #113–#122 | 规格已锁定；基线 `origin/custom/main`（`3da88bbaa8`） |
+| `issue/113-d-global-desktop-design-close` | [#113](https://github.com/NanGePlus/my-deepseek-harness/issues/113) `#D-global`：验收关闭桌面壳 V5 DESIGN.md | 待领取 |
+| `issue/114-desktop-profile` | [#114](https://github.com/NanGePlus/my-deepseek-harness/issues/114) desktop profile + bundle | 待领取 |
+| `issue/115-apps-desktop-boot` | [#115](https://github.com/NanGePlus/my-deepseek-harness/issues/115) apps/desktop Host boot + dsh:// + dev:desktop | 待领取 |
+| `issue/116-ipc-api-client` | [#116](https://github.com/NanGePlus/my-deepseek-harness/issues/116) IpcApiClient + preload | 待领取 |
+| `issue/117-standard-shell` | [#117](https://github.com/NanGePlus/my-deepseek-harness/issues/117) 单实例 / 退出守卫 / 窗口持久化 / 菜单 | 待领取 |
+| `issue/118-browser-registry-cdp` | [#118](https://github.com/NanGePlus/my-deepseek-harness/issues/118) BrowserRegistry 桌面 CDP + bounds IPC | 待领取 |
+| `issue/119-ui-browser-desktop-occupant` | [#119](https://github.com/NanGePlus/my-deepseek-harness/issues/119) ui-browser 桌面 occupant | 待领取 |
+| `issue/120-electron-builder` | [#120](https://github.com/NanGePlus/my-deepseek-harness/issues/120) electron-builder + Chromium 捆绑 | 待领取 |
+| `issue/121-desktop-app-shell` | [#121](https://github.com/NanGePlus/my-deepseek-harness/issues/121) `[desktop] app-shell` | 待领取 |
+| `issue/122-desktop-embedded-browser` | [#122](https://github.com/NanGePlus/my-deepseek-harness/issues/122) `[desktop] embedded-browser` | 待领取 |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-08-31 | `/to-issues`：V5 Issue 切片发布 | 父 PRD [#111](https://github.com/NanGePlus/my-deepseek-harness/issues/111)；子 Issue #113–#122（`ready-for-agent`）；重复 #112 已关闭 |
+| 2026-08-31 | 分支 `feat/v5`：V5 PRD 落地 | 新增 `docs/prd/desktop-v5.md`（桌面壳、双页 UI、实现/测试决策定位词） |
+| 2026-08-31 | 分支 `feat/v5`：`grill-with-docs` + ADR 落地 | 更新 `CONTEXT.md` 交付形态；新增 `docs/adr/0009-desktop-shell-electron-delivery.md`、`docs/adr/0010-desktop-browser-electron-cdp.md`；`0007` Consequences 增加交付形态分叉引用 |
+| 2026-08-31 | 从 `origin/custom/main` 创建并推送 `feat/v5` | V5 迭代线；基线 PR #110 合并后 `3da88bbaa8` |
 | 2026-08-31 | 分支 `fix/browser-v4-qa-validation`：关有头窗口后 Tab 全废 | Context `close` 后 Registry 仍持死实例，`newPage`/`page.close` 报 Target closed，`showWindow` 还当成功。改为 evict + `createTab` 重建、`closeTab` 幂等、`showWindow` 走 tab-not-found 让 Client 按 store 恢复 |
 | 2026-08-31 | 分支 `fix/browser-v4-qa-validation`：画布无法输入中文 | JPEG 画布是普通 div，拼音第一键 `isComposing=false` 被当成英文并 `preventDefault`，IME 起不来。增加隐藏 textarea 承接组合输入，只在 `compositionend` / 非组合 `input` 转发 |
 | 2026-08-31 | 分支 `fix/browser-v4-qa-validation`：打开网页后无法点击/输入 | 抬起若落在 JPEG 外不发 `mouseReleased`，Host 卡在按下；`sendPointer` 每次（含 move）`page.evaluate` 读光标，点击排在后面。改为 window 配对抬起、点击替换排队 move、人类指针/键盘走 Playwright `page.mouse` / `page.keyboard`，光标只在 move 时读取 |

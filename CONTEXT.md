@@ -1,6 +1,6 @@
-# 文件编辑器、Git 面板、人类终端与内嵌浏览器
+# 文件编辑器、Git 面板、人类终端、内嵌浏览器与桌面壳
 
-DeepSeek Harness Web 端面向人类的工具箱插件。V1 在绑定 Workspace 内提供文件树浏览与内容编辑；V2 在同一绑定 Workspace 上增加 Git 面板，与文件树的只读 Git 状态标记职责分离；V3 在工具箱增加人类终端，与 Agent 侧 PTY 工具完全分离；V4 在工具箱增加内嵌浏览器，与 Agent 浏览器工具共用同一浏览器实例。
+DeepSeek Harness 面向人类的 GUI 能力：通过 **浏览器交付** 或 **桌面壳** 两种入口访问，功能对等、用户任选。工具箱插件在两种交付下语义相同。V1 在绑定 Workspace 内提供文件树浏览与内容编辑；V2 在同一绑定 Workspace 上增加 Git 面板，与文件树的只读 Git 状态标记职责分离；V3 在工具箱增加人类终端，与 Agent 侧 PTY 工具完全分离；V4 在工具箱增加内嵌浏览器，与 Agent 浏览器工具共用同一浏览器实例；V5 将现有 GUI 包装为桌面壳，与浏览器交付并存。
 
 ## 领域语言
 
@@ -61,6 +61,10 @@ V1 仅覆盖常见图片格式（如 `.png`、`.jpg`、`.gif`、`.webp`、`.svg`
 **Session 切换守卫 (Session Switch Guard)**：
 用户切换当前 Session 时，若存在 dirty 的编辑器标签页，须先逐文件保存、丢弃或取消切换；不允许静默丢失未保存编辑缓冲。不因非空提交说明草稿而阻断切换。**不因运行中的人类终端 PTY 而阻断切换**；**不因打开中的浏览器 Tab 而阻断切换**；切换至绑定 Workspace 不同的 Session 时，原 Workspace 的 PTY 与浏览器页面可仍在 Host 后台运行。
 *避免使用*: 未保存提示 (Unsaved Prompt)
+
+**退出守卫 (Quit Guard)**：
+桌面壳关窗（**关闭即退出**）或菜单 **Quit** 时，若存在 dirty 编辑器标签页，须先逐文件保存、丢弃或**取消退出**；不允许静默丢失未保存编辑缓冲。对 dirty 编辑器的规则与 **Session 切换守卫** 一致。**不因运行中的人类终端 PTY 而阻断退出**；**不因打开中的浏览器 Tab 而阻断退出**；不因非空提交说明草稿而阻断退出。
+*避免使用*: 退出确认（未指明 dirty 编辑器时）、关闭提示
 
 **Git 状态标记 (Git Status Badge)**：
 文件树条目旁只读展示 Git 工作区状态（如 modified、untracked、deleted）。V2 仍只做速览，不在文件树上提供暂存、提交等 Git 操作；操作收敛到 Git 面板，状态变化后两边同步刷新。
@@ -149,8 +153,12 @@ Host 无法 spawn 交互式 PTY（如无可用 Shell、PTY 创建失败、权限
 *避免使用*: Shell 不可用（作与缺 Workspace 空态混淆时）
 
 **内嵌浏览器 (Embedded Browser)**：
-工具箱「浏览器」段内、面向人类开发者的 Web 浏览视图；与 Agent 浏览器工具 **共用同一浏览器实例**——同一 **绑定 Workspace** 下共享 Tab 集合、导航状态与同源存储（Cookie / localStorage / sessionStorage 等）。人类手动导航与人类侧交互默认不进 Session 日志；Agent 触发的浏览器操作按 model-visible 规则写入 Session 日志。Agent 浏览器工具 V4 覆盖四类操作：**导航**（打开 URL、后退、前进、刷新）、**感知**（当前页结构快照）、**交互**（点击、输入、滚动、选择）、**Tab 管理**（新建 / 切换 / 关闭，与人类 Tab 栏同一套）；V4 不做截图写入 Session、任意 JS 执行或清 Cookie / 缓存 / 历史。Agent 与人类可同时看见并操作同一 Tab，**不加全局锁**，以浏览器原生事件顺序为准。启用前提与资源管理器相同：须有 Session 且已 **绑定 Workspace**；未满足时 **浏览器** 段仍可见，但内容区展示 **「无法使用浏览器」** 说明空态，不渲染 Tab 栏、不自动打开 Tab，地址栏与导航不可用；Agent 浏览器工具同样不可用。与人类终端不同：不是独立会话池，Agent 与人类看见并操作同一组 Tab。V4 支持多 Tab、`+` 新建、`×` 关闭与 Tab 切换；**不含** Split 视图、独立窗口拖拽与书签管理器。始终至少保留 1 个浏览器 Tab：仅剩最后一个时隐藏 `×`、禁用「关闭 / 关闭全部」；关闭后选中相邻 Tab；Tab 右键菜单支持 **关闭 / 关闭其他 / 关闭左侧 / 关闭右侧 / 关闭全部**（受最后一 Tab 规则约束）。Agent 浏览器工具默认操作当前选中 Tab，亦可通过参数指定 Tab。同一绑定 Workspace 下多个 dsh Session 共用一套浏览器 Tab；切换到绑定 Workspace 不同的 Session 时，切换到该 Workspace 的 Tab 集（页面可仍在后台）。某 Workspace 尚无浏览器 Tab 时，**首次进入浏览器段**自动打开一个 Tab，默认 URL 为 **`about:blank`** 且地址栏获焦；不自动猜测 dev server 端口。若该 Workspace 已有 Tab 记录（切回或硬刷新后从 store 恢复），则恢复上次 Tab 集合与 URL，不走首次逻辑。人类操作面是 Host 有头 Chromium 窗口（与 Agent 同一 Playwright Context / profile），不是工具箱内 JPEG。切走 **浏览器** 段只隐藏工具箱视图，不销毁有头窗口与页面；切回时恢复 Tab 集合、选中 Tab，并再次把窗口提到前台。硬刷新 dsh Web 后从 Workspace 级持久 store 恢复 Tab 栏并按 URL 重载各 Tab。**Session 切换守卫** 不因打开中的浏览器 Tab 阻断切换。
-*避免使用*: WebView（作正式术语时）、Agent 浏览器（单独指 Agent 工具面时）
+工具箱「浏览器」段内、面向人类开发者的 Web 浏览视图；与 Agent 浏览器工具 **共用同一浏览器实例**——同一 **绑定 Workspace** 下共享 Tab 集合、导航状态与同源存储（Cookie / localStorage / sessionStorage 等）。人类手动导航与人类侧交互默认不进 Session 日志；Agent 触发的浏览器操作按 model-visible 规则写入 Session 日志。Agent 浏览器工具 V4 覆盖四类操作：**导航**（打开 URL、后退、前进、刷新）、**感知**（当前页结构快照）、**交互**（点击、输入、滚动、选择）、**Tab 管理**（新建 / 切换 / 关闭，与人类 Tab 栏同一套）；V4 不做截图写入 Session、任意 JS 执行或清 Cookie / 缓存 / 历史。Agent 与人类可同时看见并操作同一 Tab，**不加全局锁**，以浏览器原生事件顺序为准。启用前提与资源管理器相同：须有 Session 且已 **绑定 Workspace**；未满足时 **浏览器** 段仍可见，但内容区展示 **「无法使用浏览器」** 说明空态，不渲染 Tab 栏、不自动打开 Tab，地址栏与导航不可用；Agent 浏览器工具同样不可用。与人类终端不同：不是独立会话池，Agent 与人类看见并操作同一组 Tab。V4 支持多 Tab、`+` 新建、`×` 关闭与 Tab 切换；**不含** Split 视图、独立窗口拖拽与书签管理器。始终至少保留 1 个浏览器 Tab：仅剩最后一个时隐藏 `×`、禁用「关闭 / 关闭全部」；关闭后选中相邻 Tab；Tab 右键菜单支持 **关闭 / 关闭其他 / 关闭左侧 / 关闭右侧 / 关闭全部**（受最后一 Tab 规则约束）。Agent 浏览器工具默认操作当前选中 Tab，亦可通过参数指定 Tab。同一绑定 Workspace 下多个 dsh Session 共用一套浏览器 Tab；切换到绑定 Workspace 不同的 Session 时，切换到该 Workspace 的 Tab 集（页面可仍在后台）。某 Workspace 尚无浏览器 Tab 时，**首次进入浏览器段**自动打开一个 Tab，默认 URL 为 **`about:blank`** 且地址栏获焦；不自动猜测 dev server 端口。若该 Workspace 已有 Tab 记录（切回或硬刷新后从 store 恢复），则恢复上次 Tab 集合与 URL，不走首次逻辑。**浏览器人类操作面**按交付形态分叉（见 **面板内 WebView**）：**浏览器交付**下人类在 Host 有头 Chromium **独立 OS 窗口**操作，工具箱段内为 Tab 栏 + 导航 +「显示窗口」卡片；切走段只隐藏视图、不销毁 OS 窗口；切回时再次把窗口提到前台。**桌面壳**下人类在工具箱段内的面板内 WebView 操作同一 Playwright Context，不弹出独立 OS 窗口；切走段只隐藏 WebView、不销毁页面。硬刷新 GUI 后从 Workspace 级持久 store 恢复 Tab 栏并按 URL 重载各 Tab。**Session 切换守卫** 不因打开中的浏览器 Tab 阻断切换。
+*避免使用*: Agent 浏览器（单独指 Agent 工具面时）
+
+**面板内 WebView (In-panel WebView)**：
+**桌面壳**交付下，内嵌浏览器段内容区的人类操作面：页面嵌在工具箱矩形内，通过同一 Playwright Context 渲染，与 Agent 共用 Tab / Cookie / 存储。不是 JPEG screencast，也不是独立 OS 窗口。**浏览器交付**不使用此形态。
+*避免使用*: WebView（单独使用且未指明桌面壳语境时）、内嵌帧 (Embedded Frame)
 
 **浏览器 Tab (Browser Tab)**：
 内嵌浏览器段内的一个 Web 浏览视图，对应一个可导航页面实例。Tab 栏可并存多个；Tab 标题取自页面 `document.title`（过长省略），无标题时回退为 URL 主机名。不是编辑器标签页，也不是终端 Tab 或 Git 差异预览。可导航范围为 **`http://` 与 `https://` 任意可达地址**（含 localhost / 127.0.0.1 与公网）；V4 不支持 `file://` 与自定义协议。首次导航到非 localhost 域名时，段内顶部 inline 提示「正在访问外部站点」，不阻断、不弹模态。段顶栏提供后退、前进、刷新、地址栏；溢出菜单含 Hard Reload、Copy Current URL、Zoom（− / 百分比 / + / 重置）；**在外部浏览器打开**当前 Tab URL。V4 **不含** Take Screenshot、Capture Area Screenshot、Clear Browsing History / Cookies / Cache，以及顶栏跳转 **终端** 的快捷图标。
@@ -171,3 +179,41 @@ Web 右侧可收起栏。V4 五段为 **资源管理器 | Git面板 | 终端 | �
 **文件编辑器抽屉 (File Editor Drawer)**：
 工具箱中承载编辑界面的一段，即资源管理器。勿用此词指 Git 面板。
 *避免使用*: 侧栏 (Sidebar)、模态框 (Modal)
+
+### 交付形态
+
+**浏览器交付 (Browser Delivery)**：
+用户通过系统浏览器访问本地或远程 Host 提供的 GUI；与桌面壳**功能对等**（见 **功能对等**）；用户任选入口。V5 继续维护此路径。
+*避免使用*: Web 版（单独使用且易与远程无 GUI 部署混淆时）、在线版
+
+**桌面壳 (Desktop Shell)**：
+独立安装的桌面应用程序，承载与浏览器交付**功能对等**的 GUI 与 Host 能力；并允许 **壳层增强**（不改变工具箱 / Host 核心语义）。V5 首版交付 macOS 与 Windows；Linux 桌面后续版本。默认**一体启动**：用户打开 App 即拉起 Host 与 GUI，退出 App 即停止 Host；开发者可**外挂 Host**，连接已在运行的 Host 实例（调试 / 联调）。
+*避免使用*: Electron（作正式领域术语时）、桌面 App（单独使用且易与 OS 原生窗口混淆时）、客户端 (Client)（作与 Agent Client 协议混淆时）
+
+**功能对等 (Feature Parity)**：
+浏览器交付与桌面壳在工具箱五段、Host RPC、Session / Workspace / 绑定 Workspace 规则、Session 切换守卫与 Agent 工具可见性上能力相同；不因交付形态减少或独占核心业务功能。
+*避免使用*: 完全一致（易与壳层增强混淆）
+
+**壳层增强 (Shell Enhancement)**：
+仅 **桌面壳** 拥有的交付层能力，不改变工具箱插件或 Host 领域语义；如原生主窗口、Dock / Taskbar 图标、应用菜单、窗口几何持久化、系统协议唤起、自动更新等。**浏览器交付**不含壳层增强。V5 首版采用 **标准壳** 范围：原生主窗口、Dock / Taskbar 图标、应用菜单（About / Quit / Settings 入口）、窗口尺寸与位置持久化；不含系统协议唤起、自动更新、系统通知。
+*避免使用*: 桌面专属功能（未区分是否改变工具箱语义时）、原生能力
+
+**标准壳 (Standard Shell)**：
+V5 桌面壳首版壳层增强范围：原生主窗口 + Dock / Taskbar 图标 + 应用菜单 + 窗口几何持久化。系统协议唤起、自动更新、系统通知留后续版本。
+*避免使用*: 完整桌面版、Minimal shell
+
+**单实例 (Single Instance)**：
+桌面壳在单台机器上只允许一个 App 进程与一个 Host。用户二次启动（Dock / Taskbar / 快捷方式）时聚焦已有主窗口，不新建 Host、不新开实例。**外挂 Host** 调试不受此限（连接外部 Host，不违反单实例语义）。
+*避免使用*: 单窗口（易与 GUI 布局混淆）、禁止多开
+
+**关闭即退出 (Close-to-Quit)**：
+桌面壳默认行为：用户关闭主窗口（macOS 红灯 / Windows ✕）与菜单 **Quit** 等价——退出 App 并停止 Host（受 **退出守卫** 约束）。macOS 与 Windows 语义一致；关窗不在后台驻留 Host。
+*避免使用*: 隐藏到 Dock（作 V5 关窗语义时）、最小化到托盘
+
+**一体启动 (Integrated Launch)**：
+桌面壳的默认启动方式：App 进程负责在本机拉起并持有 dsh Host，无需用户单独执行 `dsh web`。Host **始终本机**；远程 Host 访问由 **浏览器交付** 承担，V5 一体启动不连接远程 Host。
+*避免使用*: 内嵌 Host（作与 Host 代码位置混淆时）
+
+**外挂 Host (Attached Host)**：
+桌面壳的可选连接模式：GUI 连接用户或 CI **本机**已启动的 Host 实例，而非由 App 自行拉起。V5 仅面向开发 / 调试；不是普通用户的默认路径；不承诺连接远程 Host。
+*避免使用*: 远程模式（单独使用且易与浏览器交付远程访问混淆时）、连接已有服务
