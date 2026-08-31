@@ -15,6 +15,7 @@ import {
   IPC_EXIT_GUARD_RESULT,
   IPC_EXIT_REQUEST,
   IPC_FOCUS_SETTINGS,
+  IPC_BROWSER_OCCUPANT_BOUNDS,
 } from './ipc-contract.ts'
 
 function subscribe(channel: string, listener: (...args: unknown[]) => void): () => void {
@@ -27,6 +28,13 @@ const shell = {
   onExitRequest: (listener: () => void) => subscribe(IPC_EXIT_REQUEST, () => { listener() }),
   sendExitGuardResult: (result: { proceed: boolean }) => { ipcRenderer.send(IPC_EXIT_GUARD_RESULT, result) },
   onFocusSettings: (listener: () => void) => subscribe(IPC_FOCUS_SETTINGS, () => { listener() }),
+  reportBrowserOccupantBounds: (bounds: {
+    x: number
+    y: number
+    width: number
+    height: number
+    visible: boolean
+  }) => { ipcRenderer.send(IPC_BROWSER_OCCUPANT_BOUNDS, bounds) },
 }
 
 const shared = {

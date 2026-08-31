@@ -158,6 +158,8 @@
     # shares. The base layer's agent-default-model service owns the default model.
     - id: api-gateway
       name: '@deepseek-ai/dsh-host-apiproxy'
+      config:
+        browserDelivery: desktop
 
     - id: cordis-host-runner
       name: '@deepseek-ai/dsh-cordis-host-runner'

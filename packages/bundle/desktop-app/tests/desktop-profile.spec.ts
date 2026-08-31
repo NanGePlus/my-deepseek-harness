@@ -54,6 +54,8 @@ describe('desktop profile composition', () => {
       expect(names).not.toContain('@deepseek-ai/dsh-web-app')
       expect(names).not.toContain('@deepseek-ai/dsh-client-connection')
       expect(names).not.toContain('@deepseek-ai/dsh-client-modules')
+      const apiGateway = rows.find(row => row.id === 'api-gateway')
+      expect(apiGateway?.config).toMatchObject({ browserDelivery: 'desktop' })
     } finally {
       rmSync(home, { recursive: true, force: true })
     }

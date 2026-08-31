@@ -21,6 +21,7 @@ import {
   DEFAULT_SESSION_LOG_COMPRESSION_LEVEL,
   type SessionLogCompressionLevel,
 } from './session-export.ts'
+import type { BrowserDelivery } from './browser-delivery.ts'
 
 export type * from './api/index.ts'
 export { RpcId } from './api/rpc.ts'
@@ -29,6 +30,12 @@ export { AbstractApiClient, InProcessApiClient } from './fetch/client.ts'
 export type { IApiClient } from './fetch/client.ts'
 export { createApiProxy } from './api-proxy.ts'
 export type { ApiProxyDefaults } from './api-proxy.ts'
+export {
+  setDesktopBrowserSurface,
+  resetDesktopBrowserSurface,
+  getDesktopBrowserSurface,
+} from './browser-delivery.ts'
+export type { BrowserDelivery, DesktopBrowserSurface } from './browser-delivery.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -59,6 +66,12 @@ export interface Config {
    * @default 1024
    */
   coldBlankProbeMaxBytes?: number
+  /**
+   * Browser delivery shape for host.browser.* — web uses a headed Playwright OS
+   * window; desktop uses Electron BrowserView + connectOverCDP (ADR-0010).
+   * @default web
+   */
+  browserDelivery?: BrowserDelivery
 }
 
 /**
@@ -77,6 +90,7 @@ export class ApiProxyService extends Service implements ApiProxy {
     sessionExportCompressionLevel: z.number().step(1).min(0).max(9)
       .default(DEFAULT_SESSION_LOG_COMPRESSION_LEVEL) as z<SessionLogCompressionLevel>,
     coldBlankProbeMaxBytes: z.natural().default(DEFAULT_COLD_BLANK_PROBE_MAX_BYTES),
+    browserDelivery: z.union(['web', 'desktop'] as const).default('web'),
   })
 
   readonly sessions: ApiProxy['sessions']
@@ -106,6 +120,7 @@ export class ApiProxyService extends Service implements ApiProxy {
       ...(config.coldBlankProbeMaxBytes === undefined
         ? {}
         : { coldBlankProbeMaxBytes: config.coldBlankProbeMaxBytes }),
+      browserRegistry: { delivery: config.browserDelivery ?? 'web' },
     })
     this.sessions = api.sessions
     this.subagents = api.subagents
