@@ -18,3 +18,4 @@ V4 内嵌浏览器需要在 Web 工具箱内展示可交互 Web 页面，且 Age
 - **浏览器不可用**（无 Chromium、Context 启动失败）与 **未绑定 Workspace**（Client 不发起 RPC）须可区分。
 - Agent 与人类并发操作同一 Tab 时不加全局锁；Playwright 与浏览器事件顺序为准。
 - Host 重启后从 profile 目录恢复 Context；Tab URL 列表由 Client store 或 Host 元数据重载。
+- **人类操作面按交付形态分叉**：**浏览器交付**为本 ADR 有头 OS 窗口；**桌面壳**为 **面板内 WebView**（Electron `BrowserView` + Playwright `connectOverCDP`），见 ADR-0010。
