@@ -205,7 +205,7 @@
 | `feat/v5` | V5 桌面壳：父 PRD [#111](https://github.com/NanGePlus/my-deepseek-harness/issues/111)；切片 #113–#122 | 规格已锁定；基线 `origin/custom/main`（`3da88bbaa8`） |
 | `issue/113-d-global-desktop-design-close` | [#113](https://github.com/NanGePlus/my-deepseek-harness/issues/113) `#D-global`：验收关闭桌面壳 V5 DESIGN.md | 已合并入 `custom/main`（PR [#124](https://github.com/NanGePlus/my-deepseek-harness/pull/124)）；分支保留 |
 | `issue/114-desktop-profile` | [#114](https://github.com/NanGePlus/my-deepseek-harness/issues/114) desktop profile + bundle | 已合并入 `custom/main`（PR #125） |
-| `issue/115-apps-desktop-boot` | [#115](https://github.com/NanGePlus/my-deepseek-harness/issues/115) apps/desktop Host boot + dsh:// + dev:desktop | 进行中 |
+| `issue/115-apps-desktop-boot` | [#115](https://github.com/NanGePlus/my-deepseek-harness/issues/115) apps/desktop Host boot + dsh:// + dev:desktop | 已合并入 `custom/main`（PR [#126](https://github.com/NanGePlus/my-deepseek-harness/pull/126)）；分支保留 |
 | `issue/116-ipc-api-client` | [#116](https://github.com/NanGePlus/my-deepseek-harness/issues/116) IpcApiClient + preload | 待领取 |
 | `issue/117-standard-shell` | [#117](https://github.com/NanGePlus/my-deepseek-harness/issues/117) 单实例 / 退出守卫 / 窗口持久化 / 菜单 | 待领取 |
 | `issue/118-browser-registry-cdp` | [#118](https://github.com/NanGePlus/my-deepseek-harness/issues/118) BrowserRegistry 桌面 CDP + bounds IPC | 待领取 |
@@ -217,6 +217,7 @@
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-08-31 | 分支 `issue/115-apps-desktop-boot` 合并入 `custom/main` | PR [#126](https://github.com/NanGePlus/my-deepseek-harness/pull/126)；Closes [#115](https://github.com/NanGePlus/my-deepseek-harness/issues/115)；分支保留 |
 | 2026-08-31 | 分支 `issue/115-apps-desktop-boot`：Issue [#115](https://github.com/NanGePlus/my-deepseek-harness/issues/115) apps/desktop Host boot + dsh:// + dev:desktop + attach | `DesktopHostController`；`dsh desktop`；18 项 seam 测试全绿 |
 | 2026-08-31 | 分支 `issue/114-desktop-profile`：Issue [#114](https://github.com/NanGePlus/my-deepseek-harness/issues/114) desktop profile + `@deepseek-ai/dsh-desktop-app` | `dsh --profile desktop --dump-config`；Node boot + `host.describe` seam 测试 |
 | 2026-08-31 | 分支 `issue/113-d-global-desktop-design-close` 合并入 `custom/main` | PR [#124](https://github.com/NanGePlus/my-deepseek-harness/pull/124)；Closes [#113](https://github.com/NanGePlus/my-deepseek-harness/issues/113)；分支保留 |
