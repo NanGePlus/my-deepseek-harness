@@ -99,13 +99,14 @@ export class AppWebEntry {
     const hostBoot = (globalThis as DshWindow).__DSH_HOST_BOOT__
     if (hostBoot !== undefined && hostBoot.ok === false) {
       this.root = createRoot(this.el)
+      const retryHostBoot = this.retryHostBootHandler()
       this.root.render(
         <AppRoot
           settled={this.settled}
           status={this.status}
           error={this.error}
           hostBootError={this.hostBootError}
-          onRetryHostBoot={this.retryHostBootHandler()}
+          {...(retryHostBoot !== undefined ? { onRetryHostBoot: retryHostBoot } : {})}
           renderApp={() => null}
         />,
       )
