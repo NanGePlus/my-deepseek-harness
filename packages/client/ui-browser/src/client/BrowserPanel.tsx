@@ -696,8 +696,15 @@ export function BrowserPanel({
   }, [hostTabsReady, syncHostTabMetadata, visible, workspaceId])
 
   const addTabDisabled = creating || creatingRef.current
-  const showDimOverlay = connecting || (navigating && !hardReloading)
-  const showLoading = showDimOverlay
+  const showPreparingOverlay = isDesktopOccupant && visible && !hostTabsReady
+  const showNavOverlay = navigating && !hardReloading
+  const showConnectingOverlay = !isDesktopOccupant && connecting
+  const showLoadingOverlay = showPreparingOverlay || showNavOverlay || showConnectingOverlay
+  const loadingMessage = showPreparingOverlay
+    ? t('browser.loading.preparing')
+    : showConnectingOverlay
+      ? t('browser.loading.connecting')
+      : undefined
   const canCloseTabs = tabs.length > 1
 
   const tabCloseMenuItems = useMemo((): readonly MenuEntry[] => {
@@ -989,7 +996,7 @@ export function BrowserPanel({
               className={css.desktopOccupant}
               role="tabpanel"
               aria-label={t('browser.native.aria')}
-              aria-busy={showLoading}
+              aria-busy={showLoadingOverlay}
             />
           )
           : (
@@ -997,7 +1004,7 @@ export function BrowserPanel({
               className={css.nativePane}
               role="tabpanel"
               aria-label={t('browser.native.aria')}
-              aria-busy={showLoading}
+              aria-busy={showLoadingOverlay}
             >
               <div className={css.emptyCard}>
                 <span className={css.emptyIcon} aria-hidden="true">
@@ -1043,13 +1050,15 @@ export function BrowserPanel({
             <div>{t('browser.empty.navFailure')}</div>
           </div>
         )}
-        {showLoading
+        {showLoadingOverlay
           ? (
             <div className={css.loadingOverlay}>
               <span className={css.spinner} aria-hidden="true">
                 <IconLoadingOutline16 size={24} />
               </span>
-              <div className={css.loadingCopy}>{t('browser.loading.connecting')}</div>
+              {loadingMessage !== undefined && (
+                <div className={css.loadingCopy}>{loadingMessage}</div>
+              )}
             </div>
           )
           : null}

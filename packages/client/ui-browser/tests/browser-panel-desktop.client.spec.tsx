@@ -5,9 +5,10 @@ import { useSyncExternalStore } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
+  BrowserPageMetadata,
   SessionId, SessionListState, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { BrowserPanel, type BrowserPanelProps } from '../src/client/BrowserPanel.tsx'
 import { createBrowserPanelStore } from '../src/client/stores.ts'
 import { zh } from '../src/client/locales.ts'
@@ -89,6 +90,7 @@ function stubDesktop(reportBounds = vi.fn()) {
 type MountOverrides = Partial<BrowserPanelProps> & {
   items?: WorkspaceView[]
   sessionId?: SessionId
+  noCurrentSession?: boolean
 }
 
 function mount(over: MountOverrides = {}) {
@@ -103,7 +105,9 @@ function mount(over: MountOverrides = {}) {
   const browserShowWindow = vi.fn(over.browserShowWindow ?? (async () => ({ shown: true as const })))
   const panelStore = over.useStore === undefined ? createBrowserPanelStore().create() : undefined
   const workspacesStore = createSnapshotStore(workspacesState(over.items ?? [workspace()]))
-  const sessionsStore = createSnapshotStore(sessionsState(over.sessionId ?? SID))
+  const sessionsStore = createSnapshotStore(sessionsState(
+    over.noCurrentSession ? undefined : (over.sessionId ?? SID),
+  ))
   const props: BrowserPanelProps = {
     visible: over.visible ?? true,
     t: makeTranslate(zh),
@@ -134,6 +138,7 @@ function mount(over: MountOverrides = {}) {
     rerender: (next: Partial<BrowserPanelProps> = {}) => {
       view.rerender(<BrowserPanel {...props} {...next} />)
     },
+    unmount: view.unmount,
   }
 }
 
@@ -211,5 +216,156 @@ describe('BrowserPanel desktop occupant', () => {
       })
     })
     expect(browserCloseTab).not.toHaveBeenCalled()
+  })
+
+  it('empty-unbound: shows 无法使用浏览器 without tab chrome on desktop', () => {
+    stubDesktop()
+    mount({ noCurrentSession: true, items: [workspace({ sessionIds: [] })] })
+    expect(screen.getByText('无法使用浏览器')).toBeTruthy()
+    expect(screen.queryByRole('tablist')).toBeNull()
+    expect(screen.queryByText('显示窗口')).toBeNull()
+  })
+
+  it('loading: shows preparing copy before Host tabs are ready', async () => {
+    stubDesktop()
+    let resolveList!: (value: { tabs: typeof BLANK_TAB[] }) => void
+    const browserList = vi.fn(() => new Promise<{ tabs: typeof BLANK_TAB[] }>((resolve) => {
+      resolveList = resolve
+    }))
+    mount({ browserList })
+    expect(screen.getByText('正在准备浏览器…')).toBeTruthy()
+    resolveList({ tabs: [BLANK_TAB] })
+    await waitFor(() => { expect(screen.getByRole('tablist')).toBeTruthy() })
+    expect(screen.queryByText('正在准备浏览器…')).toBeNull()
+  })
+
+  it('loading: shows aria-busy occupant while navigation is in flight', async () => {
+    stubDesktop()
+    let resolveNav!: (value: BrowserPageMetadata) => void
+    const browserNavigate = vi.fn(() => new Promise<BrowserPageMetadata>((resolve) => {
+      resolveNav = resolve
+    }))
+    mount({
+      browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })),
+      browserNavigate,
+    })
+    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
+    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://example.com' } })
+    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
+    await waitFor(() => {
+      expect(screen.getByRole('tabpanel').getAttribute('aria-busy')).toBe('true')
+    })
+    resolveNav({ url: 'https://example.com/', title: 'Example', canGoBack: false, canGoForward: false })
+    await waitFor(() => {
+      expect(screen.getByRole('tabpanel').getAttribute('aria-busy')).toBe('false')
+    })
+  })
+
+  it('nav-error: surfaces inline error and occupant failure copy on desktop', async () => {
+    stubDesktop()
+    const browserNavigate = vi.fn(async () => Promise.reject(new Error('dns failed')))
+    mount({
+      browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })),
+      browserNavigate,
+    })
+    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
+    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://missing.example' } })
+    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
+    await waitFor(() => { expect(screen.getByText('dns failed')).toBeTruthy() })
+    expect(screen.getByText('无法加载此页')).toBeTruthy()
+    expect(document.getElementById('browser-occupant')).toBeTruthy()
+    expect(screen.queryByText('显示窗口')).toBeNull()
+  })
+
+  it('unavailable: bootstrap failure shows retry card without show-window chrome', async () => {
+    stubDesktop()
+    const browserCreateTab = vi.fn(async () => Promise.reject(new DirectoryBrowseError({
+      code: 'browser-unavailable',
+      message: '无法启动浏览器',
+      details: { reason: 'context-start-failed' },
+    })))
+    mount({ browserCreateTab })
+    await waitFor(() => { expect(screen.getByText('浏览器不可用')).toBeTruthy() })
+    expect(screen.getByText('无法启动浏览器')).toBeTruthy()
+    expect(screen.queryByRole('tablist')).toBeNull()
+    expect(screen.queryByText('显示窗口')).toBeNull()
+  })
+
+  it('hard refresh: remount restores tab bar from store without browserShowWindow', async () => {
+    stubDesktop()
+    const panelStore = createBrowserPanelStore().create()
+    panelStore.actions.setWorkspaceTabs(WID, [{
+      tabId: 'live-1',
+      url: 'https://example.com',
+      title: 'Example',
+      canGoBack: false,
+      canGoForward: false,
+    }], 'live-1')
+    const browserList = vi.fn(async () => ({
+      tabs: [{
+        tabId: 'live-1',
+        url: 'https://example.com',
+        title: 'Example',
+        selected: true,
+        canGoBack: true,
+        canGoForward: false,
+      }],
+    }))
+    const browserShowWindow = vi.fn(async () => ({ shown: true as const }))
+    const first = mount({
+      useStore: hookOf(panelStore),
+      actions: panelStore.actions,
+      browserList,
+      browserShowWindow,
+    })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'Example' })).toBeTruthy() })
+    first.unmount()
+    browserList.mockClear()
+    browserShowWindow.mockClear()
+    mount({
+      useStore: hookOf(panelStore),
+      actions: panelStore.actions,
+      browserList,
+      browserShowWindow,
+    })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'Example' })).toBeTruthy() })
+    expect(browserShowWindow).not.toHaveBeenCalled()
+    expect(browserList).toHaveBeenCalledWith(WID, expect.any(AbortSignal))
+  })
+
+  it('host-restart: empty Host list with persisted Client tabs recreates tabs on desktop', async () => {
+    stubDesktop()
+    const panelStore = createBrowserPanelStore().create()
+    panelStore.actions.setWorkspaceTabs(WID, [{
+      tabId: 'stale-1',
+      url: 'https://example.com',
+      title: 'Example',
+      canGoBack: false,
+      canGoForward: false,
+    }], 'stale-1')
+    const browserList = vi.fn()
+      .mockResolvedValueOnce({ tabs: [] })
+      .mockResolvedValue({
+        tabs: [{
+          tabId: 'live-1',
+          url: 'https://example.com',
+          title: 'Example',
+          selected: true,
+          canGoBack: false,
+          canGoForward: false,
+        }],
+      })
+    const browserCreateTab = vi.fn(async () => ({ tabId: 'live-1' }))
+    const browserShowWindow = vi.fn(async () => ({ shown: true as const }))
+    mount({
+      useStore: hookOf(panelStore),
+      actions: panelStore.actions,
+      browserList,
+      browserCreateTab,
+      browserShowWindow,
+    })
+    await waitFor(() => { expect(browserCreateTab).toHaveBeenCalled() })
+    await waitFor(() => { expect(screen.getByRole('tab', { name: 'Example' })).toBeTruthy() })
+    expect(browserShowWindow).not.toHaveBeenCalled()
   })
 })
