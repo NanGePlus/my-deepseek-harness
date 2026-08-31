@@ -275,6 +275,9 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async browserSelectTab(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { selected: true as const } } }
       },
+      async browserShowWindow(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { shown: true as const } } }
+      },
       async browserNavigate(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { url: 'about:blank', title: '', canGoBack: false, canGoForward: false } } }
       },

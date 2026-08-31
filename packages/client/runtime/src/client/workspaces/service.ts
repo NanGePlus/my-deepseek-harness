@@ -840,6 +840,12 @@ export class WorkspaceRuntime implements IWorkspaces {
     return response.result.value
   }
 
+  async browserShowWindow(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<{ shown: true }> {
+    const response = await this.api.host.browserShowWindow({ workspaceId, tabId }, signal)
+    if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
+    return response.result.value
+  }
+
   async browserNavigate(
     workspaceId: WorkspaceId,
     tabId: string,
@@ -904,9 +910,18 @@ export class WorkspaceRuntime implements IWorkspaces {
     tabId: string,
     deltaX: number,
     deltaY: number,
+    x?: number,
+    y?: number,
     signal?: AbortSignal,
   ): Promise<{ scrolled: true }> {
-    const response = await this.api.host.browserScroll({ workspaceId, tabId, deltaX, deltaY }, signal)
+    const response = await this.api.host.browserScroll({
+      workspaceId,
+      tabId,
+      deltaX,
+      deltaY,
+      ...(x === undefined ? {} : { x }),
+      ...(y === undefined ? {} : { y }),
+    }, signal)
     if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
     return response.result.value
   }
@@ -928,9 +943,13 @@ export class WorkspaceRuntime implements IWorkspaces {
     tabId: string,
     width: number,
     height: number,
+    devicePixelRatio: number,
     signal?: AbortSignal,
   ): Promise<{ resized: true }> {
-    const response = await this.api.host.browserResizeViewport({ workspaceId, tabId, width, height }, signal)
+    const response = await this.api.host.browserResizeViewport(
+      { workspaceId, tabId, width, height, devicePixelRatio },
+      signal,
+    )
     if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
     return response.result.value
   }
@@ -945,7 +964,7 @@ export class WorkspaceRuntime implements IWorkspaces {
       button?: 'left' | 'right' | 'middle'
     },
     signal?: AbortSignal,
-  ): Promise<{ sent: true }> {
+  ): Promise<{ sent: true; cursor?: string }> {
     const response = await this.api.host.browserSendPointer({ workspaceId, tabId, ...event }, signal)
     if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
     return response.result.value

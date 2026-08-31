@@ -197,6 +197,7 @@ export class FakeApiClient implements IApiClient {
     browserCreateTab: payload => this.record('host.browserCreateTab', payload, Promise.resolve(ok({ tabId: 'fake-browser-1' }))),
     browserCloseTab: payload => this.record('host.browserCloseTab', payload, Promise.resolve(ok({ closed: true as const }))),
     browserSelectTab: payload => this.record('host.browserSelectTab', payload, Promise.resolve(ok({ selected: true as const }))),
+    browserShowWindow: payload => this.record('host.browserShowWindow', payload, Promise.resolve(ok({ shown: true as const }))),
     browserNavigate: payload => this.record('host.browserNavigate', payload, Promise.resolve(ok(BLANK_BROWSER_PAGE))),
     browserGoBack: payload => this.record('host.browserGoBack', payload, Promise.resolve(ok(BLANK_BROWSER_PAGE))),
     browserGoForward: payload => this.record('host.browserGoForward', payload, Promise.resolve(ok(BLANK_BROWSER_PAGE))),

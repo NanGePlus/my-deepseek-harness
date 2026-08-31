@@ -76,6 +76,7 @@ export interface RpcMethodMap {
   'host.browserCreateTab': HostApi['browserCreateTab']
   'host.browserCloseTab': HostApi['browserCloseTab']
   'host.browserSelectTab': HostApi['browserSelectTab']
+  'host.browserShowWindow': HostApi['browserShowWindow']
   'host.browserNavigate': HostApi['browserNavigate']
   'host.browserGoBack': HostApi['browserGoBack']
   'host.browserGoForward': HostApi['browserGoForward']

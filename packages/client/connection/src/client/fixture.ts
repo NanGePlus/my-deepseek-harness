@@ -2638,6 +2638,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       browserCreateTab: request => ok(request, { tabId: 'fixture-browser-1' }),
       browserCloseTab: request => ok(request, { closed: true as const }),
       browserSelectTab: request => ok(request, { selected: true as const }),
+      browserShowWindow: request => ok(request, { shown: true as const }),
       browserNavigate: request => ok(request, { url: 'about:blank', title: '', canGoBack: false, canGoForward: false }),
       browserGoBack: request => ok(request, { url: 'about:blank', title: '', canGoBack: false, canGoForward: false }),
       browserGoForward: request => ok(request, { url: 'about:blank', title: '', canGoBack: false, canGoForward: false }),
@@ -3221,6 +3222,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'host.browserCreateTab': return this.api.host.browserCreateTab(request, signal)
       case 'host.browserCloseTab': return this.api.host.browserCloseTab(request, signal)
       case 'host.browserSelectTab': return this.api.host.browserSelectTab(request, signal)
+      case 'host.browserShowWindow': return this.api.host.browserShowWindow(request, signal)
       case 'host.browserNavigate': return this.api.host.browserNavigate(request, signal)
       case 'host.browserGoBack': return this.api.host.browserGoBack(request, signal)
       case 'host.browserGoForward': return this.api.host.browserGoForward(request, signal)

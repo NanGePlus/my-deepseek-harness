@@ -441,6 +441,13 @@ export interface IWorkspaces {
   browserCreateTab(workspaceId: WorkspaceId, url?: string, signal?: AbortSignal): Promise<BrowserCreateTabResult>
   browserCloseTab(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<{ closed: true }>
   browserSelectTab(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<{ selected: true }>
+  /**
+   * Raise the headed Chromium window for one tab so a human can operate it.
+   * @param workspaceId - Workspace whose browser pool owns the tab.
+   * @param tabId - live tab id.
+   * @param signal - aborts a superseded raise.
+   */
+  browserShowWindow(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<{ shown: true }>
   browserNavigate(workspaceId: WorkspaceId, tabId: string, url: string, signal?: AbortSignal): Promise<BrowserPageMetadata>
   browserGoBack(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserPageMetadata>
   browserGoForward(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserPageMetadata>
@@ -448,7 +455,15 @@ export interface IWorkspaces {
   browserSnapshot(workspaceId: WorkspaceId, tabId: string, signal?: AbortSignal): Promise<BrowserSnapshotResult>
   browserClick(workspaceId: WorkspaceId, tabId: string, x: number, y: number, signal?: AbortSignal): Promise<{ clicked: true }>
   browserType(workspaceId: WorkspaceId, tabId: string, text: string, signal?: AbortSignal): Promise<{ typed: true }>
-  browserScroll(workspaceId: WorkspaceId, tabId: string, deltaX: number, deltaY: number, signal?: AbortSignal): Promise<{ scrolled: true }>
+  browserScroll(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    deltaX: number,
+    deltaY: number,
+    x?: number,
+    y?: number,
+    signal?: AbortSignal,
+  ): Promise<{ scrolled: true }>
   browserSelectOption(
     workspaceId: WorkspaceId,
     tabId: string,
@@ -461,6 +476,7 @@ export interface IWorkspaces {
     tabId: string,
     width: number,
     height: number,
+    devicePixelRatio: number,
     signal?: AbortSignal,
   ): Promise<{ resized: true }>
   browserSendPointer(
@@ -473,7 +489,7 @@ export interface IWorkspaces {
       button?: 'left' | 'right' | 'middle'
     },
     signal?: AbortSignal,
-  ): Promise<{ sent: true }>
+  ): Promise<{ sent: true; cursor?: string }>
   browserSendKeyboard(
     workspaceId: WorkspaceId,
     tabId: string,

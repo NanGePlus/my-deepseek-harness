@@ -622,6 +622,17 @@ export const hostBrowserSelectTabValueSchema = z.object({
   selected: z.literal(true),
 }) satisfies z.ZodType<Wire<ResponseValue<'host.browserSelectTab'>>>
 
+/** host.browserShowWindow request payload. */
+export const hostBrowserShowWindowRequestSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  tabId: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.browserShowWindow'>>>
+
+/** host.browserShowWindow response value. */
+export const hostBrowserShowWindowValueSchema = z.object({
+  shown: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.browserShowWindow'>>>
+
 const browserPageMetadataSchema = z.object({
   url: z.string(),
   title: z.string(),
@@ -709,6 +720,8 @@ export const hostBrowserScrollRequestSchema = z.object({
   tabId: z.string().min(1),
   deltaX: z.number(),
   deltaY: z.number(),
+  x: z.number().optional(),
+  y: z.number().optional(),
 }) satisfies z.ZodType<Wire<RequestPayload<'host.browserScroll'>>>
 
 /** host.browserScroll response value. */
@@ -735,6 +748,7 @@ export const hostBrowserResizeViewportRequestSchema = z.object({
   tabId: z.string().min(1),
   width: z.number().int().min(1),
   height: z.number().int().min(1),
+  devicePixelRatio: z.number().min(1).max(3).optional(),
 }) satisfies z.ZodType<Wire<RequestPayload<'host.browserResizeViewport'>>>
 
 /** host.browserResizeViewport response value. */
@@ -755,6 +769,7 @@ export const hostBrowserSendPointerRequestSchema = z.object({
 /** host.browserSendPointer response value. */
 export const hostBrowserSendPointerValueSchema = z.object({
   sent: z.literal(true),
+  cursor: z.string().min(1).optional(),
 }) satisfies z.ZodType<Wire<ResponseValue<'host.browserSendPointer'>>>
 
 /** host.browserSendKeyboard request payload. */

@@ -49,15 +49,8 @@ export function apply(ctx: ClientContext): void {
         ctx.workspaces.browserGoForward(workspaceId, tabId, signal),
       browserReload: (workspaceId, tabId, hard, signal) =>
         ctx.workspaces.browserReload(workspaceId, tabId, hard, signal),
-      browserResizeViewport: (workspaceId, tabId, width, height, signal) =>
-        ctx.workspaces.browserResizeViewport(workspaceId, tabId, width, height, signal),
-      browserSendPointer: (workspaceId, tabId, event, signal) =>
-        ctx.workspaces.browserSendPointer(workspaceId, tabId, event, signal),
-      browserSendKeyboard: (workspaceId, tabId, event, signal) =>
-        ctx.workspaces.browserSendKeyboard(workspaceId, tabId, event, signal),
-      browserWatchScreencast: (workspaceId, tabId, onFrame, signal, onOpen, onError) => {
-        ctx.workspaces.browserWatchScreencast(workspaceId, tabId, onFrame, signal, onOpen, onError)
-      },
+      browserShowWindow: (workspaceId, tabId, signal) =>
+        ctx.workspaces.browserShowWindow(workspaceId, tabId, signal),
     }),
   }, BrowserPanel))
 }

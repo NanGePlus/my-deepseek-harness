@@ -5,9 +5,13 @@
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { chromium, type BrowserContext, type Page } from 'playwright'
+import { chromium, type BrowserContext, type CDPSession, type Page } from 'playwright'
 import type { WorkspaceId } from './api/workspace.ts'
 import type { BrowserScreencastFrame } from './api/host.ts'
+import {
+  APPLY_SCROLL_AT_POINT, DISPATCH_FOCUSED_INPUT, FOCUS_EDITABLE_AT_POINT, READ_CSS_CURSOR_AT_POINT,
+  asPageFunction,
+} from './browser-page-scripts.ts'
 
 /** One live browser tab row of host.browserList. */
 export interface BrowserTabSummary {
@@ -57,6 +61,25 @@ export class BrowserUnavailableError extends Error {
   }
 }
 
+/** Supported Host screencast device scale factor bounds. */
+export const BROWSER_DEVICE_PIXEL_RATIO_MIN = 1
+export const BROWSER_DEVICE_PIXEL_RATIO_MAX = 3
+
+/** Clamp one Client-reported device pixel ratio to supported Host bounds. */
+export function clampBrowserDevicePixelRatio(devicePixelRatio: number): number {
+  if (!Number.isFinite(devicePixelRatio) || devicePixelRatio <= 0) return BROWSER_DEVICE_PIXEL_RATIO_MIN
+  return Math.min(
+    BROWSER_DEVICE_PIXEL_RATIO_MAX,
+    Math.max(BROWSER_DEVICE_PIXEL_RATIO_MIN, devicePixelRatio),
+  )
+}
+
+/** True when Playwright rejected an operation because the page or Context is gone. */
+function isTargetClosedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /has been closed|TargetClosedError/i.test(message)
+}
+
 /** Raised when a browser tab id is unknown within a workspace. */
 export class BrowserTabNotFoundError extends Error {
   /** @param tabId - requested tab id. */
@@ -71,6 +94,8 @@ export interface BrowserRegistryInternals {
   profilesRoot?: string
   launchPersistentContext?: typeof chromium.launchPersistentContext
   chromiumExecutablePath?: () => string
+  /** When true, Chromium stays headless. Product default is a visible window. */
+  headless?: boolean
 }
 
 interface LiveTab {
@@ -80,20 +105,35 @@ interface LiveTab {
   title: string
   canGoBack: boolean
   canGoForward: boolean
+  viewportWidth: number
+  viewportHeight: number
+  devicePixelRatio: number
+  cdp?: CDPSession
 }
 
 interface WorkspaceBrowser {
   context: BrowserContext
   tabs: Map<string, LiveTab>
   selectedTabId: string | undefined
+  devicePixelRatio: number
+}
+
+interface TabSnapshot {
+  tabId: string
+  url: string
+  selected: boolean
+  viewportWidth: number
+  viewportHeight: number
 }
 
 /** Workspace-indexed Playwright BrowserContext pool. */
 export class BrowserRegistry {
   private readonly workspaces = new Map<WorkspaceId, WorkspaceBrowser>()
+  private readonly recreating = new Map<WorkspaceId, Promise<WorkspaceBrowser>>()
   private readonly profilesRoot: string
   private readonly launchPersistentContext: typeof chromium.launchPersistentContext
   private readonly chromiumExecutablePath: () => string
+  private readonly headless: boolean
 
   /**
    * @param cwd - Host project directory; profiles live under `.sessions/browser-profiles/`.
@@ -103,9 +143,10 @@ export class BrowserRegistry {
     this.profilesRoot = internals.profilesRoot ?? join(cwd, '.sessions', 'browser-profiles')
     this.launchPersistentContext = internals.launchPersistentContext ?? chromium.launchPersistentContext.bind(chromium)
     this.chromiumExecutablePath = internals.chromiumExecutablePath ?? (() => chromium.executablePath())
+    this.headless = internals.headless ?? false
   }
 
-  /** List live tabs for one workspace. */
+  /** List live tabs for one workspace. Empty when the headed window has closed the Context. */
   list(workspaceId: WorkspaceId): BrowserListResult {
     const workspace = this.workspaces.get(workspaceId)
     if (workspace === undefined) return { tabs: [] }
@@ -123,12 +164,21 @@ export class BrowserRegistry {
 
   /**
    * Open one tab in the workspace browser pool.
+   * Relaunches the persistent Context when the previous headed window was closed.
    * @param workspaceId - owning workspace.
    * @param url - initial document URL; defaults to `about:blank`.
    */
   async createTab(workspaceId: WorkspaceId, url = 'about:blank'): Promise<BrowserCreateTabResult> {
-    const workspace = await this.ensureWorkspace(workspaceId)
-    const page = await workspace.context.newPage()
+    let workspace = await this.ensureWorkspace(workspaceId)
+    let page: Page
+    try {
+      page = await workspace.context.newPage()
+    } catch (error: unknown) {
+      if (!isTargetClosedError(error)) throw error
+      this.forgetWorkspace(workspaceId, workspace)
+      workspace = await this.launchWorkspace(workspaceId, workspace.devicePixelRatio)
+      page = await workspace.context.newPage()
+    }
     const tabId = randomUUID()
     if (url !== 'about:blank') {
       await page.goto(url, { waitUntil: 'domcontentloaded' })
@@ -136,15 +186,32 @@ export class BrowserRegistry {
     const tab = this.trackTab(workspace, tabId, page)
     workspace.selectedTabId = tabId
     await this.syncTabMetadata(tab)
+    await this.revealTab(tab)
     return { tabId }
   }
 
-  /** Close one tab and select another when the closed tab was selected. */
+  /**
+   * Close one tab and select another when the closed tab was selected.
+   * Succeeds when the tab or Context is already gone.
+   */
   async closeTab(workspaceId: WorkspaceId, tabId: string): Promise<{ closed: true }> {
-    const workspace = this.requireWorkspace(workspaceId)
-    const tab = this.requireTab(workspace, tabId)
+    const workspace = this.workspaces.get(workspaceId)
+    if (workspace === undefined) return { closed: true }
+    const tab = workspace.tabs.get(tabId)
+    if (tab === undefined) return { closed: true }
     workspace.tabs.delete(tabId)
-    await tab.page.close()
+    if (tab.cdp !== undefined) {
+      try {
+        await tab.cdp.detach()
+      } catch {
+        // session already closed with a crashed or closing page
+      }
+    }
+    try {
+      await tab.page.close()
+    } catch (error: unknown) {
+      if (!isTargetClosedError(error)) throw error
+    }
     if (workspace.selectedTabId === tabId) {
       const remaining = [...workspace.tabs.keys()]
       workspace.selectedTabId = remaining[0]
@@ -152,18 +219,32 @@ export class BrowserRegistry {
     return { closed: true }
   }
 
-  /** Mark one tab selected within its workspace pool. */
-  selectTab(workspaceId: WorkspaceId, tabId: string): { selected: true } {
+  /** Mark one tab selected within its workspace pool and raise its window. */
+  async selectTab(workspaceId: WorkspaceId, tabId: string): Promise<{ selected: true }> {
     const workspace = this.requireWorkspace(workspaceId)
-    this.requireTab(workspace, tabId)
+    const tab = this.requireTab(workspace, tabId)
     workspace.selectedTabId = tabId
+    await this.revealTab(tab)
     return { selected: true }
+  }
+
+  /**
+   * Raise the headed Chromium window for one tab so a human can operate it.
+   * Also marks the tab selected.
+   */
+  async showWindow(workspaceId: WorkspaceId, tabId: string): Promise<{ shown: true }> {
+    const workspace = this.requireWorkspace(workspaceId)
+    const tab = this.requireTab(workspace, tabId)
+    workspace.selectedTabId = tabId
+    await this.revealTab(tab)
+    return { shown: true }
   }
 
   /** Navigate one tab to a reachable http(s) URL. */
   async navigate(workspaceId: WorkspaceId, tabId: string, url: string): Promise<BrowserPageMetadata> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.goto(url, { waitUntil: 'domcontentloaded' })
+    await this.revealTab(tab)
     return this.pageMetadata(tab)
   }
 
@@ -171,6 +252,7 @@ export class BrowserRegistry {
   async goBack(workspaceId: WorkspaceId, tabId: string): Promise<BrowserPageMetadata> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.goBack({ waitUntil: 'domcontentloaded' })
+    await this.revealTab(tab)
     return this.pageMetadata(tab)
   }
 
@@ -178,6 +260,7 @@ export class BrowserRegistry {
   async goForward(workspaceId: WorkspaceId, tabId: string): Promise<BrowserPageMetadata> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.goForward({ waitUntil: 'domcontentloaded' })
+    await this.revealTab(tab)
     return this.pageMetadata(tab)
   }
 
@@ -186,14 +269,16 @@ export class BrowserRegistry {
    * @param hard - when true, bypass cache via CDP.
    */
   async reload(workspaceId: WorkspaceId, tabId: string, hard = false): Promise<BrowserPageMetadata> {
+    await this.awaitWorkspaceReady(workspaceId)
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     if (hard) {
-      const cdp = await tab.page.context().newCDPSession(tab.page)
+      const cdp = await this.pageCdp(tab)
       await cdp.send('Page.reload', { ignoreCache: true })
       await tab.page.waitForLoadState('domcontentloaded')
     } else {
       await tab.page.reload({ waitUntil: 'domcontentloaded' })
     }
+    await this.revealTab(tab)
     return this.pageMetadata(tab)
   }
 
@@ -204,10 +289,11 @@ export class BrowserRegistry {
     return { tree }
   }
 
-  /** Click by coordinates on the screencast canvas. */
+  /** Click by coordinates on one tab. */
   async click(workspaceId: WorkspaceId, tabId: string, x: number, y: number): Promise<{ clicked: true }> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.mouse.click(x, y)
+    await this.revealTab(tab)
     await this.syncTabMetadata(tab)
     return { clicked: true }
   }
@@ -216,13 +302,27 @@ export class BrowserRegistry {
   async type(workspaceId: WorkspaceId, tabId: string, text: string): Promise<{ typed: true }> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.keyboard.type(text)
+    await this.revealTab(tab)
     return { typed: true }
   }
 
-  /** Scroll the page by pixel deltas. */
-  async scroll(workspaceId: WorkspaceId, tabId: string, deltaX: number, deltaY: number): Promise<{ scrolled: true }> {
+  /** Scroll one tab by pixel deltas at optional viewport coordinates. */
+  async scroll(
+    workspaceId: WorkspaceId,
+    tabId: string,
+    deltaX: number,
+    deltaY: number,
+    x?: number,
+    y?: number,
+  ): Promise<{ scrolled: true }> {
+    await this.awaitWorkspaceReady(workspaceId)
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
-    await tab.page.mouse.wheel(deltaX, deltaY)
+    const wheelX = x ?? Math.floor(tab.viewportWidth / 2)
+    const wheelY = y ?? Math.floor(tab.viewportHeight / 2)
+    await tab.page.evaluate(
+      asPageFunction<{ px: number; py: number; dx: number; dy: number }, void>(APPLY_SCROLL_AT_POINT),
+      { px: wheelX, py: wheelY, dx: deltaX, dy: deltaY },
+    )
     return { scrolled: true }
   }
 
@@ -235,6 +335,7 @@ export class BrowserRegistry {
   ): Promise<{ selected: true }> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.selectOption(selector, values)
+    await this.revealTab(tab)
     return { selected: true }
   }
 
@@ -244,13 +345,23 @@ export class BrowserRegistry {
     tabId: string,
     width: number,
     height: number,
+    devicePixelRatio = BROWSER_DEVICE_PIXEL_RATIO_MIN,
   ): Promise<{ resized: true }> {
-    const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
-    await tab.page.setViewportSize({ width, height })
+    const scale = clampBrowserDevicePixelRatio(devicePixelRatio)
+    let workspace = this.workspaces.get(workspaceId)
+    if (workspace === undefined) throw new BrowserTabNotFoundError('workspace-browser-not-initialized')
+    if (workspace.devicePixelRatio !== scale) {
+      workspace = await this.recreateWorkspaceWithDevicePixelRatio(workspaceId, scale)
+    }
+    const tab = this.requireTab(workspace, tabId)
+    await this.applyViewportMetrics(tab, width, height, scale)
     return { resized: true }
   }
 
-  /** Forward one pointer event through CDP Input.dispatchMouseEvent. */
+  /**
+   * Forward one pointer event through Playwright `page.mouse` (same path as Agent `click`).
+   * CSS cursor is read only on `mouseMoved` so press/release is not blocked by `page.evaluate`.
+   */
   async sendPointer(
     workspaceId: WorkspaceId,
     tabId: string,
@@ -260,33 +371,55 @@ export class BrowserRegistry {
       y: number
       button?: 'left' | 'right' | 'middle'
     },
-  ): Promise<{ sent: true }> {
+  ): Promise<{ sent: true; cursor?: string }> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
-    const cdp = await tab.page.context().newCDPSession(tab.page)
-    await cdp.send('Input.dispatchMouseEvent', {
-      type: event.type,
-      x: event.x,
-      y: event.y,
-      button: event.button ?? 'left',
-      clickCount: event.type === 'mousePressed' ? 1 : 0,
-    })
-    if (event.type === 'mouseReleased') await this.syncTabMetadata(tab)
-    return { sent: true }
+    const button = event.button ?? 'left'
+    await tab.page.mouse.move(event.x, event.y)
+    if (event.type === 'mousePressed') await tab.page.mouse.down({ button })
+    else if (event.type === 'mouseReleased') {
+      await tab.page.mouse.up({ button })
+      try {
+        await tab.page.evaluate(
+          asPageFunction<{ px: number; py: number }, boolean>(FOCUS_EDITABLE_AT_POINT),
+          { px: event.x, py: event.y },
+        )
+        const focused = tab.page.locator(':focus')
+        if (await focused.count() > 0) await focused.focus()
+      } catch {
+        // page closed or navigated while focusing the control under the click
+      }
+      await this.syncTabMetadata(tab)
+    }
+    const cursor = event.type === 'mouseMoved'
+      ? await this.readCssCursor(tab.page, event.x, event.y)
+      : undefined
+    return cursor === undefined ? { sent: true } : { sent: true, cursor }
   }
 
-  /** Forward one keyboard event through CDP Input.dispatchKeyEvent. */
+  /** Forward one keyboard event through Playwright `page.keyboard`. */
   async sendKeyboard(
     workspaceId: WorkspaceId,
     tabId: string,
     event: { type: 'keyDown' | 'keyUp' | 'char'; key?: string; text?: string },
   ): Promise<{ sent: true }> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
-    const cdp = await tab.page.context().newCDPSession(tab.page)
-    await cdp.send('Input.dispatchKeyEvent', {
-      type: event.type,
-      ...(event.key === undefined ? {} : { key: event.key }),
-      ...(event.text === undefined ? {} : { text: event.text }),
-    })
+    if (event.type === 'char' && event.text !== undefined && event.text !== '') {
+      await tab.page.keyboard.insertText(event.text)
+      try {
+        await tab.page.evaluate(
+          asPageFunction<{ text: string }, void>(DISPATCH_FOCUSED_INPUT),
+          { text: event.text },
+        )
+      } catch {
+        // page closed or navigated while dispatching the input event
+      }
+      await this.syncTabMetadata(tab)
+      return { sent: true }
+    }
+    if (event.key !== undefined && event.key !== '') {
+      if (event.type === 'keyDown') await tab.page.keyboard.down(event.key)
+      else if (event.type === 'keyUp') await tab.page.keyboard.up(event.key)
+    }
     return { sent: true }
   }
 
@@ -299,21 +432,41 @@ export class BrowserRegistry {
     tabId: string,
     signal: AbortSignal,
   ): AsyncGenerator<BrowserScreencastFrame> {
-    const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
+    await this.awaitWorkspaceReady(workspaceId)
+    this.requireTab(this.requireWorkspace(workspaceId), tabId)
+    let lastJpeg: Buffer | undefined
     while (!signal.aborted) {
-      const viewport = tab.page.viewportSize() ?? { width: 1280, height: 720 }
-      const buffer = await tab.page.screenshot({ type: 'jpeg', quality: 80 })
-      yield {
-        type: 'host/browser-screencast',
-        data: buffer.toString('base64'),
-        width: viewport.width,
-        height: viewport.height,
+      await this.awaitWorkspaceReady(workspaceId)
+      const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
+      const viewport = { width: tab.viewportWidth, height: tab.viewportHeight }
+      let buffer: Buffer
+      try {
+        buffer = await this.captureScreencastJpeg(tab.page)
+      } catch (error: unknown) {
+        await this.awaitWorkspaceReady(workspaceId)
+        const current = this.workspaces.get(workspaceId)?.tabs.get(tabId)
+        if (current === undefined || current.page === tab.page) throw error
+        continue
+      }
+      if (lastJpeg === undefined || !buffer.equals(lastJpeg)) {
+        lastJpeg = buffer
+        yield {
+          type: 'host/browser-screencast',
+          data: buffer.toString('base64'),
+          width: viewport.width,
+          height: viewport.height,
+        }
       }
       await new Promise(resolve => setTimeout(resolve, 200))
     }
   }
 
+  private async captureScreencastJpeg(page: Page): Promise<Buffer> {
+    return page.screenshot({ type: 'jpeg', quality: 80, scale: 'device' })
+  }
+
   private trackTab(workspace: WorkspaceBrowser, tabId: string, page: Page): LiveTab {
+    const viewport = page.viewportSize() ?? { width: 1280, height: 720 }
     const tab: LiveTab = {
       tabId,
       page,
@@ -321,10 +474,30 @@ export class BrowserRegistry {
       title: '',
       canGoBack: false,
       canGoForward: false,
+      viewportWidth: viewport.width,
+      viewportHeight: viewport.height,
+      devicePixelRatio: workspace.devicePixelRatio,
     }
     workspace.tabs.set(tabId, tab)
     page.on('framenavigated', () => { void this.syncTabMetadata(tab) })
+    page.on('close', () => {
+      if (workspace.tabs.get(tabId) !== tab) return
+      workspace.tabs.delete(tabId)
+      if (workspace.selectedTabId === tabId) {
+        workspace.selectedTabId = [...workspace.tabs.keys()][0]
+      }
+    })
     return tab
+  }
+
+  /** Bring the headed Chromium window and tab to the front when the page is still open. */
+  private async revealTab(tab: LiveTab): Promise<void> {
+    if (this.headless) return
+    try {
+      await tab.page.bringToFront()
+    } catch (error: unknown) {
+      if (isTargetClosedError(error)) throw new BrowserTabNotFoundError(tab.tabId)
+    }
   }
 
   private async pageMetadata(tab: LiveTab): Promise<BrowserPageMetadata> {
@@ -343,6 +516,25 @@ export class BrowserRegistry {
     const navigation = await this.readNavigationState(tab.page)
     tab.canGoBack = navigation.canGoBack
     tab.canGoForward = navigation.canGoForward
+  }
+
+  /** Reuse one CDP session per tab for pointer, wheel, and keyboard dispatch. */
+  private async pageCdp(tab: LiveTab): Promise<CDPSession> {
+    tab.cdp ??= await tab.page.context().newCDPSession(tab.page)
+    return tab.cdp
+  }
+
+  /** Read the computed CSS cursor at viewport coordinates for the screencast overlay. */
+  private async readCssCursor(page: Page, x: number, y: number): Promise<string | undefined> {
+    try {
+      return await page.evaluate(
+        asPageFunction<{ px: number; py: number }, string>(READ_CSS_CURSOR_AT_POINT),
+        { px: x, py: y },
+      )
+    } catch {
+      // page closed or navigated while reading computed cursor; overlay keeps last cursor
+      return undefined
+    }
   }
 
   private async readNavigationState(page: Page): Promise<{ canGoBack: boolean; canGoForward: boolean }> {
@@ -375,17 +567,87 @@ export class BrowserRegistry {
     return tab
   }
 
-  private async ensureWorkspace(workspaceId: WorkspaceId): Promise<WorkspaceBrowser> {
-    const existing = this.workspaces.get(workspaceId)
-    if (existing !== undefined) return existing
+  private async applyViewportMetrics(
+    tab: LiveTab,
+    width: number,
+    height: number,
+    devicePixelRatio: number,
+  ): Promise<void> {
+    const scale = clampBrowserDevicePixelRatio(devicePixelRatio)
+    tab.viewportWidth = width
+    tab.viewportHeight = height
+    tab.devicePixelRatio = scale
+    await tab.page.setViewportSize({ width, height })
+  }
+
+  private async awaitWorkspaceReady(workspaceId: WorkspaceId): Promise<void> {
+    const pending = this.recreating.get(workspaceId)
+    if (pending !== undefined) await pending
+  }
+
+  private async recreateWorkspaceWithDevicePixelRatio(
+    workspaceId: WorkspaceId,
+    devicePixelRatio: number,
+  ): Promise<WorkspaceBrowser> {
+    const inflight = this.recreating.get(workspaceId)
+    if (inflight !== undefined) return inflight
+    const run = this.rebuildWorkspaceWithDevicePixelRatio(workspaceId, devicePixelRatio)
+    this.recreating.set(workspaceId, run)
+    try {
+      return await run
+    } finally {
+      this.recreating.delete(workspaceId)
+    }
+  }
+
+  private async rebuildWorkspaceWithDevicePixelRatio(
+    workspaceId: WorkspaceId,
+    devicePixelRatio: number,
+  ): Promise<WorkspaceBrowser> {
+    const existing = this.requireWorkspace(workspaceId)
+    const snapshots: TabSnapshot[] = [...existing.tabs.values()].map(tab => ({
+      tabId: tab.tabId,
+      url: tab.url,
+      selected: tab.tabId === existing.selectedTabId,
+      viewportWidth: tab.viewportWidth,
+      viewportHeight: tab.viewportHeight,
+    }))
+    await existing.context.close()
+    this.workspaces.delete(workspaceId)
+    const workspace = await this.launchWorkspace(workspaceId, devicePixelRatio)
+    for (const snapshot of snapshots) {
+      const page = await workspace.context.newPage()
+      if (snapshot.url !== '' && snapshot.url !== 'about:blank') {
+        await page.goto(snapshot.url, { waitUntil: 'domcontentloaded' })
+      }
+      const tab = this.trackTab(workspace, snapshot.tabId, page)
+      tab.viewportWidth = snapshot.viewportWidth
+      tab.viewportHeight = snapshot.viewportHeight
+      await this.syncTabMetadata(tab)
+    }
+    workspace.selectedTabId = snapshots.find(item => item.selected)?.tabId ?? snapshots[0]?.tabId
+    const selected = workspace.selectedTabId === undefined
+      ? undefined
+      : workspace.tabs.get(workspace.selectedTabId)
+    if (selected !== undefined) await this.revealTab(selected)
+    return workspace
+  }
+
+  private async launchWorkspace(
+    workspaceId: WorkspaceId,
+    devicePixelRatio: number,
+  ): Promise<WorkspaceBrowser> {
     this.assertChromiumAvailable()
     const profileDir = join(this.profilesRoot, workspaceId)
     mkdirSync(profileDir, { recursive: true })
+    const scale = clampBrowserDevicePixelRatio(devicePixelRatio)
     let context: BrowserContext
     try {
       context = await this.launchPersistentContext(profileDir, {
-        headless: true,
-        viewport: { width: 1280, height: 720 },
+        headless: this.headless,
+        ...(this.headless
+          ? { viewport: { width: 1280, height: 720 }, deviceScaleFactor: scale }
+          : { viewport: null }),
         args: ['--disable-dev-shm-usage'],
       })
     } catch (error: unknown) {
@@ -396,9 +658,24 @@ export class BrowserRegistry {
       context,
       tabs: new Map(),
       selectedTabId: undefined,
+      devicePixelRatio: scale,
     }
     this.workspaces.set(workspaceId, workspace)
+    context.on('close', () => {
+      this.forgetWorkspace(workspaceId, workspace)
+    })
     return workspace
+  }
+
+  /** Drop a workspace pool only when it is still the mapped instance. */
+  private forgetWorkspace(workspaceId: WorkspaceId, workspace: WorkspaceBrowser): void {
+    if (this.workspaces.get(workspaceId) === workspace) this.workspaces.delete(workspaceId)
+  }
+
+  private async ensureWorkspace(workspaceId: WorkspaceId): Promise<WorkspaceBrowser> {
+    const existing = this.workspaces.get(workspaceId)
+    if (existing !== undefined) return existing
+    return this.launchWorkspace(workspaceId, BROWSER_DEVICE_PIXEL_RATIO_MIN)
   }
 
   private assertChromiumAvailable(): void {

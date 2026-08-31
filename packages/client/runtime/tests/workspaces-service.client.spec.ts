@@ -678,15 +678,35 @@ describe('WorkspaceRuntime', () => {
     })
     await expect(workspaces.browserCreateTab(wid('alpha'))).resolves.toEqual({ tabId: 'fake-browser-1' })
     await expect(workspaces.browserList(wid('alpha'))).resolves.toEqual({ tabs: [] })
+    await expect(workspaces.browserShowWindow(wid('alpha'), 'fake-browser-1')).resolves.toEqual({ shown: true })
     await expect(workspaces.browserNavigate(wid('alpha'), 'fake-browser-1', 'about:blank')).resolves.toEqual({
       url: 'about:blank',
       title: '',
+      canGoBack: false,
+      canGoForward: false,
     })
     workspaces.browserWatchScreencast(wid('alpha'), 'fake-browser-1', (frame) => {
       if (frame.type === 'host/browser-screencast') frames.push(frame.data)
     })
     await vi.waitFor(() => { expect(frames).toEqual(['jpeg']) })
     expect(api.callsOf('host.browserCreateTab')).toEqual([{ workspaceId: 'alpha' }])
+  })
+
+  it('forwards browserScroll coordinates in the payload, not as the abort signal', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const workspaces = new WorkspaceRuntime(ctx, api, new SessionRuntime(ctx, api, fakeRemote()))
+    await expect(workspaces.browserScroll(wid('alpha'), 'tab-1', 0, 120, 90, 60)).resolves.toEqual({
+      scrolled: true,
+    })
+    expect(api.callsOf('host.browserScroll')).toEqual([{
+      workspaceId: 'alpha',
+      tabId: 'tab-1',
+      deltaX: 0,
+      deltaY: 120,
+      x: 90,
+      y: 60,
+    }])
   })
 
   it('passes workspace path mutations through the host wire', async () => {

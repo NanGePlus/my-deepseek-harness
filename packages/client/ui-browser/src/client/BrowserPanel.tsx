@@ -13,10 +13,10 @@ import {
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
-  BrowserListResult, BrowserPageMetadata, BrowserScreencastFrame, WorkspaceId,
+  BrowserListResult, BrowserPageMetadata, WorkspaceId,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
-import { reportBrowserFailure } from './browser-failure.ts'
+import { isBrowserTabNotFoundError, reportBrowserFailure } from './browser-failure.ts'
 import {
   browserUrlHost, isExternalBrowserUrl, isLocalhostBrowserUrl, normalizeBrowserNavigateUrl,
 } from './browser-navigate-url.ts'
@@ -34,11 +34,10 @@ import {
   browserWorkspaceState, createBrowserPanelStore, rowsFromBrowserList,
 } from './stores.ts'
 import { browserTabDisplayTitle, DEFAULT_BROWSER_TAB_URL } from './browser-tab-title.ts'
-import { createScreencastViewport, type ScreencastViewportHandle } from './screencast-viewport.ts'
-import {
-  createViewportResizeDebouncer, readViewportContentSize,
-} from './viewport-resize-debounce.ts'
 import css from './BrowserPanel.module.css'
+
+/** How often the toolbox Tab bar rereads Host metadata while the segment is visible. */
+const BROWSER_TAB_SYNC_MS = 1000
 
 /** Host embedded-browser callbacks closed over `ctx.workspaces` in apply. */
 export interface BrowserPanelInjected {
@@ -130,67 +129,16 @@ export interface BrowserPanelInjected {
     signal?: AbortSignal,
   ) => Promise<BrowserPageMetadata>
   /**
-   * Resize the Host viewport for screencast capture.
+   * Raise the headed Chromium window for one tab.
    * @param workspaceId - Workspace whose browser pool owns the tab.
    * @param tabId - live tab id.
-   * @param width - viewport width in CSS pixels.
-   * @param height - viewport height in CSS pixels.
-   * @param signal - aborts a superseded resize.
+   * @param signal - aborts a superseded raise.
    */
-  browserResizeViewport: (
+  browserShowWindow: (
     workspaceId: WorkspaceId,
     tabId: string,
-    width: number,
-    height: number,
     signal?: AbortSignal,
-  ) => Promise<{ resized: true }>
-  /**
-   * Forward one pointer event to the Host page.
-   * @param workspaceId - Workspace whose browser pool owns the tab.
-   * @param tabId - live tab id.
-   * @param event - pointer payload.
-   * @param signal - aborts a superseded send.
-   */
-  browserSendPointer: (
-    workspaceId: WorkspaceId,
-    tabId: string,
-    event: {
-      type: 'mousePressed' | 'mouseReleased' | 'mouseMoved'
-      x: number
-      y: number
-      button?: 'left' | 'right' | 'middle'
-    },
-    signal?: AbortSignal,
-  ) => Promise<{ sent: true }>
-  /**
-   * Forward one keyboard event to the Host page.
-   * @param workspaceId - Workspace whose browser pool owns the tab.
-   * @param tabId - live tab id.
-   * @param event - keyboard payload.
-   * @param signal - aborts a superseded send.
-   */
-  browserSendKeyboard: (
-    workspaceId: WorkspaceId,
-    tabId: string,
-    event: { type: 'keyDown' | 'keyUp' | 'char'; key?: string; text?: string },
-    signal?: AbortSignal,
-  ) => Promise<{ sent: true }>
-  /**
-   * Subscribe to JPEG screencast frames for one tab.
-   * @param workspaceId - Workspace whose browser pool owns the tab.
-   * @param tabId - live tab id.
-   * @param onFrame - invoked once per Host SSE frame.
-   * @param signal - aborts the stream.
-   * @param onOpen - invoked once response headers are readable.
-   */
-  browserWatchScreencast: (
-    workspaceId: WorkspaceId,
-    tabId: string,
-    onFrame: (frame: BrowserScreencastFrame) => void,
-    signal?: AbortSignal,
-    onOpen?: () => void,
-    onError?: (message: string) => void,
-  ) => void
+  ) => Promise<{ shown: true }>
 }
 
 /** Props for the embedded browser panel. */
@@ -201,7 +149,7 @@ export type BrowserPanelProps =
   & BrowserPanelInjected
 
 /**
- * Embedded browser body: workspace-bound tabs, navigation chrome, and screencast canvas.
+ * Embedded browser body: workspace-bound tabs, navigation chrome, and native-window handoff.
  * @param props - root runtime share, locale, workspace-partitioned store, and Host callbacks.
  * @returns the embedded browser surface.
  */
@@ -209,7 +157,7 @@ export function BrowserPanel({
   t, visible, useSessions, useWorkspaces, useStore, actions,
   browserList, browserCreateTab, browserCloseTab, browserSelectTab,
   browserNavigate, browserGoBack, browserGoForward, browserReload,
-  browserResizeViewport, browserSendPointer, browserSendKeyboard, browserWatchScreencast,
+  browserShowWindow,
 }: BrowserPanelProps) {
   const currentSessionId = useSessions(state => state.current)
   const workspace = useWorkspaces(state =>
@@ -250,15 +198,15 @@ export function BrowserPanel({
     ? false
     : browserWorkspaceState(state, workspaceId).deferAutoCreate)
   const wasVisibleRef = useRef(false)
-  const viewportHostRef = useRef<HTMLDivElement>(null)
-  const viewportRef = useRef<ScreencastViewportHandle | null>(null)
-  const streamAbortRef = useRef<AbortController | null>(null)
   const addressInputRef = useRef<HTMLInputElement>(null)
   const tabsRef = useRef(tabs)
   tabsRef.current = tabs
+  const selectedTabIdRef = useRef(selectedTabId)
+  selectedTabIdRef.current = selectedTabId
   const creatingRef = useRef(false)
+  const [hostTabsReady, setHostTabsReady] = useState(false)
   const [addressDraft, setAddressDraft] = useState('')
-  const [streamAttempt, setStreamAttempt] = useState(0)
+  const [revealAttempt, setRevealAttempt] = useState(0)
   const [navigating, setNavigating] = useState(false)
   const [hardReloading, setHardReloading] = useState(false)
   const [tabMenu, setTabMenu] = useState<{ anchorTabId: string; rect: DOMRect } | null>(null)
@@ -266,8 +214,6 @@ export function BrowserPanel({
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
   const overflowButtonRef = useRef<HTMLButtonElement>(null)
   const navRetryRef = useRef<(() => void) | null>(null)
-  const visibleRef = useRef(visible)
-  visibleRef.current = visible
 
   const activeTab = useMemo(
     () => tabs.find(tab => tab.tabId === selectedTabId),
@@ -282,37 +228,6 @@ export function BrowserPanel({
   useEffect(() => {
     setAddressDraft(activeTab?.url ?? '')
   }, [activeTab?.tabId, activeTab?.url])
-
-  const ensureViewport = useCallback((): ScreencastViewportHandle | null => {
-    if (workspaceId === undefined || selectedTabId === undefined) return null
-    const wid = workspaceId
-    const tabId = selectedTabId
-    if (viewportRef.current !== null) {
-      viewportRef.current.setZoom(zoom)
-      return viewportRef.current
-    }
-    const host = viewportHostRef.current
-    if (host === null || host.clientWidth === 0) return null
-    const viewport = createScreencastViewport({
-      zoom,
-      onPointer: (event) => {
-        void browserSendPointer(wid, tabId, event).catch((error: unknown) => {
-          reportBrowserFailure(actions, wid, error)
-        })
-      },
-      onKeyboard: (event) => {
-        void browserSendKeyboard(wid, tabId, event).catch((error: unknown) => {
-          reportBrowserFailure(actions, wid, error)
-        })
-      },
-    })
-    viewport.attach(host)
-    viewportRef.current = viewport
-    return viewport
-  }, [actions, browserSendKeyboard, browserSendPointer, selectedTabId, workspaceId, zoom])
-
-  const ensureViewportRef = useRef(ensureViewport)
-  ensureViewportRef.current = ensureViewport
 
   const focusAddressBar = useCallback(() => {
     addressInputRef.current?.focus()
@@ -337,23 +252,32 @@ export function BrowserPanel({
     actions.setExternalInfo(workspaceId, t('browser.info.external'))
   }, [actions, seenExternalHosts, t, workspaceId])
 
-  const syncViewportSize = useCallback(async (signal?: AbortSignal) => {
-    /* v8 ignore next 2 -- only runs while a bound Workspace tab is mounted. */
-    if (workspaceId === undefined || selectedTabId === undefined) return
-    const host = viewportHostRef.current
-    /* v8 ignore next -- tabpanel ref is committed before resize sync runs. */
-    if (host === null) return
-    const size = readViewportContentSize(host)
-    /* v8 ignore next -- zero-sized hosts skip resize until layout settles. */
-    if (size === null) return
-    try {
-      await browserResizeViewport(workspaceId, selectedTabId, size.width, size.height, signal)
-    } catch (error: unknown) {
-      /* v8 ignore next -- superseded resize calls abort before settlement. */
-      if (signal?.aborted) return
-      reportBrowserFailure(actions, workspaceId, error)
+  const recreateHostTabsFromStore = useCallback(async (signal?: AbortSignal): Promise<string | undefined> => {
+    if (workspaceId === undefined) return undefined
+    const persisted = tabsRef.current
+    if (persisted.length === 0) return undefined
+    const priorSelectedIndex = persisted.findIndex(tab => tab.tabId === selectedTabIdRef.current)
+    for (const row of persisted) {
+      const url = row.url === '' ? DEFAULT_BROWSER_TAB_URL : row.url
+      await browserCreateTab(workspaceId, url, signal)
+      /* v8 ignore next -- superseded recreate calls abort before settlement. */
+      if (signal?.aborted) return undefined
     }
-  }, [actions, browserResizeViewport, selectedTabId, workspaceId])
+    const listed = await browserList(workspaceId, signal)
+    /* v8 ignore next -- superseded recreate calls abort before settlement. */
+    if (signal?.aborted) return undefined
+    const mapped = rowsFromBrowserList(listed.tabs)
+    let selected = mapped.selectedTabId
+    const hostTab = listed.tabs[priorSelectedIndex]
+    if (hostTab !== undefined) {
+      selected = hostTab.tabId
+      if (selected !== mapped.selectedTabId) {
+        await browserSelectTab(workspaceId, selected, signal)
+      }
+    }
+    actions.setWorkspaceTabs(workspaceId, mapped.rows, selected)
+    return selected
+  }, [actions, browserCreateTab, browserList, browserSelectTab, workspaceId])
 
   const createBlankTab = useCallback(async (focusAddress = false) => {
     /* v8 ignore next -- coalesces duplicate create requests while one tab open is in flight. */
@@ -364,6 +288,14 @@ export function BrowserPanel({
       actions.setCreating(workspaceId, true)
       actions.setInlineError(workspaceId, undefined)
       actions.setBrowserUnavailable(workspaceId, undefined)
+      const listed = await browserList(workspaceId, ac.signal)
+      /* v8 ignore next -- superseded create calls abort before settlement. */
+      if (ac.signal.aborted) return
+      if (listed.tabs.length === 0 && tabsRef.current.length > 0) {
+        await recreateHostTabsFromStore(ac.signal)
+        /* v8 ignore next -- superseded create calls abort before settlement. */
+        if (ac.signal.aborted) return
+      }
       const created = await browserCreateTab(workspaceId, DEFAULT_BROWSER_TAB_URL, ac.signal)
       /* v8 ignore next -- superseded create calls abort before settlement. */
       if (ac.signal.aborted) return
@@ -385,7 +317,56 @@ export function BrowserPanel({
       if (!ac.signal.aborted) actions.setCreating(workspaceId, false)
       creatingRef.current = false
     }
-  }, [actions, browserCreateTab, focusAddressBar, workspaceId])
+  }, [actions, browserCreateTab, browserList, focusAddressBar, recreateHostTabsFromStore, workspaceId])
+
+  const recoverMissingHostTab = useCallback(async (): Promise<string | undefined> => {
+    if (workspaceId === undefined) return undefined
+    const listed = await browserList(workspaceId)
+    if (listed.tabs.length > 0) {
+      const mapped = rowsFromBrowserList(listed.tabs)
+      actions.setWorkspaceTabs(workspaceId, mapped.rows, mapped.selectedTabId)
+      return mapped.selectedTabId
+    }
+    if (tabsRef.current.length > 0) return recreateHostTabsFromStore()
+    return undefined
+  }, [actions, browserList, recreateHostTabsFromStore, workspaceId])
+
+  const revealWindow = useCallback(async (tabId: string, signal?: AbortSignal) => {
+    /* v8 ignore next -- reveal only runs while a bound Workspace tab is active. */
+    if (workspaceId === undefined) return
+    try {
+      await browserShowWindow(workspaceId, tabId, signal)
+    } catch (error: unknown) {
+      /* v8 ignore next -- superseded reveal calls abort before settlement. */
+      if (signal?.aborted) return
+      if (isBrowserTabNotFoundError(error)) {
+        const recovered = await recoverMissingHostTab()
+        if (recovered !== undefined && !signal?.aborted) {
+          await browserShowWindow(workspaceId, recovered, signal)
+          return
+        }
+        if (recovered !== undefined) return
+      }
+      reportBrowserFailure(actions, workspaceId, error)
+    }
+  }, [actions, browserShowWindow, recoverMissingHostTab, workspaceId])
+
+  const syncHostTabMetadata = useCallback(async (signal?: AbortSignal) => {
+    /* v8 ignore next -- metadata sync only runs while a bound Workspace is mounted. */
+    if (workspaceId === undefined) return
+    try {
+      const listed = await browserList(workspaceId, signal)
+      /* v8 ignore next -- superseded list calls abort before settlement. */
+      if (signal?.aborted) return
+      if (listed.tabs.length === 0) return
+      const mapped = rowsFromBrowserList(listed.tabs)
+      actions.setWorkspaceTabs(workspaceId, mapped.rows, mapped.selectedTabId)
+    } catch (error: unknown) {
+      /* v8 ignore next -- superseded list calls abort before settlement. */
+      if (signal?.aborted) return
+      reportBrowserFailure(actions, workspaceId, error)
+    }
+  }, [actions, browserList, workspaceId])
 
   const handleNavigate = useCallback(async () => {
     /* v8 ignore next 2 -- navigation chrome disables without a bound tab or empty URL. */
@@ -448,8 +429,14 @@ export function BrowserPanel({
       if (ac.signal.aborted) return
       actions.removeTab(workspaceId, tabId)
     } catch (error: unknown) {
-      /* v8 ignore next -- DirectoryBrowseError is expected; abort means a superseded close. */
-      if (error instanceof DirectoryBrowseError || ac.signal.aborted) return
+      /* v8 ignore next -- abort means a superseded close. */
+      if (ac.signal.aborted) return
+      if (isBrowserTabNotFoundError(error)) {
+        actions.removeTab(workspaceId, tabId)
+        return
+      }
+      /* v8 ignore next -- DirectoryBrowseError is expected; other Host failures hit the boundary. */
+      if (error instanceof DirectoryBrowseError) return
       /* v8 ignore next -- unexpected Host failures propagate to the runtime error boundary. */
       throw error
     }
@@ -521,7 +508,7 @@ export function BrowserPanel({
     if (tabsRef.current.length === 0) {
       setBootstrapAttempt(attempt => attempt + 1)
     } else {
-      setStreamAttempt(attempt => attempt + 1)
+      setRevealAttempt(attempt => attempt + 1)
     }
   }, [actions, workspaceId])
 
@@ -538,17 +525,27 @@ export function BrowserPanel({
     setHardReloading(true)
     setNavigating(true)
     actions.setNavError(workspaceId, undefined)
-    void browserReload(workspaceId, selectedTabId, true).then((metadata) => {
-      applyPageMetadata(selectedTabId, metadata)
-      noteExternalVisit(metadata.url)
-    }).catch((error: unknown) => {
-      navRetryRef.current = hardReload
-      reportBrowserFailure(actions, workspaceId, error, 'nav')
-    }).finally(() => {
-      setNavigating(false)
-      setHardReloading(false)
-    })
-  }, [actions, applyPageMetadata, browserReload, noteExternalVisit, selectedTabId, workspaceId])
+    void (async () => {
+      try {
+        let tabId = selectedTabId
+        const metadata = await browserReload(workspaceId, tabId, true).catch(async (error: unknown) => {
+          if (!isBrowserTabNotFoundError(error)) throw error
+          const recovered = await recoverMissingHostTab()
+          if (recovered === undefined) throw error
+          tabId = recovered
+          return browserReload(workspaceId, recovered, true)
+        })
+        applyPageMetadata(tabId, metadata)
+        noteExternalVisit(metadata.url)
+      } catch (error: unknown) {
+        navRetryRef.current = hardReload
+        reportBrowserFailure(actions, workspaceId, error, 'nav')
+      } finally {
+        setNavigating(false)
+        setHardReloading(false)
+      }
+    })()
+  }, [actions, applyPageMetadata, browserReload, noteExternalVisit, recoverMissingHostTab, selectedTabId, workspaceId])
 
   const runHistoryNav = useCallback((
     run: () => Promise<BrowserPageMetadata>,
@@ -571,32 +568,35 @@ export function BrowserPanel({
     setNavigating(true)
     actions.setNavError(workspaceId, undefined)
     navRetryRef.current = runSoftReload
-    void browserReload(workspaceId, selectedTabId).then((metadata) => {
-      applyPageMetadata(selectedTabId, metadata)
-      noteExternalVisit(metadata.url)
-    }).catch((error: unknown) => {
-      reportBrowserFailure(actions, workspaceId, error, 'nav')
-    }).finally(() => { setNavigating(false) })
-  }, [actions, applyPageMetadata, browserReload, noteExternalVisit, selectedTabId, workspaceId])
+    void (async () => {
+      try {
+        let tabId = selectedTabId
+        const metadata = await browserReload(workspaceId, tabId).catch(async (error: unknown) => {
+          if (!isBrowserTabNotFoundError(error)) throw error
+          const recovered = await recoverMissingHostTab()
+          if (recovered === undefined) throw error
+          tabId = recovered
+          return browserReload(workspaceId, recovered)
+        })
+        applyPageMetadata(tabId, metadata)
+        noteExternalVisit(metadata.url)
+      } catch (error: unknown) {
+        reportBrowserFailure(actions, workspaceId, error, 'nav')
+      } finally {
+        setNavigating(false)
+      }
+    })()
+  }, [actions, applyPageMetadata, browserReload, noteExternalVisit, recoverMissingHostTab, selectedTabId, workspaceId])
 
   const retryInline = useCallback(() => {
     /* v8 ignore next -- retry only renders while a bound Workspace tab is active. */
     if (workspaceId === undefined) return
     actions.setInlineError(workspaceId, undefined)
-    setStreamAttempt(attempt => attempt + 1)
+    setRevealAttempt(attempt => attempt + 1)
   }, [actions, workspaceId])
 
   useEffect(() => {
-    viewportRef.current?.dispose()
-    viewportRef.current = null
-  }, [selectedTabId, workspaceId])
-
-  useEffect(() => {
-    if (!visible) return
-    ensureViewport()
-  }, [ensureViewport, visible, zoom])
-
-  useEffect(() => {
+    setHostTabsReady(false)
     if (!visible || workspaceId === undefined) {
       wasVisibleRef.current = visible
       return
@@ -614,98 +614,59 @@ export function BrowserPanel({
         if (listed.tabs.length > 0) {
           const mapped = rowsFromBrowserList(listed.tabs)
           actions.setWorkspaceTabs(workspaceId, mapped.rows, mapped.selectedTabId)
+          setHostTabsReady(true)
           return
         }
-        if (tabsRef.current.length > 0) return
+        if (tabsRef.current.length > 0) {
+          await recreateHostTabsFromStore(ac.signal)
+          if (ac.signal.aborted) return
+          setHostTabsReady(true)
+          return
+        }
         if (!reentered && deferAutoCreate) return
         await createBlankTab(true)
+        if (ac.signal.aborted) return
+        setHostTabsReady(true)
       } catch (error: unknown) {
         /* v8 ignore next -- bootstrap aborts when the segment hides or Workspace changes. */
         if (ac.signal.aborted) return
+        setHostTabsReady(false)
         reportBrowserFailure(actions, workspaceId, error)
       }
     })()
-    return () => { ac.abort() }
+    return () => {
+      ac.abort()
+      setHostTabsReady(false)
+    }
   }, [
-    actions, bootstrapAttempt, browserList, createBlankTab, deferAutoCreate, visible, workspaceId,
+    actions, bootstrapAttempt, browserList, createBlankTab, deferAutoCreate,
+    recreateHostTabsFromStore, visible, workspaceId,
   ])
 
   useEffect(() => {
-    if (workspaceId === undefined || selectedTabId === undefined || !visible) {
-      streamAbortRef.current?.abort()
+    if (!hostTabsReady || workspaceId === undefined || selectedTabId === undefined || !visible) {
       if (workspaceId !== undefined) actions.setConnecting(workspaceId, false)
       return
     }
-    streamAbortRef.current?.abort()
     const ac = new AbortController()
-    streamAbortRef.current = ac
     actions.setConnecting(workspaceId, true)
-    let frameSeen = false
-
-    void syncViewportSize(ac.signal)
-
-    browserWatchScreencast(workspaceId, selectedTabId, (frame) => {
-      if (frame.type === 'stream/error') {
-        if (frame.error.code === 'browser-unavailable') {
-          actions.setBrowserUnavailable(workspaceId, frame.error.message)
-        } else {
-          actions.setInlineError(workspaceId, frame.error.message)
-        }
-        actions.setConnecting(workspaceId, false)
-        return
-      }
-      frameSeen = true
-      ensureViewportRef.current()?.setFrame({
-        data: frame.data,
-        width: frame.width,
-        height: frame.height,
-      })
-      /* v8 ignore next -- stream teardown clears connecting when the segment hides. */
-      if (visibleRef.current) actions.setConnecting(workspaceId, false)
-    }, ac.signal, () => {
-      /* v8 ignore next -- stream teardown clears connecting when the segment hides. */
-      if (visibleRef.current) actions.setConnecting(workspaceId, false)
-      actions.setInlineError(workspaceId, undefined)
-      /* v8 ignore next -- only clears a painted frame after the viewport host exists. */
-      if (!frameSeen) ensureViewportRef.current()?.setFrame(null)
-    }, (message) => {
-      /* v8 ignore next -- stream teardown clears connecting when the segment hides. */
-      if (visibleRef.current) actions.setConnecting(workspaceId, false)
-      actions.setInlineError(workspaceId, message)
+    void revealWindow(selectedTabId, ac.signal).finally(() => {
+      if (!ac.signal.aborted) actions.setConnecting(workspaceId, false)
     })
     return () => { ac.abort() }
-  }, [
-    actions, browserWatchScreencast, selectedTabId, streamAttempt, syncViewportSize, visible, workspaceId,
-  ])
+  }, [actions, hostTabsReady, revealAttempt, revealWindow, selectedTabId, visible, workspaceId])
 
   useEffect(() => {
-    if (!visible || workspaceId === undefined || selectedTabId === undefined) return
-    /* v8 ignore next -- ResizeObserver is polyfilled in jsdom tests and always present in web builds. */
-    if (typeof ResizeObserver === 'undefined') return
-    const host = viewportHostRef.current
-    /* v8 ignore next -- the tabpanel ref is committed before this layout effect runs. */
-    if (host === null) return
-    const debouncer = createViewportResizeDebouncer(() => {
-      void syncViewportSize()
-    })
-    const observer = new ResizeObserver(() => {
-      if (host.clientWidth === 0) return
-      ensureViewportRef.current?.()
-      debouncer.arm()
-    })
-    observer.observe(host)
-    debouncer.arm()
+    if (!hostTabsReady || !visible || workspaceId === undefined) return
+    const ac = new AbortController()
+    const timer = window.setInterval(() => {
+      void syncHostTabMetadata(ac.signal)
+    }, BROWSER_TAB_SYNC_MS)
     return () => {
-      observer.disconnect()
-      debouncer.dispose()
+      ac.abort()
+      window.clearInterval(timer)
     }
-  }, [selectedTabId, syncViewportSize, visible, workspaceId])
-
-  useEffect(() => () => {
-    streamAbortRef.current?.abort()
-    viewportRef.current?.dispose()
-    viewportRef.current = null
-  }, [])
+  }, [hostTabsReady, syncHostTabMetadata, visible, workspaceId])
 
   const addTabDisabled = creating || creatingRef.current
   const showDimOverlay = connecting || (navigating && !hardReloading)
@@ -862,7 +823,7 @@ export function BrowserPanel({
           />
         )}
         <div className={css.tabBarActions}>
-          <Tooltip label={t('browser.tab.new')} delayMs={500}>
+          <Tooltip label={t('browser.tab.new')} side="bottom" delayMs={500}>
             <button
               type="button"
               className={css.addButton}
@@ -876,7 +837,7 @@ export function BrowserPanel({
         </div>
       </div>
       <div className={css.navBar}>
-        <Tooltip label={t('browser.nav.back')} delayMs={500}>
+        <Tooltip label={t('browser.nav.back')} side="bottom" delayMs={500}>
           <button
             type="button"
             className={css.navButton}
@@ -891,7 +852,7 @@ export function BrowserPanel({
             <IconChevronLeftOutline14 size={14} />
           </button>
         </Tooltip>
-        <Tooltip label={t('browser.nav.forward')} delayMs={500}>
+        <Tooltip label={t('browser.nav.forward')} side="bottom" delayMs={500}>
           <button
             type="button"
             className={css.navButton}
@@ -906,12 +867,12 @@ export function BrowserPanel({
             <IconChevronRightOutline14 size={14} />
           </button>
         </Tooltip>
-        <Tooltip label={t('browser.nav.reload')} delayMs={500}>
+        <Tooltip label={t('browser.nav.reload')} side="bottom" delayMs={500}>
           <button
             type="button"
             className={css.navButton}
             aria-label={t('browser.nav.reload')}
-            disabled={selectedTabId === undefined || navigating}
+            disabled={selectedTabId === undefined || navigating || !hostTabsReady}
             onClick={() => { runSoftReload() }}
           >
             <span className={navigating ? css.spinner : undefined} aria-hidden="true">
@@ -933,7 +894,7 @@ export function BrowserPanel({
             }
           }}
         />
-        <Tooltip label={t('browser.nav.openExternal')} delayMs={500}>
+        <Tooltip label={t('browser.nav.openExternal')} side="bottom" delayMs={500}>
           <button
             type="button"
             className={css.navButton}
@@ -950,7 +911,7 @@ export function BrowserPanel({
           compact
           align="end"
           anchor={(
-            <Tooltip label={t('browser.nav.overflow')} delayMs={500}>
+            <Tooltip label={t('browser.nav.overflow')} side="bottom" delayMs={500}>
               <button
                 ref={overflowButtonRef}
                 type="button"
@@ -994,12 +955,32 @@ export function BrowserPanel({
       )}
       <div className={css.body}>
         <div
-          ref={viewportHostRef}
-          className={css.viewportHost}
+          className={css.nativePane}
           role="tabpanel"
-          aria-label={t('browser.screencast.aria')}
+          aria-label={t('browser.native.aria')}
           aria-busy={showLoading}
-        />
+        >
+          <div className={css.emptyCard}>
+            <span className={css.emptyIcon} aria-hidden="true">
+              <IconGlobeOutline14 size={48} />
+            </span>
+            <div className={css.emptyTitle}>{t('browser.native.title')}</div>
+            <div className={css.emptyBody}>{t('browser.native.body')}</div>
+            <Button
+              variant="primary"
+              size="sm"
+              className={css.emptyRetry}
+              disabled={selectedTabId === undefined || browserUnavailable !== undefined}
+              onClick={() => {
+                /* v8 ignore next -- the button disables without a selected tab. */
+                if (selectedTabId === undefined) return
+                setRevealAttempt(attempt => attempt + 1)
+              }}
+            >
+              {t('browser.native.show')}
+            </Button>
+          </div>
+        </div>
         {browserUnavailable !== undefined && (
           <div className={css.unavailableOverlay}>
             <div className={css.emptyCard}>
