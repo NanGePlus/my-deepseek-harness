@@ -405,3 +405,4 @@
 | 2026-08-30 | 从最新 `origin/custom/main` 创建分支 `feat/v4` | V4 版本迭代线；基线 PR #91 merge commit `5ca6576365` |
 | 2026-08-30 | V4 内嵌浏览器规格锁定 | `grill-with-docs` 拷问完成；更新 `CONTEXT.md`；新增 `docs/prd/browser-v4.md`、`docs/adr/0007-embedded-browser-host-playwright.md`、`docs/adr/0008-embedded-browser-client-and-tools.md` |
 | 2026-08-31 | Issue #120 electron-builder 打包 | 分支 `issue/120-electron-builder`：staging + `extraResources`（web-dist / playwright-browsers / host-runtime）；`directories.app` + dmg/NSIS；`PLAYWRIGHT_BROWSERS_PATH`；CI `desktop-packaging.yml` + headless smoke；32/32 desktop tests 绿 |
+| 2026-08-31 | PR [#131](https://github.com/NanGePlus/my-deepseek-harness/pull/131) 合并入 `custom/main` | 关闭 Issue [#120](https://github.com/NanGePlus/my-deepseek-harness/issues/120)；保留分支 `issue/120-electron-builder` |
