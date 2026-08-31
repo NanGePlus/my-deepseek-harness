@@ -115,6 +115,12 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
     setOpen(true)
   }, [])
 
+  useEffect(() => {
+    const bridge = (globalThis as { dsh?: { onFocusSettings?: (listener: () => void) => () => void } }).dsh
+    if (bridge?.onFocusSettings === undefined) return undefined
+    return bridge.onFocusSettings(() => { setOpen(true) })
+  }, [])
+
   // The ledger tick keeps the nav rows fresh: registrants re-register with
   // freshly localized text on locale change, and the trigger/header/close
   // seats re-render through their own outlets' subscriptions.

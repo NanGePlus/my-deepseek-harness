@@ -6,14 +6,31 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, ipcMain, protocol } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeImage,
+  protocol,
+  screen,
+} from 'electron'
 import type { ApiProxy } from '@deepseek-ai/dsh-host-apiproxy/api'
+import { resolveDesktopAppIconPath } from './app-icon.ts'
+import { buildApplicationMenuTemplate } from './app-menu.ts'
 import { composeDesktopBootGraph } from './boot-graph.ts'
+import { createExitGuardCoordinator } from './exit-guard.ts'
 import { DesktopHostController } from './host-boot.ts'
 import { registerIpcApiBridge } from './ipc-api-bridge.ts'
 import { hostBootFailureWire, hostBootSuccessWire, injectHostBootWire } from './host-boot-wire.ts'
 import { resolveDesktopLoadTarget, DEFAULT_DESKTOP_DEV_URL } from './load-url.ts'
 import { shouldSkipHostBoot } from './attach.ts'
+import {
+  IPC_EXIT_GUARD_RESULT,
+  IPC_EXIT_REQUEST,
+  IPC_FOCUS_SETTINGS,
+} from './ipc-contract.ts'
 import {
   DSH_APP_AUTHORITY,
   DSH_PROTOCOL_SCHEME,
@@ -22,7 +39,9 @@ import {
   resolveDshProtocolPath,
   resolveWebDistRoot,
 } from './protocol-dsh.ts'
+import { installSingleInstanceLock } from './single-instance.ts'
 import { injectBootManifest } from '@deepseek-ai/dsh-client-modules'
+import { loadWindowBounds, saveWindowBounds } from './window-bounds.ts'
 
 const repoRoot = fileURLToPath(new URL('../../..', import.meta.url))
 const bootGraphFile = join(repoRoot, '.sessions/desktop-boot-graph.json')
@@ -39,9 +58,30 @@ let mainWindow: BrowserWindow | undefined
 let bootGraph: ReturnType<typeof composeDesktopBootGraph> | undefined
 let lastHostBootError: string | undefined
 let disposeIpcBridge: (() => void) | undefined
+let quitting = false
+const exitGuard = createExitGuardCoordinator({
+  sendExitRequest: () => { mainWindow?.webContents.send(IPC_EXIT_REQUEST) },
+  teardownHost: () => {
+    disposeIpcBridge?.()
+    void hostController.teardown()
+  },
+  isAttachMode: () => shouldSkipHostBoot(),
+})
 
 function distRoot(): string {
   return resolveWebDistRoot(repoRoot)
+}
+
+function primaryWorkArea(): { x: number; y: number; width: number; height: number } {
+  const area = screen.getPrimaryDisplay().workArea
+  return { x: area.x, y: area.y, width: area.width, height: area.height }
+}
+
+function applyAppIcon(): void {
+  const iconPath = resolveDesktopAppIconPath(repoRoot)
+  if (iconPath === undefined) return
+  const image = nativeImage.createFromPath(iconPath)
+  if (process.platform === 'darwin' && !image.isEmpty()) app.dock?.setIcon(image)
 }
 
 function writeDevBootGraph(): void {
@@ -105,6 +145,44 @@ function registerDshProtocol(): void {
   })
 }
 
+function focusMainWindow(): void {
+  if (mainWindow === undefined) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+async function beginQuit(): Promise<void> {
+  if (quitting) return
+  const proceed = await exitGuard.requestQuit()
+  if (!proceed) return
+  quitting = true
+  if (mainWindow !== undefined) {
+    const bounds = mainWindow.getBounds()
+    saveWindowBounds(app.getPath('userData'), bounds)
+  }
+  app.quit()
+}
+
+function installApplicationMenu(): void {
+  const appName = app.getName()
+  const template = buildApplicationMenuTemplate({
+    appName,
+    version: app.getVersion(),
+    showAbout: () => {
+      void dialog.showMessageBox(mainWindow ?? undefined, {
+        type: 'info',
+        title: `About ${appName}`,
+        message: appName,
+        detail: `Version ${app.getVersion()}\nDeepSeek Harness desktop shell.`,
+      })
+    },
+    focusSettings: () => { mainWindow?.webContents.send(IPC_FOCUS_SETTINGS) },
+    requestQuit: () => { void beginQuit() },
+  })
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
 function createMainWindow(): void {
   const target = resolveDesktopLoadTarget({
     ...process.env,
@@ -112,14 +190,21 @@ function createMainWindow(): void {
       process.env.DSH_DESKTOP_DEV === '1' ? DEFAULT_DESKTOP_DEV_URL : undefined
     ),
   })
+  const bounds = loadWindowBounds(app.getPath('userData'), primaryWorkArea())
+  const iconPath = resolveDesktopAppIconPath(repoRoot)
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 840,
+    ...bounds,
+    icon: iconPath,
     webPreferences: {
       preload: fileURLToPath(new URL('./preload.js', import.meta.url)),
       contextIsolation: true,
       nodeIntegration: false,
     },
+  })
+  mainWindow.on('close', (event) => {
+    if (quitting) return
+    event.preventDefault()
+    void beginQuit()
   })
   void mainWindow.loadURL(target.url)
 }
@@ -139,21 +224,33 @@ async function retryHostBoot(): Promise<{ ok: boolean; error?: string }> {
   }
 }
 
-app.whenReady().then(async () => {
-  registerDshProtocol()
-  await bootIntegratedHost()
-  createMainWindow()
-})
+if (!installSingleInstanceLock({
+  requestSingleInstanceLock: () => app.requestSingleInstanceLock(),
+  onSecondInstance: (listener) => { app.on('second-instance', listener) },
+  quit: () => { app.quit() },
+  focusMainWindow,
+}, { skip: shouldSkipHostBoot() })) {
+  // Second instance: focus only; this process exits before Host boot.
+} else {
+  app.whenReady().then(async () => {
+    applyAppIcon()
+    registerDshProtocol()
+    installApplicationMenu()
+    await bootIntegratedHost()
+    createMainWindow()
+  })
 
-app.on('before-quit', () => {
-  disposeIpcBridge?.()
-  void hostController.teardown()
-})
+  app.on('window-all-closed', () => { void beginQuit() })
 
-app.on('window-all-closed', () => {
-  app.quit()
-})
+  app.on('activate', () => {
+    if (mainWindow === undefined) createMainWindow()
+    else focusMainWindow()
+  })
+}
 
 ipcMain.handle('dsh:host-boot-retry', () => retryHostBoot())
+ipcMain.on(IPC_EXIT_GUARD_RESULT, (_event, result: { proceed?: boolean }) => {
+  exitGuard.handleExitGuardResult({ proceed: result.proceed === true })
+})
 
 export { preloadFileUrl, repoRoot }

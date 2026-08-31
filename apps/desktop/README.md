@@ -4,6 +4,8 @@ Electron desktop shell for DeepSeek Harness V5 ([ADR-0009](../../../docs/adr/000
 
 Main boots the `desktop` profile Host on App `ready`, serves the SPA via `dsh://` in production, and loads the Vite dev server during `pnpm run dev:desktop`. Attach mode (`DSH_DESKTOP_ATTACH`) skips integrated Host boot and points the Renderer at a running `dsh web` URL.
 
+Standard shell (#117): single-instance lock with second-launch focus, close-to-quit with dirty-editor exit guard (reuses file-editor dialog), window bounds persisted under `desktop.windowBounds.v1`, and About / Settings / Quit application menu.
+
 ## Commands
 
 ```sh

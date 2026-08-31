@@ -11,6 +11,10 @@ export const IPC_API_STREAM_OPENED = 'dsh:api-stream-opened'
 export const IPC_API_STREAM_FRAME = 'dsh:api-stream-frame'
 export const IPC_API_STREAM_END = 'dsh:api-stream-end'
 
+export const IPC_EXIT_REQUEST = 'dsh:exit-request'
+export const IPC_EXIT_GUARD_RESULT = 'dsh:exit-guard-result'
+export const IPC_FOCUS_SETTINGS = 'dsh:focus-settings'
+
 export const MUX_EVENTS_PATH = '/api/events.mux'
 export const HOST_EVENTS_PATH = '/api/events.host'
 export const WATCH_PATH_PATH = '/api/host.watchPath'

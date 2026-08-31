@@ -12,6 +12,9 @@ import {
   IPC_API_STREAM_FRAME,
   IPC_API_STREAM_OPEN,
   IPC_API_STREAM_OPENED,
+  IPC_EXIT_GUARD_RESULT,
+  IPC_EXIT_REQUEST,
+  IPC_FOCUS_SETTINGS,
 } from './ipc-contract.ts'
 
 function subscribe(channel: string, listener: (...args: unknown[]) => void): () => void {
@@ -20,9 +23,16 @@ function subscribe(channel: string, listener: (...args: unknown[]) => void): () 
   return () => { ipcRenderer.removeListener(channel, handler) }
 }
 
+const shell = {
+  onExitRequest: (listener: () => void) => subscribe(IPC_EXIT_REQUEST, () => { listener() }),
+  sendExitGuardResult: (result: { proceed: boolean }) => { ipcRenderer.send(IPC_EXIT_GUARD_RESULT, result) },
+  onFocusSettings: (listener: () => void) => subscribe(IPC_FOCUS_SETTINGS, () => { listener() }),
+}
+
 const shared = {
   delivery: 'desktop' as const,
   retryHostBoot: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('dsh:host-boot-retry'),
+  ...shell,
 }
 
 const attachMode = process.env.DSH_DESKTOP_ATTACH?.trim()

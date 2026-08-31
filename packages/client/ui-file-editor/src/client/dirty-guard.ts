@@ -10,6 +10,12 @@ export interface DirtyTabRef {
   name: string
 }
 
+/** Dirty tab scoped to a Workspace for app-exit guard queues. */
+export interface ExitDirtyTabRef extends DirtyTabRef {
+  /** Owning Workspace for save/discard callbacks. */
+  workspaceId: WorkspaceId
+}
+
 /** Workspace-scoped editor callbacks the guard invokes during save / discard. */
 export interface WorkspaceEditorBridge {
   /** Dirty tabs in stable tab-bar order. */
@@ -31,6 +37,7 @@ export interface WorkspaceEditorBridge {
 export type DirtyGuardMode =
   | { kind: 'idle' }
   | { kind: 'close-tab'; workspaceId: WorkspaceId; queue: readonly DirtyTabRef[]; saveError?: string }
+  | { kind: 'exit-app'; queue: readonly ExitDirtyTabRef[]; saveError?: string }
 
 /** Observable guard snapshot for React subscriptions. */
 export interface DirtyGuardSnapshot {
@@ -64,6 +71,16 @@ export interface DirtyGuard {
    * @returns true when a guard dialog opened (caller must not close directly).
    */
   requestCloseTabs(workspaceId: WorkspaceId, paths: readonly string[]): boolean
+  /**
+   * Begin desktop app-exit guard when any registered Workspace has dirty tabs.
+   * @returns true when a guard dialog opened (caller must wait for completion).
+   */
+  requestExit(): boolean
+  /**
+   * Resolve when an exit-app guard finishes or is cancelled.
+   * @returns `'proceed'` after all dirty tabs are saved/discarded; `'cancel'` when aborted.
+   */
+  waitForExitDecision(): Promise<'proceed' | 'cancel'>
   /** Save the head of the current guard queue. */
   saveCurrent(): Promise<void>
   /** Discard the head of the current guard queue. */
@@ -82,6 +99,7 @@ export function createDirtyGuard(): DirtyGuard {
   let snapshot: DirtyGuardSnapshot = IDLE
   const listeners = new Set<() => void>()
   const bridges = new Map<WorkspaceId, WorkspaceEditorBridge>()
+  let exitDecision: ((decision: 'proceed' | 'cancel') => void) | undefined
 
   const publish = (next: DirtyGuardSnapshot): void => {
     snapshot = next
@@ -90,9 +108,28 @@ export function createDirtyGuard(): DirtyGuard {
 
   const bridgeFor = (workspaceId: WorkspaceId): WorkspaceEditorBridge | undefined => bridges.get(workspaceId)
 
-  const head = (mode: Exclude<DirtyGuardMode, { kind: 'idle' }>): DirtyTabRef | undefined => mode.queue[0]
+  const headCloseTab = (mode: { kind: 'close-tab'; queue: readonly DirtyTabRef[] }): DirtyTabRef | undefined =>
+    mode.queue[0]
+
+  const headExitTab = (mode: { kind: 'exit-app'; queue: readonly ExitDirtyTabRef[] }): ExitDirtyTabRef | undefined =>
+    mode.queue[0]
+
+  const resolveExitDecision = (decision: 'proceed' | 'cancel'): void => {
+    exitDecision?.(decision)
+    exitDecision = undefined
+  }
 
   const finishQueue = (mode: Exclude<DirtyGuardMode, { kind: 'idle' }>): void => {
+    if (mode.kind === 'exit-app') {
+      const rest = mode.queue.slice(1)
+      if (rest.length > 0) {
+        publish({ mode: { kind: 'exit-app', queue: rest } })
+        return
+      }
+      resolveExitDecision('proceed')
+      publish(IDLE)
+      return
+    }
     const rest = mode.queue.slice(1)
     if (rest.length > 0) {
       publish({ mode: { kind: 'close-tab', workspaceId: mode.workspaceId, queue: rest } })
@@ -125,10 +162,45 @@ export function createDirtyGuard(): DirtyGuard {
       publish({ mode: { kind: 'close-tab', workspaceId, queue } })
       return true
     },
+    requestExit() {
+      const queue: ExitDirtyTabRef[] = []
+      for (const [workspaceId, bridge] of bridges) {
+        for (const tab of bridge.dirtyTabs()) {
+          queue.push({ ...tab, workspaceId })
+        }
+      }
+      if (queue.length === 0) return false
+      publish({ mode: { kind: 'exit-app', queue } })
+      return true
+    },
+    waitForExitDecision() {
+      if (snapshot.mode.kind !== 'exit-app') {
+        if (this.requestExit()) {
+          return new Promise<'proceed' | 'cancel'>((resolve) => { exitDecision = resolve })
+        }
+        return Promise.resolve('proceed')
+      }
+      return new Promise<'proceed' | 'cancel'>((resolve) => { exitDecision = resolve })
+    },
     async saveCurrent() {
       const mode = snapshot.mode
       if (mode.kind === 'idle') return
-      const current = head(mode)
+      if (mode.kind === 'exit-app') {
+        const current = headExitTab(mode)
+        /* v8 ignore next -- queue head is always defined while the guard is active */
+        if (current === undefined) return
+        const bridge = bridgeFor(current.workspaceId)
+        if (bridge === undefined) return
+        const ok = await bridge.saveTab(current.path)
+        if (!ok) {
+          publish({ mode: { ...mode, saveError: 'save-failed' } })
+          return
+        }
+        bridge.discardTab(current.path)
+        finishQueue(mode)
+        return
+      }
+      const current = headCloseTab(mode)
       /* v8 ignore next -- queue head is always defined while the guard is active */
       if (current === undefined) return
       const bridge = bridgeFor(mode.workspaceId)
@@ -144,7 +216,15 @@ export function createDirtyGuard(): DirtyGuard {
     discardCurrent() {
       const mode = snapshot.mode
       if (mode.kind === 'idle') return
-      const current = head(mode)
+      if (mode.kind === 'exit-app') {
+        const current = headExitTab(mode)
+        /* v8 ignore next -- queue head is always defined while the guard is active */
+        if (current === undefined) return
+        bridgeFor(current.workspaceId)?.discardTab(current.path)
+        finishQueue(mode)
+        return
+      }
+      const current = headCloseTab(mode)
       /* v8 ignore next -- queue head is always defined while the guard is active */
       if (current === undefined) return
       bridgeFor(mode.workspaceId)?.discardTab(current.path)
@@ -152,6 +232,7 @@ export function createDirtyGuard(): DirtyGuard {
     },
     cancel() {
       if (snapshot.mode.kind === 'idle') return
+      if (snapshot.mode.kind === 'exit-app') resolveExitDecision('cancel')
       publish(IDLE)
     },
   }
