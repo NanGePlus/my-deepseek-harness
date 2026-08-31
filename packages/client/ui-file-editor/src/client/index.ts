@@ -8,6 +8,7 @@ import type { InputTriggerServiceContract, InputTriggerSource } from '@deepseek-
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { insertFileContextIntoComposer } from './composer-file-context-insert.ts'
 import { EditorSurface, editorDirtyGuard, type FileEditorInjected } from './EditorSurface.tsx'
+import { wireDesktopExitGuard } from './desktop-shell.ts'
 import {
   FILE_CONTEXT_SOURCE,
   decodeFileContextRef,
@@ -37,6 +38,7 @@ export const inject = ['slots', 'workspaces', 'locale', 'sessions', 'conversatio
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-file-editor: dictionaries')
+  ctx.effect(() => wireDesktopExitGuard(editorDirtyGuard), 'ui-file-editor: desktop exit guard')
 
   const fileEditorStore = createFileEditorStore()
 

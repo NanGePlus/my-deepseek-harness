@@ -141,4 +141,42 @@ describe('dirty guard', () => {
     })
     expect(guard.requestCloseTabs(W1, ['/w/c.ts'])).toBe(false)
   })
+
+  it('blocks app exit until dirty editors are discarded', async () => {
+    const guard = createDirtyGuard()
+    const discarded: string[] = []
+    guard.registerBridge(W1, {
+      dirtyTabs: () => [TAB],
+      saveTab: async () => true,
+      discardTab: (path) => { discarded.push(path) },
+    })
+    const decision = guard.waitForExitDecision()
+    expect(guard.getSnapshot().mode.kind).toBe('exit-app')
+    await guard.discardCurrent()
+    await expect(decision).resolves.toBe('proceed')
+    expect(discarded).toEqual([TAB.path])
+  })
+
+  it('cancels app exit without touching non-editor state', async () => {
+    const guard = createDirtyGuard()
+    guard.registerBridge(W1, {
+      dirtyTabs: () => [TAB],
+      saveTab: async () => true,
+      discardTab: () => {},
+    })
+    const decision = guard.waitForExitDecision()
+    guard.cancel()
+    await expect(decision).resolves.toBe('cancel')
+    expect(guard.getSnapshot().mode.kind).toBe('idle')
+  })
+
+  it('proceeds immediately when no dirty editor tabs exist', async () => {
+    const guard = createDirtyGuard()
+    guard.registerBridge(W1, {
+      dirtyTabs: () => [],
+      saveTab: async () => true,
+      discardTab: () => {},
+    })
+    await expect(guard.waitForExitDecision()).resolves.toBe('proceed')
+  })
 })

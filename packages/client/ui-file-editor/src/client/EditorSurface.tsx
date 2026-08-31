@@ -302,9 +302,13 @@ export function EditorSurface({
 
   const guardMode = useSyncExternalStore(dirtyGuard.subscribe, dirtyGuard.getSnapshot)
   const activeGuard =
-    guardMode.mode.kind !== 'idle' && workspaceId !== undefined && guardMode.mode.workspaceId === workspaceId
+    guardMode.mode.kind === 'exit-app'
       ? guardMode.mode
-      : null
+      : guardMode.mode.kind === 'close-tab'
+        && workspaceId !== undefined
+        && guardMode.mode.workspaceId === workspaceId
+        ? guardMode.mode
+        : null
 
   const bumpGitRefresh = useCallback((silent = false) => {
     setGitRefresh(prev => ({ trigger: prev.trigger + 1, silent }))
