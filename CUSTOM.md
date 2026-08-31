@@ -184,11 +184,12 @@
 | `issue/98-ui-browser-states-menu` | [#98](https://github.com/NanGePlus/my-deepseek-harness/issues/98) `ui-browser`：不可用 + 错误 + 溢出菜单 | 已合并入 `custom/main` |
 | `issue/99-ui-browser-lifecycle` | [#99](https://github.com/NanGePlus/my-deepseek-harness/issues/99) `ui-browser`：SSE 生命周期 + Zoom + viewport | 已合并入 `custom/main`（PR [#108](https://github.com/NanGePlus/my-deepseek-harness/pull/108)） |
 | `issue/100-tool-browser` | [#100](https://github.com/NanGePlus/my-deepseek-harness/issues/100) `tool-browser`：Agent `browser_*` 工具 | 已合并入 `custom/main`（PR [#109](https://github.com/NanGePlus/my-deepseek-harness/pull/109)） |
-| `fix/browser-v4-qa-validation` | V4 内嵌浏览器：有头窗口人类主表面 + 关窗恢复 | 开 PR 合并入 `custom/main`；分支保留；基线 `origin/custom/main`（`000ca32d56`） |
+| `fix/browser-v4-qa-validation` | V4 内嵌浏览器：有头窗口人类主表面 + 关窗恢复 | 已合并入 `custom/main`（PR [#110](https://github.com/NanGePlus/my-deepseek-harness/pull/110)）；分支保留 |
 
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-08-31 | PR [#110](https://github.com/NanGePlus/my-deepseek-harness/pull/110) 合并入 `custom/main` | 有头 Chromium 人类主表面 + 关窗恢复；分支 `fix/browser-v4-qa-validation` 保留 |
 | 2026-08-31 | 分支 `fix/browser-v4-qa-validation`：关有头窗口后 Tab 全废 | Context `close` 后 Registry 仍持死实例，`newPage`/`page.close` 报 Target closed，`showWindow` 还当成功。改为 evict + `createTab` 重建、`closeTab` 幂等、`showWindow` 走 tab-not-found 让 Client 按 store 恢复 |
 | 2026-08-31 | 分支 `fix/browser-v4-qa-validation`：画布无法输入中文 | JPEG 画布是普通 div，拼音第一键 `isComposing=false` 被当成英文并 `preventDefault`，IME 起不来。增加隐藏 textarea 承接组合输入，只在 `compositionend` / 非组合 `input` 转发 |
 | 2026-08-31 | 分支 `fix/browser-v4-qa-validation`：打开网页后无法点击/输入 | 抬起若落在 JPEG 外不发 `mouseReleased`，Host 卡在按下；`sendPointer` 每次（含 move）`page.evaluate` 读光标，点击排在后面。改为 window 配对抬起、点击替换排队 move、人类指针/键盘走 Playwright `page.mouse` / `page.keyboard`，光标只在 move 时读取 |
