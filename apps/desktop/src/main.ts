@@ -7,8 +7,10 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, ipcMain, protocol } from 'electron'
+import type { ApiProxy } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { composeDesktopBootGraph } from './boot-graph.ts'
 import { DesktopHostController } from './host-boot.ts'
+import { registerIpcApiBridge } from './ipc-api-bridge.ts'
 import { hostBootFailureWire, hostBootSuccessWire, injectHostBootWire } from './host-boot-wire.ts'
 import { resolveDesktopLoadTarget, DEFAULT_DESKTOP_DEV_URL } from './load-url.ts'
 import { shouldSkipHostBoot } from './attach.ts'
@@ -36,6 +38,7 @@ const hostController = new DesktopHostController()
 let mainWindow: BrowserWindow | undefined
 let bootGraph: ReturnType<typeof composeDesktopBootGraph> | undefined
 let lastHostBootError: string | undefined
+let disposeIpcBridge: (() => void) | undefined
 
 function distRoot(): string {
   return resolveWebDistRoot(repoRoot)
@@ -55,10 +58,22 @@ async function bootIntegratedHost(): Promise<void> {
     await hostController.boot()
     lastHostBootError = undefined
     writeDevBootGraph()
+    wireIpcApiBridge()
   } catch (error) {
     lastHostBootError = error instanceof Error ? error.message : String(error)
     console.error('desktop: Host boot failed:', lastHostBootError)
   }
+}
+
+function wireIpcApiBridge(): void {
+  if (shouldSkipHostBoot()) return
+  disposeIpcBridge?.()
+  disposeIpcBridge = undefined
+  const ctx = hostController.context
+  if (ctx === undefined) return
+  const api = ctx.get('apiProxy') as ApiProxy | undefined
+  if (api === undefined) return
+  disposeIpcBridge = registerIpcApiBridge(api)
 }
 
 function buildIndexHtml(): string {
@@ -115,6 +130,7 @@ async function retryHostBoot(): Promise<{ ok: boolean; error?: string }> {
   try {
     await hostController.boot()
     writeDevBootGraph()
+    wireIpcApiBridge()
     mainWindow?.reload()
     return { ok: true }
   } catch (error) {
@@ -130,6 +146,7 @@ app.whenReady().then(async () => {
 })
 
 app.on('before-quit', () => {
+  disposeIpcBridge?.()
   void hostController.teardown()
 })
 

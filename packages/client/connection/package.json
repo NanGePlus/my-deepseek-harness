@@ -22,6 +22,18 @@
       "types": "./lib/types/invariant.d.ts",
       "default": "./lib/invariant.js"
     },
+    "./api-path": {
+      "types": "./lib/types/api-path.d.ts",
+      "default": "./lib/types/api-path.js"
+    },
+    "./ipc-channels": {
+      "types": "./lib/types/ipc-channels.d.ts",
+      "default": "./lib/types/ipc-channels.js"
+    },
+    "./downlink-frame": {
+      "types": "./lib/types/downlink-frame.d.ts",
+      "default": "./lib/types/downlink-frame.js"
+    },
     "./client": {
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
