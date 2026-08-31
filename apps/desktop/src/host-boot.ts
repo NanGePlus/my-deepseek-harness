@@ -5,8 +5,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
-import { runProfile, type RunProfileOptions } from '../../cli/src/profile-boot.ts'
-import type { ProcessShutdown } from '../../cli/src/process-shutdown.ts'
+import { runProfile, type RunProfileOptions } from '../../cli/lib/types/profile-boot.js'
+import type { ProcessShutdown } from '../../cli/lib/types/process-shutdown.js'
 
 /** Options for {@link DesktopHostController.boot}. */
 export interface DesktopHostBootOptions {

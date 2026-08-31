@@ -40,13 +40,23 @@ import {
   preloadFileUrl,
   readDshProtocolAsset,
   resolveDshProtocolPath,
-  resolveWebDistRoot,
 } from './protocol-dsh.ts'
 import { installSingleInstanceLock } from './single-instance.ts'
 import { injectBootManifest } from '@deepseek-ai/dsh-client-modules'
 import { loadWindowBounds, saveWindowBounds } from './window-bounds.ts'
+import { applyPackagedRuntimeEnv } from './packaging-env.ts'
+import { resolvePackagingLayout } from './packaging-paths.ts'
 
 const repoRoot = fileURLToPath(new URL('../../..', import.meta.url))
+const packagingLayout = resolvePackagingLayout({
+  packaged: app.isPackaged,
+  repoRoot,
+  resourcesPath: process.resourcesPath,
+})
+
+if (app.isPackaged) {
+  applyPackagedRuntimeEnv(packagingLayout)
+}
 const bootGraphFile = join(repoRoot, '.sessions/desktop-boot-graph.json')
 const DESKTOP_CDP_PORT = Number(process.env.DSH_DESKTOP_CDP_PORT ?? 9222)
 
@@ -82,7 +92,7 @@ const exitGuard = createExitGuardCoordinator({
 })
 
 function distRoot(): string {
-  return resolveWebDistRoot(repoRoot)
+  return packagingLayout.webDistRoot
 }
 
 function primaryWorkArea(): { x: number; y: number; width: number; height: number } {

@@ -143,6 +143,10 @@
     "mock:llm": "node --import tsx packages/test-support/llm-mock-server/src/bin.ts",
     "dev:web": "tsx scripts/dev-web.ts --poll",
     "dev:desktop": "tsx scripts/dev-desktop.ts",
+    "prepare:desktop-packaging": "tsx scripts/prepare-desktop-packaging.ts",
+    "pack:desktop:dir": "pnpm run prepare:desktop-packaging && node scripts/run-electron-builder.mjs --config electron-builder.yml --dir",
+    "pack:desktop": "pnpm run prepare:desktop-packaging && node scripts/run-electron-builder.mjs --config electron-builder.yml",
+    "smoke:desktop-packaging": "tsx scripts/smoke-desktop-packaging.ts",
     "postinstall": "node scripts/install-lefthook.mjs"
   },
   "devDependencies": {
