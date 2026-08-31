@@ -4,7 +4,7 @@
 
 > UI 模式：`spec-driven`（规范驱动 UI）
 >
-> 全局 Token、色板与字号仅由 Design Issue 变更；UI 实现 PR 不得修改。页面布局与业务文案以 PRD 为准。运行时 `--dsw-*` 值由 [`ui-theme`](../../packages/client/ui-theme/README.md) 样式表拥有；本文件是品牌板映射。同一工具箱栏内的 Git 面板、人类终端与内嵌浏览器消费本品牌板，不另定义色板、字号或 §5 原语。见 [web-styling.md](../web-styling.md)、[文件编辑器设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-20-file-editor-design-system.md)、[Git 面板设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-25-git-panel-design-system.md)、[人类终端设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-29-human-terminal-design-system.md) 与 [内嵌浏览器设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-30-embedded-browser-design-system.md)。
+> 全局 Token、色板与字号仅由 Design Issue 变更；UI 实现 PR 不得修改。页面布局与业务文案以 PRD 为准。运行时 `--dsw-*` 值由 [`ui-theme`](../../packages/client/ui-theme/README.md) 样式表拥有；本文件是品牌板映射。同一工具箱栏内的 Git 面板、人类终端、内嵌浏览器与桌面壳 SPA 内容消费本品牌板，不另定义色板、字号或 §5 原语。原生桌面窗口 chrome（菜单、标题栏）走平台原生规范，不在本文件内。见 [web-styling.md](../web-styling.md)、[文件编辑器设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-20-file-editor-design-system.md)、[Git 面板设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-25-git-panel-design-system.md)、[人类终端设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-29-human-terminal-design-system.md)、[内嵌浏览器设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-30-embedded-browser-design-system.md) 与 [桌面壳设计系统 Agent Note](../../.agents/notes/implemented/process/2026-08-31-desktop-shell-design-system.md)。
 
 ## 1. 概览与创意北极星
 
@@ -54,7 +54,7 @@ light 模式下 `--dsw-alias-brand-primary` 为 `--dsw-static-neutral-bluish-100
 |------|-------|-----------|------|
 | 底层 | `--dsw-alias-bg-base` | `#FFFFFF` | details 栏背景 |
 | 文件树区 | `--dsw-alias-bg-overlay` | `#E9ECF2` | 叠色列表列（文件树或其他操作列表） |
-| 编辑区 | `--dsw-alias-markdown-code-block` | `#F9FAFB` | 代码/预览区（Monaco、行级差异、xterm 画布或 screencast 画布） |
+| 编辑区 | `--dsw-alias-markdown-code-block` | `#F9FAFB` | 代码/预览区（Monaco、行级差异、xterm 画布、screencast 画布或 BrowserView occupant） |
 | 提示/空状态卡片 | `--dsw-alias-bg-overlay` | `#E9ECF2` | 分组容器，圆角 8px |
 | 对话框/确认 | `--dsw-alias-bg-layer-3` | `#FFFFFF` | 复用 Harness 浮层（若有） |
 

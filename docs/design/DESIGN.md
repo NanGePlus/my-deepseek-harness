@@ -4,7 +4,7 @@ English | [中文](DESIGN.zh.md)
 
 > UI mode: `spec-driven` (spec-driven UI)
 >
-> Global tokens, palettes, and type scale change only through a Design Issue; UI implementation PRs must not edit them. Page layout and product copy live in the PRD. Runtime `--dsw-*` values are owned by [`ui-theme`](../../packages/client/ui-theme/README.md) sheets; this file is the brand-board mapping. The Git panel, human terminal, and embedded browser in the same toolbox column consume this board and do not define a second palette, type scale, or §5 primitive. See [web-styling.md](../web-styling.md), the [file-editor design-system Agent Note](../../.agents/notes/implemented/process/2026-08-20-file-editor-design-system.md), the [Git panel design-system Agent Note](../../.agents/notes/implemented/process/2026-08-25-git-panel-design-system.md), the [human-terminal design-system Agent Note](../../.agents/notes/implemented/process/2026-08-29-human-terminal-design-system.md), and the [embedded-browser design-system Agent Note](../../.agents/notes/implemented/process/2026-08-30-embedded-browser-design-system.md).
+> Global tokens, palettes, and type scale change only through a Design Issue; UI implementation PRs must not edit them. Page layout and product copy live in the PRD. Runtime `--dsw-*` values are owned by [`ui-theme`](../../packages/client/ui-theme/README.md) sheets; this file is the brand-board mapping. The Git panel, human terminal, embedded browser, and desktop-shell SPA content in the same toolbox column consume this board and do not define a second palette, type scale, or §5 primitive. Native desktop window chrome (menu, title bar) is platform-native and outside this file. See [web-styling.md](../web-styling.md), the [file-editor design-system Agent Note](../../.agents/notes/implemented/process/2026-08-20-file-editor-design-system.md), the [Git panel design-system Agent Note](../../.agents/notes/implemented/process/2026-08-25-git-panel-design-system.md), the [human-terminal design-system Agent Note](../../.agents/notes/implemented/process/2026-08-29-human-terminal-design-system.md), the [embedded-browser design-system Agent Note](../../.agents/notes/implemented/process/2026-08-30-embedded-browser-design-system.md), and the [desktop-shell design-system Agent Note](../../.agents/notes/implemented/process/2026-08-31-desktop-shell-design-system.md).
 
 ## 1. Overview and creative north star
 
@@ -54,7 +54,7 @@ In light mode `--dsw-alias-brand-primary` is `--dsw-static-neutral-bluish-1000` 
 |-------|-------|-----------|-----|
 | Base | `--dsw-alias-bg-base` | `#FFFFFF` | details column background |
 | File-tree pane | `--dsw-alias-bg-overlay` | `#E9ECF2` | overlay list column (file tree or other operation lists) |
-| Editor pane | `--dsw-alias-markdown-code-block` | `#F9FAFB` | code/preview pane (Monaco, line-level diffs, xterm canvas, or screencast canvas) |
+| Editor pane | `--dsw-alias-markdown-code-block` | `#F9FAFB` | code/preview pane (Monaco, line-level diffs, xterm canvas, screencast canvas, or BrowserView occupant) |
 | Hint / empty-state card | `--dsw-alias-bg-overlay` | `#E9ECF2` | grouping container, 8px radius |
 | Dialog / confirm | `--dsw-alias-bg-layer-3` | `#FFFFFF` | reuse the Harness overlay when present |
 
