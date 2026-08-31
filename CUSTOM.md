@@ -216,7 +216,7 @@
 | `issue/115-apps-desktop-boot` | [#115](https://github.com/NanGePlus/my-deepseek-harness/issues/115) apps/desktop Host boot + dsh:// + dev:desktop | 已合并入 `custom/main`（PR [#126](https://github.com/NanGePlus/my-deepseek-harness/pull/126)）；分支保留 |
 | `issue/116-ipc-api-client` | [#116](https://github.com/NanGePlus/my-deepseek-harness/issues/116) IpcApiClient + preload | 已合并入 `custom/main`（PR [#127](https://github.com/NanGePlus/my-deepseek-harness/pull/127)）；分支保留 |
 | `issue/117-standard-shell` | [#117](https://github.com/NanGePlus/my-deepseek-harness/issues/117) 单实例 / 退出守卫 / 窗口持久化 / 菜单 | 已合并入 `custom/main`（PR [#128](https://github.com/NanGePlus/my-deepseek-harness/pull/128)）；分支保留 |
-| `issue/118-browser-registry-cdp` | [#118](https://github.com/NanGePlus/my-deepseek-harness/issues/118) BrowserRegistry 桌面 CDP + bounds IPC | 进行中 |
+| `issue/118-browser-registry-cdp` | [#118](https://github.com/NanGePlus/my-deepseek-harness/issues/118) BrowserRegistry 桌面 CDP + bounds IPC | 已合并入 `custom/main`（PR [#129](https://github.com/NanGePlus/my-deepseek-harness/pull/129)）；分支保留 |
 | `issue/119-ui-browser-desktop-occupant` | [#119](https://github.com/NanGePlus/my-deepseek-harness/issues/119) ui-browser 桌面 occupant | 待领取 |
 | `issue/120-electron-builder` | [#120](https://github.com/NanGePlus/my-deepseek-harness/issues/120) electron-builder + Chromium 捆绑 | 待领取 |
 | `issue/121-desktop-app-shell` | [#121](https://github.com/NanGePlus/my-deepseek-harness/issues/121) `[desktop] app-shell` | 待领取 |
@@ -225,6 +225,7 @@
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-08-31 | 分支 `issue/118-browser-registry-cdp` 合并入 `custom/main` | PR [#129](https://github.com/NanGePlus/my-deepseek-harness/pull/129)；Closes [#118](https://github.com/NanGePlus/my-deepseek-harness/issues/118)；分支保留 |
 | 2026-08-31 | 分支 `issue/118-browser-registry-cdp`：Issue [#118](https://github.com/NanGePlus/my-deepseek-harness/issues/118) BrowserRegistry desktop CDP + bounds IPC | `BrowserRegistry` delivery 分叉；`DesktopBrowserViewManager`；bounds IPC + 21 项 seam 测试 |
 | 2026-08-31 | 分支 `issue/117-standard-shell` 合并入 `custom/main` | PR [#128](https://github.com/NanGePlus/my-deepseek-harness/pull/128)；Closes [#117](https://github.com/NanGePlus/my-deepseek-harness/issues/117)；分支保留 |
 | 2026-08-31 | 分支 `issue/117-standard-shell`：Issue [#117](https://github.com/NanGePlus/my-deepseek-harness/issues/117) 标准壳 | 单实例聚焦、退出守卫 IPC + dirty guard、窗口 bounds、About/Settings/Quit 菜单、Dock 图标；18 项 seam 测试 |
