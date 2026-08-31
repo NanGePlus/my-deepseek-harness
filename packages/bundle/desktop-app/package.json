@@ -1,0 +1,108 @@
+{
+  "name": "@deepseek-ai/dsh-desktop-app",
+  "description": "The dsh desktop-surface bundle: the desktop Host patch layer over dsh-base without webserver or loopback HTTP transport",
+  "version": "0.1.0-rc.5",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/bundle/desktop-app"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "cordis.patch.yml",
+    "lib/types/**/*.d.ts"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-agent-presets": "workspace:^",
+    "@deepseek-ai/dsh-api-remotes": "workspace:^",
+    "@deepseek-ai/dsh-app-boot": "workspace:^",
+    "@deepseek-ai/dsh-client-locale": "workspace:^",
+    "@deepseek-ai/dsh-client-runtime": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-agent-preset": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-commands": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-file-editor": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-git": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-terminal": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-browser": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-cordis": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-deliverables": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-directory-picker-native": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-message-feedback": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-goal": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-layout": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-model-selection": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-settings-models": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-settings-plugin-inventory": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-permission-presets": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-plan": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-settings-plugins": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-user-questions": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-settings": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-settings-general": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-sidebar": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-skill": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-input-trigger": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-subagent": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-jobs": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-theme": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-tool": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-workflow-run": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-trajectory": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-workspace": "workspace:^",
+    "@deepseek-ai/dsh-code-runtime-worker-thread": "workspace:^",
+    "@deepseek-ai/dsh-cordis-client-runner": "workspace:^",
+    "@deepseek-ai/dsh-cordis-host-runner": "workspace:^",
+    "@deepseek-ai/dsh-host-apiproxy": "workspace:^",
+    "@deepseek-ai/dsh-lsp": "workspace:^",
+    "@deepseek-ai/dsh-lsp-editor": "workspace:^",
+    "@deepseek-ai/dsh-lsp-stdio": "workspace:^",
+    "@deepseek-ai/dsh-host-directory-picker-native": "workspace:^",
+    "@deepseek-ai/dsh-host-plugin-inventory": "workspace:^",
+    "@deepseek-ai/dsh-message-feedback": "workspace:^",
+    "@deepseek-ai/dsh-session-projection-cache": "workspace:^",
+    "@deepseek-ai/dsh-session-log-export": "workspace:^",
+    "@deepseek-ai/dsh-session-stats": "workspace:^",
+    "@deepseek-ai/dsh-storage": "workspace:^",
+    "@deepseek-ai/dsh-storage-domain": "workspace:^",
+    "@deepseek-ai/dsh-storage-json": "workspace:^",
+    "@deepseek-ai/dsh-workspace": "workspace:^",
+    "@deepseek-ai/dsh-tool-browser": "workspace:^"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/cordis": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/cordis": "workspace:^"
+  }
+}

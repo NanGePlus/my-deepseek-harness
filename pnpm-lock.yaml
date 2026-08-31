@@ -177,6 +177,9 @@ importers:
       '@deepseek-ai/dsh-cordis-client-runner':
         specifier: workspace:^
         version: link:../../packages/extensions/cordis-client-runner
+      '@deepseek-ai/dsh-desktop-app':
+        specifier: workspace:^
+        version: link:../../packages/bundle/desktop-app
       '@deepseek-ai/dsh-fs-local':
         specifier: workspace:^
         version: link:../../packages/fs/fs-local
@@ -1264,6 +1267,184 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+
+  packages/bundle/desktop-app:
+    dependencies:
+      '@deepseek-ai/dsh-agent-presets':
+        specifier: workspace:^
+        version: link:../../preset/agent-presets
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: workspace:^
+        version: link:../../api/remotes
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:^
+        version: link:../../boot/app-boot
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:^
+        version: link:../../client/locale
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: workspace:^
+        version: link:../../client/runtime
+      '@deepseek-ai/dsh-client-ui-agent-preset':
+        specifier: workspace:^
+        version: link:../../client/ui-agent-preset
+      '@deepseek-ai/dsh-client-ui-browser':
+        specifier: workspace:^
+        version: link:../../client/ui-browser
+      '@deepseek-ai/dsh-client-ui-commands':
+        specifier: workspace:^
+        version: link:../../client/ui-commands
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: workspace:^
+        version: link:../../client/ui-conversation
+      '@deepseek-ai/dsh-client-ui-cordis':
+        specifier: workspace:^
+        version: link:../../extensions/ui-cordis
+      '@deepseek-ai/dsh-client-ui-deliverables':
+        specifier: workspace:^
+        version: link:../../client/ui-deliverables
+      '@deepseek-ai/dsh-client-ui-directory-picker-native':
+        specifier: workspace:^
+        version: link:../../client/ui-directory-picker-native
+      '@deepseek-ai/dsh-client-ui-file-editor':
+        specifier: workspace:^
+        version: link:../../client/ui-file-editor
+      '@deepseek-ai/dsh-client-ui-git':
+        specifier: workspace:^
+        version: link:../../client/ui-git
+      '@deepseek-ai/dsh-client-ui-goal':
+        specifier: workspace:^
+        version: link:../../client/ui-goal
+      '@deepseek-ai/dsh-client-ui-input-trigger':
+        specifier: workspace:^
+        version: link:../../client/ui-input-trigger
+      '@deepseek-ai/dsh-client-ui-jobs':
+        specifier: workspace:^
+        version: link:../../client/ui-jobs
+      '@deepseek-ai/dsh-client-ui-layout':
+        specifier: workspace:^
+        version: link:../../client/ui-layout
+      '@deepseek-ai/dsh-client-ui-message-feedback':
+        specifier: workspace:^
+        version: link:../../client/ui-message-feedback
+      '@deepseek-ai/dsh-client-ui-model-selection':
+        specifier: workspace:^
+        version: link:../../client/ui-model-selection
+      '@deepseek-ai/dsh-client-ui-permission-presets':
+        specifier: workspace:^
+        version: link:../../client/ui-permission-presets
+      '@deepseek-ai/dsh-client-ui-plan':
+        specifier: workspace:^
+        version: link:../../client/ui-plan
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:^
+        version: link:../../client/ui-settings
+      '@deepseek-ai/dsh-client-ui-settings-general':
+        specifier: workspace:^
+        version: link:../../client/ui-settings-general
+      '@deepseek-ai/dsh-client-ui-settings-models':
+        specifier: workspace:^
+        version: link:../../client/ui-settings-models
+      '@deepseek-ai/dsh-client-ui-settings-plugin-inventory':
+        specifier: workspace:^
+        version: link:../../client/ui-settings-plugin-inventory
+      '@deepseek-ai/dsh-client-ui-settings-plugins':
+        specifier: workspace:^
+        version: link:../../client/ui-settings-plugins
+      '@deepseek-ai/dsh-client-ui-sidebar':
+        specifier: workspace:^
+        version: link:../../client/ui-sidebar
+      '@deepseek-ai/dsh-client-ui-skill':
+        specifier: workspace:^
+        version: link:../../client/ui-skill
+      '@deepseek-ai/dsh-client-ui-subagent':
+        specifier: workspace:^
+        version: link:../../client/ui-subagent
+      '@deepseek-ai/dsh-client-ui-terminal':
+        specifier: workspace:^
+        version: link:../../client/ui-terminal
+      '@deepseek-ai/dsh-client-ui-theme':
+        specifier: workspace:^
+        version: link:../../client/ui-theme
+      '@deepseek-ai/dsh-client-ui-tool':
+        specifier: workspace:^
+        version: link:../../client/ui-tool
+      '@deepseek-ai/dsh-client-ui-trajectory':
+        specifier: workspace:^
+        version: link:../../client/ui-trajectory
+      '@deepseek-ai/dsh-client-ui-user-questions':
+        specifier: workspace:^
+        version: link:../../client/ui-user-questions
+      '@deepseek-ai/dsh-client-ui-workflow-run':
+        specifier: workspace:^
+        version: link:../../client/ui-workflow-run
+      '@deepseek-ai/dsh-client-ui-workspace':
+        specifier: workspace:^
+        version: link:../../client/ui-workspace
+      '@deepseek-ai/dsh-code-runtime-worker-thread':
+        specifier: workspace:^
+        version: link:../../code-runtime/code-runtime-worker-thread
+      '@deepseek-ai/dsh-cordis-client-runner':
+        specifier: workspace:^
+        version: link:../../extensions/cordis-client-runner
+      '@deepseek-ai/dsh-cordis-host-runner':
+        specifier: workspace:^
+        version: link:../../extensions/cordis-host-runner
+      '@deepseek-ai/dsh-host-apiproxy':
+        specifier: workspace:^
+        version: link:../../host/apiproxy
+      '@deepseek-ai/dsh-host-directory-picker-native':
+        specifier: workspace:^
+        version: link:../../host/directory-picker-native
+      '@deepseek-ai/dsh-host-plugin-inventory':
+        specifier: workspace:^
+        version: link:../../host/plugin-inventory
+      '@deepseek-ai/dsh-lsp':
+        specifier: workspace:^
+        version: link:../../lsp/lsp
+      '@deepseek-ai/dsh-lsp-editor':
+        specifier: workspace:^
+        version: link:../../lsp/lsp-editor
+      '@deepseek-ai/dsh-lsp-stdio':
+        specifier: workspace:^
+        version: link:../../lsp/lsp-stdio
+      '@deepseek-ai/dsh-message-feedback':
+        specifier: workspace:^
+        version: link:../../feedback/message-feedback
+      '@deepseek-ai/dsh-session-log-export':
+        specifier: workspace:^
+        version: link:../../session-query/session-log-export
+      '@deepseek-ai/dsh-session-projection-cache':
+        specifier: workspace:^
+        version: link:../../session/session-projection-cache
+      '@deepseek-ai/dsh-session-stats':
+        specifier: workspace:^
+        version: link:../../session/session-stats
+      '@deepseek-ai/dsh-storage':
+        specifier: workspace:^
+        version: link:../../storage/storage
+      '@deepseek-ai/dsh-storage-domain':
+        specifier: workspace:^
+        version: link:../../storage/storage-domain
+      '@deepseek-ai/dsh-storage-json':
+        specifier: workspace:^
+        version: link:../../storage/storage-json
+      '@deepseek-ai/dsh-tool-browser':
+        specifier: workspace:^
+        version: link:../../browser/tool-browser
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:^
+        version: link:../../workspace/workspace
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: workspace:^
+        version: link:../../../vendor/loader
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants

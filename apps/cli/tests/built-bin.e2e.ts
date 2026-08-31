@@ -721,6 +721,22 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       expect(stdout).not.toMatch(/name: '@deepseek-ai\/dsh-client-/)
     }, 30_000)
 
+    it('prints the desktop profile Host rows without webserver or loopback transport', async () => {
+      const { stdout, code, stderr } = await runBuiltBin(
+        ['--profile', 'desktop', '--dump-default-config'],
+        { DSH_HOME: home },
+      )
+      expect(code).toBe(0)
+      expect(stderr).toBe('')
+      expect(stdout).toContain("name: '@deepseek-ai/dsh-host-apiproxy'")
+      expect(stdout).toContain("name: '@deepseek-ai/dsh-client-ui-terminal'")
+      expect(stdout).toContain("name: '@deepseek-ai/dsh-client-ui-git'")
+      expect(stdout).toContain("name: '@deepseek-ai/dsh-client-ui-browser'")
+      expect(stdout).not.toContain("name: '@deepseek-ai/dsh-host-webserver'")
+      expect(stdout).not.toContain("name: '@deepseek-ai/dsh-web-app'")
+      expect(stdout).not.toContain("name: '@deepseek-ai/dsh-client-connection'")
+    }, 30_000)
+
     it('composes the profile user layer and a --patch overlay in order', async () => {
       // Auto-init the web profile first, then write its user layer.
       const init = await runBuiltBin(['--profile', 'web', '--dump-default-config'], { DSH_HOME: home })
