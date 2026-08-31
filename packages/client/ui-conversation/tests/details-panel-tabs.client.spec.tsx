@@ -19,6 +19,7 @@ import {
 } from '../src/client/session-bound-source.ts'
 import { createChatStore } from '../src/client/stores.ts'
 import { DetailsPanel } from '../src/client/skeleton/DetailsPanel.tsx'
+import { DETAILS_TAB_LABELS } from '../src/client/details-tab-labels.ts'
 import { zh } from '../src/client/locales.ts'
 
 const t: DetailsSlotProps['t'] = makeTranslate(zh, commonZh)
@@ -143,7 +144,7 @@ describe('DetailsPanel segmented tabs', () => {
 
   it('default: shows 资源管理器 | Git面板 | 终端 | 浏览器 | 工具详情 with the editor selected', () => {
     const { view } = bench()
-    expect(tabLabels(view)).toEqual(['资源管理器', 'Git面板', '终端', '浏览器', '工具详情'])
+    expect(tabLabels(view)).toEqual([...DETAILS_TAB_LABELS])
     expect(selectedTab(view)).toBe('资源管理器')
     expect(view.getByTestId('editor-surface-seat').getAttribute('data-visible')).toBe('true')
     expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('false')
