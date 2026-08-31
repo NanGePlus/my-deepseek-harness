@@ -11,7 +11,7 @@
  * @module @deepseek-ai/dsh/profile-boot
  */
 
-import { writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FiberState, type Context } from '@deepseek-ai/cordis'
@@ -31,8 +31,12 @@ import {
 } from '@deepseek-ai/dsh-app-boot'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 
-/** Shipped agent-preset root: beside this app's own config, in both source and built layouts. */
-const SHIPPED_PRESET_ROOT = fileURLToPath(new URL('../config/agent-presets/', import.meta.url))
+/** Shipped agent-preset root beside this app's own config in source and built layouts. */
+const SHIPPED_PRESET_ROOT = (() => {
+  const fromSrc = fileURLToPath(new URL('../config/agent-presets/', import.meta.url))
+  if (existsSync(fromSrc)) return fromSrc
+  return fileURLToPath(new URL('../../config/agent-presets/', import.meta.url))
+})()
 
 import { DSH_LAUNCH_ENVIRONMENT_KEY, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
@@ -50,8 +54,14 @@ export function homePatchPath(): string {
   return join(resolveDshHome(), PROFILE_PATCH_FILENAME)
 }
 
-/** Absolute path of this dsh installation's package.json (both anchors: src/ and lib/ sit one level under apps/cli). */
-export const INSTALL_ANCHOR = fileURLToPath(new URL('../package.json', import.meta.url))
+/** Absolute path of this dsh installation's package.json (`src/` and `lib/types/` layouts). */
+export const INSTALL_ANCHOR = (() => {
+  const oneUp = fileURLToPath(new URL('../package.json', import.meta.url))
+  if (existsSync(oneUp)) return oneUp
+  const twoUp = fileURLToPath(new URL('../../package.json', import.meta.url))
+  if (existsSync(twoUp)) return twoUp
+  throw new Error(`dsh install anchor not found near ${import.meta.url}`)
+})()
 
 /** The session-telemetry row id the DSH_TELEMETRY_DISABLED switch targets. */
 const TELEMETRY_ROW_ID = 'session-telemetry-otel'

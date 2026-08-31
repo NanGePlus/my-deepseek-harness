@@ -1,0 +1,31 @@
+appId: ai.deepseek.harness.desktop
+productName: DeepSeek Harness
+copyright: Copyright © DeepSeek
+electronVersion: 35.7.5
+directories:
+  app: ../../dist/desktop/staging/app
+  output: ../../dist/desktop/installers
+  buildResources: resources
+extraResources:
+  - from: ../../dist/desktop/staging/extra/web-dist
+    to: web-dist
+  - from: ../../dist/desktop/staging/extra/playwright-browsers
+    to: playwright-browsers
+  - from: ../../dist/desktop/staging/extra/host-runtime
+    to: host-runtime
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+  identity: null
+  hardenedRuntime: false
+dmg:
+  sign: false
+win:
+  target:
+    - nsis
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false

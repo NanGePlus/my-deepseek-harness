@@ -1,0 +1,74 @@
+name: Desktop packaging
+
+on:
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'apps/desktop-host-pkg/**'
+      - 'apps/web/**'
+      - 'scripts/prepare-desktop-packaging.ts'
+      - 'scripts/smoke-desktop-packaging.ts'
+      - 'scripts/run-electron-builder.mjs'
+      - 'apps/desktop/electron-builder.yml'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-packaging-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  pack:
+    name: pack (${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos
+            runner: macos-latest
+            artifact_glob: '*.dmg'
+          - os: windows
+            runner: windows-latest
+            artifact_glob: '*.exe'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      - name: Stage desktop packaging inputs
+        run: pnpm run prepare:desktop-packaging
+
+      - name: Build unpacked desktop app for smoke
+        run: node ../../scripts/run-electron-builder.mjs --config electron-builder.yml --dir
+        working-directory: apps/desktop
+
+      - name: Headless artifact smoke
+        run: pnpm run smoke:desktop-packaging
+
+      - name: Build unsigned desktop installer
+        run: node ../../scripts/run-electron-builder.mjs --config electron-builder.yml
+        working-directory: apps/desktop
+
+      - name: Upload desktop installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: deepseek-harness-desktop-${{ matrix.os }}
+          path: dist/desktop/installers/${{ matrix.artifact_glob }}
+          if-no-files-found: error
+          retention-days: 7
