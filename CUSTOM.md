@@ -188,7 +188,7 @@
 | `issue/100-tool-browser` | [#100](https://github.com/NanGePlus/my-deepseek-harness/issues/100) `tool-browser`：Agent `browser_*` 工具 | 已合并入 `custom/main`（PR [#109](https://github.com/NanGePlus/my-deepseek-harness/pull/109)） |
 | `fix/browser-v4-qa-validation` | V4 内嵌浏览器：有头窗口人类主表面 + 关窗恢复 | 开 PR 合并入 `custom/main`；分支保留；基线 `origin/custom/main`（`000ca32d56`） |
 | `feat/v5` | V5 桌面壳：父 PRD [#111](https://github.com/NanGePlus/my-deepseek-harness/issues/111)；切片 #113–#122 | 规格已锁定；基线 `origin/custom/main`（`3da88bbaa8`） |
-| `issue/113-d-global-desktop-design-close` | [#113](https://github.com/NanGePlus/my-deepseek-harness/issues/113) `#D-global`：验收关闭桌面壳 V5 DESIGN.md | 待领取 |
+| `issue/113-d-global-desktop-design-close` | [#113](https://github.com/NanGePlus/my-deepseek-harness/issues/113) `#D-global`：验收关闭桌面壳 V5 DESIGN.md | 进行中 |
 | `issue/114-desktop-profile` | [#114](https://github.com/NanGePlus/my-deepseek-harness/issues/114) desktop profile + bundle | 待领取 |
 | `issue/115-apps-desktop-boot` | [#115](https://github.com/NanGePlus/my-deepseek-harness/issues/115) apps/desktop Host boot + dsh:// + dev:desktop | 待领取 |
 | `issue/116-ipc-api-client` | [#116](https://github.com/NanGePlus/my-deepseek-harness/issues/116) IpcApiClient + preload | 待领取 |
@@ -202,6 +202,7 @@
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-08-31 | 从最新 `origin/custom/main` 创建分支 `issue/113-d-global-desktop-design-close` | Issue [#113](https://github.com/NanGePlus/my-deepseek-harness/issues/113) `#D-global` 验收关闭；桌面壳 SPA 消费既有品牌板，原生 chrome 不在 DESIGN 范围 |
 | 2026-08-31 | `/to-issues`：V5 Issue 切片发布 | 父 PRD [#111](https://github.com/NanGePlus/my-deepseek-harness/issues/111)；子 Issue #113–#122（`ready-for-agent`）；重复 #112 已关闭 |
 | 2026-08-31 | 分支 `feat/v5`：V5 PRD 落地 | 新增 `docs/prd/desktop-v5.md`（桌面壳、双页 UI、实现/测试决策定位词） |
 | 2026-08-31 | 分支 `feat/v5`：`grill-with-docs` + ADR 落地 | 更新 `CONTEXT.md` 交付形态；新增 `docs/adr/0009-desktop-shell-electron-delivery.md`、`docs/adr/0010-desktop-browser-electron-cdp.md`；`0007` Consequences 增加交付形态分叉引用 |
