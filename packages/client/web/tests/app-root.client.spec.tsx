@@ -73,4 +73,25 @@ describe('AppRoot', () => {
     expect(queryByText('HARNESS')).toBeNull()
     expect(counts()).toBe(1)
   })
+
+  it('shows integrated Host boot failure with retry before plugin boot', () => {
+    const hostBootError = createSignal<string | undefined>('Host unavailable')
+    let retried = false
+    const { getByText, queryByTestId } = render(
+      <AppRoot
+        settled={createSignal(false)}
+        status={createLoaderStatusStore()}
+        error={createSignal(undefined)}
+        hostBootError={hostBootError}
+        onRetryHostBoot={() => { retried = true }}
+        renderApp={() => <div data-testid="real-ui" />}
+      />,
+    )
+    expect(getByText('Host 启动失败')).toBeTruthy()
+    expect(getByText('Host unavailable')).toBeTruthy()
+    expect(getByText('重试启动 Host')).toBeTruthy()
+    expect(queryByTestId('real-ui')).toBeNull()
+    act(() => { getByText('重试启动 Host').click() })
+    expect(retried).toBe(true)
+  })
 })

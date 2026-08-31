@@ -71,6 +71,7 @@ export class AppWebEntry {
   private readonly status = createLoaderStatusStore()
   private readonly settled = createSignal(false)
   private readonly error = createSignal<string | undefined>(undefined)
+  private readonly hostBootError = createSignal<string | undefined>(undefined)
   // Assigned by run() before any private method or settled-gated closure reads them.
   private ctx!: Context
   private modules!: ClientModuleSystem
@@ -95,6 +96,24 @@ export class AppWebEntry {
    * @returns resolves once the UI settled or the failure report rendered.
    */
   async run(): Promise<void> {
+    const hostBoot = (globalThis as DshWindow).__DSH_HOST_BOOT__
+    if (hostBoot !== undefined && hostBoot.ok === false) {
+      this.root = createRoot(this.el)
+      const retryHostBoot = this.retryHostBootHandler()
+      this.root.render(
+        <AppRoot
+          settled={this.settled}
+          status={this.status}
+          error={this.error}
+          hostBootError={this.hostBootError}
+          {...(retryHostBoot !== undefined ? { onRetryHostBoot: retryHostBoot } : {})}
+          renderApp={() => null}
+        />,
+      )
+      this.hostBootError.set(hostBoot.error ?? 'Host boot failed')
+      return
+    }
+
     this.manifest = parseBootManifest((globalThis as DshWindow).__DSH_BOOT__)
 
     this.modules = new ClientModuleSystem({
@@ -145,6 +164,13 @@ export class AppWebEntry {
   /** Unmount the shell (loading page or settled UI). */
   dispose(): void {
     this.root?.unmount()
+  }
+
+  /** Desktop preload retry hook when integrated Host boot failed in Main. */
+  private retryHostBootHandler(): (() => void) | undefined {
+    const desktop = (globalThis as { dsh?: { retryHostBoot?: () => Promise<unknown> } }).dsh
+    if (desktop?.retryHostBoot === undefined) return undefined
+    return () => { void desktop.retryHostBoot?.() }
   }
 
   /** Prefetch the immediately tier (factory registration only; failures defer to the import path). */

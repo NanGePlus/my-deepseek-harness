@@ -21,6 +21,10 @@ export interface AppRootProps {
   status: KernelSignal<LoaderStatus>
   /** Boot failure report (the settle rejection message); undefined while loading or after success. */
   error: KernelSignal<string | undefined>
+  /** Desktop integrated Host boot failure from Main; blocks plugin boot until retry succeeds. */
+  hostBootError?: KernelSignal<string | undefined>
+  /** Retry integrated Host boot (desktop delivery); undefined when unavailable. */
+  onRetryHostBoot?: () => void
   /** Builds the real UI; called only after settled. */
   renderApp: () => ReactNode
 }
@@ -30,9 +34,31 @@ export function AppRoot(props: AppRootProps) {
   const settled = useSyncExternalStore(props.settled.subscribe, props.settled.getSnapshot)
   const status = useSyncExternalStore(props.status.subscribe, props.status.getSnapshot)
   const error = useSyncExternalStore(props.error.subscribe, props.error.getSnapshot)
+  const hostBootError = props.hostBootError === undefined
+    ? undefined
+    : useSyncExternalStore(props.hostBootError.subscribe, props.hostBootError.getSnapshot)
   const failed = Object.entries(status).filter(([, s]) => s === 'failed')
 
   if (settled) return <>{props.renderApp()}</>
+
+  if (hostBootError !== undefined) {
+    return (
+      <div className={css.boot}>
+        <div className={css.card}>
+          <div className={css.wordmark}>HARNESS</div>
+          <div className={css.failed}>
+            <div className={css.failedTitle}>Host 启动失败</div>
+            <div className={css.failedItem}>{hostBootError}</div>
+            {props.onRetryHostBoot !== undefined && (
+              <button type="button" className={css.retry} onClick={props.onRetryHostBoot}>
+                重试启动 Host
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const loud = error !== undefined || failed.length > 0
 

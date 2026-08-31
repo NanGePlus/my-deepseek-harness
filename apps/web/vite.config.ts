@@ -13,7 +13,7 @@ function rejectStandaloneServe(): Plugin {
   return {
     name: 'dsh-reject-standalone-web-serve',
     config(_config, env) {
-      if (env.command === 'serve') throw new Error(STANDALONE_ERROR)
+      if (env.command === 'serve' && process.env.DSH_DESKTOP_DEV !== '1') throw new Error(STANDALONE_ERROR)
     },
   }
 }

@@ -159,6 +159,8 @@ export interface ClientPluginHandoff {
 export interface DshWindow {
   /** Host-composed entry graph, injected before the shell bundle runs; wire-boundary raw until {@link parseBootManifest}. */
   __DSH_BOOT__?: unknown
+  /** Desktop integrated Host boot status injected by Electron Main before SPA boot. */
+  __DSH_HOST_BOOT__?: { ok: boolean; error?: string }
   /** Bundle registration sink; installed once per page by the {@link ClientModuleSystem} constructor. */
   __ModuleLoader__?: { load(handoff: ClientPluginHandoff): void }
   /**

@@ -44,8 +44,15 @@ interface PluginInvocation {
   args: string[]
 }
 
+/** Spawn the desktop Electron shell (`dsh desktop`). */
+interface DesktopInvocation {
+  mode: 'desktop'
+  /** Arguments forwarded to the desktop Main entry. */
+  args: string[]
+}
+
 /** The resolved `dsh` invocation. Help, version, and errors exit inside {@link parseDshArgs}. */
-export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation
+export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation | DesktopInvocation
 
 /** Launcher flags shared by the default command and the `web` alias. */
 interface BootOptions {
@@ -68,6 +75,7 @@ Examples:
   dsh --profile tui --patch ./extra.yml      boot a custom profile with one extra overlay
   dsh --profile tui --resume <session>       arguments after the launcher flags reach the app
   dsh --profile web --help                   the web app's own flags and help
+  dsh desktop                                launch the desktop Electron shell
   dsh plugin --profile tui add <package>     install a plugin into the tui profile
 `
 
@@ -166,6 +174,17 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
     .action((args: string[], options: BootOptions) => {
       rejectParentOptions('web')
       resolved = resolveBoot(web, 'web', options, args)
+    })
+
+  const desktop = program.command('desktop').description('launch the desktop Electron shell; optional inner arguments follow')
+  desktop
+    .allowUnknownOption()
+    .passThroughOptions()
+    .enablePositionalOptions()
+    .argument('[args...]', 'arguments forwarded to the desktop shell')
+    .action((args: string[]) => {
+      rejectParentOptions('desktop')
+      resolved = { mode: 'desktop', args }
     })
 
   const plugin = program.command('plugin').description('manage a profile\'s plugins by forwarding the remaining arguments to pnpm in the profile directory')
