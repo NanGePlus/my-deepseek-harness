@@ -10,6 +10,7 @@ import type { Browser, BrowserContext, Page } from 'playwright'
 import type { WorkspaceId } from '../src/api/workspace.ts'
 import { BrowserRegistry } from '../src/browser-registry.ts'
 import type { DesktopBrowserSurface } from '../src/browser-delivery.ts'
+import { setDesktopBrowserHumanRevealListener } from '../src/browser-delivery.ts'
 
 function createMockPage(initialUrl = 'about:blank'): Page & {
   bringToFront: ReturnType<typeof vi.fn>
@@ -147,6 +148,71 @@ describe('BrowserRegistry desktop CDP seam', () => {
     await expect(registry.closeTab(workspaceId, created.tabId)).resolves.toEqual({ closed: true })
     expect(closeTab).toHaveBeenCalledWith(workspaceId, created.tabId)
     expect(order).toEqual(['surface', 'page'])
+  })
+
+  it('notifies desktop Renderer to reveal toolbox browser after createTab with a URL', async () => {
+    const reveals: Array<{ workspaceId: string; tabId: string; url: string }> = []
+    const revealForHuman = vi.fn((request) => { reveals.push(request) })
+    const page = createMockPage()
+    const selectTab = vi.fn(async () => {})
+    const registry = desktopRegistry(page, { selectTab, revealForHuman })
+    const workspaceId = 'ws-reveal' as WorkspaceId
+    const created = await registry.createTab(workspaceId, 'https://example.com')
+    expect(selectTab).toHaveBeenCalledWith(workspaceId, created.tabId)
+    expect(revealForHuman).toHaveBeenCalledWith({
+      workspaceId,
+      tabId: created.tabId,
+      url: 'about:blank',
+    })
+    expect(reveals).toEqual([{
+      workspaceId,
+      tabId: created.tabId,
+      url: 'about:blank',
+    }])
+  })
+
+  it('does not notify human reveal after blank createTab or selectTab', async () => {
+    const revealForHuman = vi.fn()
+    const page = createMockPage()
+    const registry = desktopRegistry(page, { revealForHuman })
+    const workspaceId = 'ws-no-reveal-select' as WorkspaceId
+    const created = await registry.createTab(workspaceId)
+    expect(revealForHuman).not.toHaveBeenCalled()
+    await registry.selectTab(workspaceId, created.tabId)
+    expect(revealForHuman).not.toHaveBeenCalled()
+  })
+
+  it('notifies human reveal after navigate', async () => {
+    const revealForHuman = vi.fn()
+    const page = createMockPage()
+    const registry = desktopRegistry(page, { revealForHuman })
+    const workspaceId = 'ws-nav-reveal' as WorkspaceId
+    const created = await registry.createTab(workspaceId)
+    revealForHuman.mockClear()
+    await registry.navigate(workspaceId, created.tabId, 'https://example.org')
+    expect(revealForHuman).toHaveBeenCalledWith({
+      workspaceId,
+      tabId: created.tabId,
+      url: 'https://example.org',
+    })
+  })
+
+  it('falls back to the module reveal listener when the surface omits revealForHuman', async () => {
+    const reveals: Array<{ workspaceId: string; tabId: string; url: string }> = []
+    setDesktopBrowserHumanRevealListener((request) => { reveals.push(request) })
+    try {
+      const page = createMockPage()
+      const registry = desktopRegistry(page)
+      const workspaceId = 'ws-reveal-listener' as WorkspaceId
+      const created = await registry.createTab(workspaceId, 'https://example.com')
+      expect(reveals).toEqual([{
+        workspaceId,
+        tabId: created.tabId,
+        url: 'about:blank',
+      }])
+    } finally {
+      setDesktopBrowserHumanRevealListener(undefined)
+    }
   })
 
   it('rejects navigation that lands on a Chromium net-error page', async () => {

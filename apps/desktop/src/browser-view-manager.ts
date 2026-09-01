@@ -6,7 +6,7 @@
 import { BrowserView, type BrowserWindow } from 'electron'
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
 import type { WorkspaceId } from '@deepseek-ai/dsh-host-apiproxy/api/workspace'
-import type { DesktopBrowserSurface } from '@deepseek-ai/dsh-host-apiproxy'
+import type { DesktopBrowserHumanRevealRequest, DesktopBrowserSurface } from '@deepseek-ai/dsh-host-apiproxy'
 import {
   applyBrowserOccupantBounds,
   type BrowserOccupantBounds,
@@ -39,6 +39,9 @@ function defaultCreateBrowserView(): BrowserView {
   })
 }
 
+/** Default BrowserView factory for {@link DesktopBrowserViewManager}. */
+export const defaultDesktopBrowserViewFactory: DesktopBrowserViewFactory = defaultCreateBrowserView
+
 /** Owns BrowserView instances and resolves Playwright pages over CDP. */
 export class DesktopBrowserViewManager implements DesktopBrowserSurface {
   private readonly tabs = new Map<string, TabRecord>()
@@ -51,12 +54,19 @@ export class DesktopBrowserViewManager implements DesktopBrowserSurface {
    * @param getMainWindow - returns the primary BrowserWindow hosting BrowserViews.
    * @param cdpPort - Electron remote-debugging-port for Playwright connectOverCDP.
    * @param createView - BrowserView constructor; tests inject a double.
+   * @param onRevealForHuman - forwards toolbox browser reveal to the Renderer.
    */
   constructor(
     private readonly getMainWindow: () => BrowserWindow | undefined,
     private readonly cdpPort: number,
     private readonly createView: DesktopBrowserViewFactory = defaultCreateBrowserView,
+    private readonly onRevealForHuman?: (request: DesktopBrowserHumanRevealRequest) => void,
   ) {}
+
+  /** @inheritdoc */
+  revealForHuman(request: DesktopBrowserHumanRevealRequest): void {
+    this.onRevealForHuman?.(request)
+  }
 
   /** @inheritdoc */
   cdpEndpoint(): string {

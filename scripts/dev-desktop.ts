@@ -2,7 +2,7 @@
  * Parallel Vite (desktop dev config) + Electron for `pnpm run dev:desktop`.
  */
 import { accessSync } from 'node:fs'
-import { spawn } from 'node:child_process'
+import { spawn, execSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,6 +11,11 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const webAppRoot = join(repoRoot, 'apps/web')
 const viteBin = join(webAppRoot, 'node_modules/vite/bin/vite.js')
 accessSync(viteBin)
+
+execSync('pnpm exec tsx apps/desktop/scripts/bundle-preload.ts', {
+  cwd: repoRoot,
+  stdio: 'inherit',
+})
 
 const electron = createRequire(join(repoRoot, 'apps/cli/package.json'))('electron') as string
 const desktopMain = join(repoRoot, 'apps/desktop/src/main.ts')

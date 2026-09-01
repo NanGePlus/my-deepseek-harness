@@ -14,9 +14,18 @@ describe('browser-desktop-occupant', () => {
     expect(readDesktopBrowserOccupantReporter()).toBeUndefined()
   })
 
+  it('readDesktopBrowserOccupantReporter returns undefined without integrated IPC fetch', () => {
+    vi.stubGlobal('dsh', { delivery: 'desktop', reportBrowserOccupantBounds: vi.fn() })
+    expect(readDesktopBrowserOccupantReporter()).toBeUndefined()
+  })
+
   it('readDesktopBrowserOccupantReporter returns the preload reporter', () => {
     const report = vi.fn()
-    vi.stubGlobal('dsh', { delivery: 'desktop', reportBrowserOccupantBounds: report })
+    vi.stubGlobal('dsh', {
+      delivery: 'desktop',
+      fetch: vi.fn(),
+      reportBrowserOccupantBounds: report,
+    })
     readDesktopBrowserOccupantReporter()!({ x: 1, y: 2, width: 3, height: 4, visible: true })
     expect(report).toHaveBeenCalledWith({ x: 1, y: 2, width: 3, height: 4, visible: true })
   })

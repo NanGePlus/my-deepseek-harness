@@ -17,6 +17,7 @@ import {
   IPC_FOCUS_SETTINGS,
   IPC_BROWSER_OCCUPANT_BOUNDS,
   IPC_OPEN_EMBEDDED_BROWSER,
+  IPC_REVEAL_TOOLBOX_BROWSER,
   IPC_OPEN_EXTERNAL_URL,
 } from './ipc-contract.ts'
 
@@ -42,6 +43,25 @@ const shell = {
     (...args) => {
       const url = args[0]
       if (typeof url === 'string') listener(url)
+    },
+  ),
+  onRevealToolboxBrowser: (listener: (request: {
+    workspaceId: string
+    tabId: string
+    url: string
+  }) => void) => subscribe(
+    IPC_REVEAL_TOOLBOX_BROWSER,
+    (...args) => {
+      const request = args[0]
+      if (
+        request !== null
+        && typeof request === 'object'
+        && typeof (request as { workspaceId?: unknown }).workspaceId === 'string'
+        && typeof (request as { tabId?: unknown }).tabId === 'string'
+        && typeof (request as { url?: unknown }).url === 'string'
+      ) {
+        listener(request as { workspaceId: string; tabId: string; url: string })
+      }
     },
   ),
   openExternalUrl: (url: string): Promise<{ opened: boolean }> =>

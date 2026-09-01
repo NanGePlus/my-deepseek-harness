@@ -34,6 +34,8 @@ import {
   readDesktopBrowserOccupantReporter,
   reportBrowserOccupantBounds,
   subscribeDesktopEmbeddedBrowserOpen,
+  subscribeDesktopToolboxBrowserReveal,
+  type DesktopToolboxBrowserRevealRequest,
   openDesktopExternalUrl,
 } from './browser-desktop-occupant.ts'
 import { planEmbeddedBrowserOpen } from './embedded-browser-open.ts'
@@ -213,6 +215,7 @@ export function BrowserPanel({
   const navRetryRef = useRef<(() => void) | null>(null)
   const pendingNavigateUrlRef = useRef<string | undefined>(undefined)
   const pendingEmbeddedUrlRef = useRef<string | undefined>(undefined)
+  const pendingToolboxRevealRef = useRef<DesktopToolboxBrowserRevealRequest | undefined>(undefined)
   const occupantRef = useRef<HTMLDivElement>(null)
   const desktopReporter = useMemo(() => readDesktopBrowserOccupantReporter(), [])
   const isDesktopOccupant = desktopReporter !== undefined
@@ -519,11 +522,57 @@ export function BrowserPanel({
   ])
   const openEmbeddedSessionUrlRef = useRef(openEmbeddedSessionUrl)
   openEmbeddedSessionUrlRef.current = openEmbeddedSessionUrl
+
+  const focusToolboxBrowserTab = useCallback(async (request: DesktopToolboxBrowserRevealRequest) => {
+    revealBrowserSegment()
+    if (workspaceId === undefined || workspaceId !== request.workspaceId) return
+    if (!hostTabsReady) {
+      pendingToolboxRevealRef.current = request
+      return
+    }
+    pendingToolboxRevealRef.current = undefined
+    const ac = new AbortController()
+    try {
+      actions.setInlineError(workspaceId, undefined)
+      actions.setNavError(workspaceId, undefined)
+      const listed = await browserList(workspaceId, ac.signal)
+      if (ac.signal.aborted) return
+      const mapped = rowsFromBrowserList(listed.tabs)
+      actions.setWorkspaceTabs(workspaceId, mapped.rows, request.tabId)
+      await selectEmbeddedTab(workspaceId, request.tabId, ac.signal)
+      const tab = listed.tabs.find(row => row.tabId === request.tabId)
+      if (tab !== undefined) {
+        actions.updateTabMetadata(
+          workspaceId,
+          request.tabId,
+          tab.url,
+          tab.title,
+          tab.canGoBack,
+          tab.canGoForward,
+        )
+        noteExternalVisit(tab.url)
+      } else {
+        noteExternalVisit(request.url)
+      }
+    } catch (error: unknown) {
+      if (ac.signal.aborted) return
+      reportBrowserFailure(actions, workspaceId, error)
+    }
+  }, [
+    actions, browserList, hostTabsReady, noteExternalVisit, revealBrowserSegment,
+    selectEmbeddedTab, workspaceId,
+  ])
+  const focusToolboxBrowserTabRef = useRef(focusToolboxBrowserTab)
+  focusToolboxBrowserTabRef.current = focusToolboxBrowserTab
   const handleNavigateRef = useRef(handleNavigate)
   handleNavigateRef.current = handleNavigate
 
   useEffect(() => subscribeDesktopEmbeddedBrowserOpen((url) => {
     void openEmbeddedSessionUrlRef.current(url)
+  }), [])
+
+  useEffect(() => subscribeDesktopToolboxBrowserReveal((request) => {
+    void focusToolboxBrowserTabRef.current(request)
   }), [])
 
   useEffect(() => {
@@ -534,7 +583,12 @@ export function BrowserPanel({
       pendingEmbeddedUrlRef.current = undefined
       void openEmbeddedSessionUrl(embedded)
     }
-  }, [handleNavigate, hostTabsReady, openEmbeddedSessionUrl])
+    const reveal = pendingToolboxRevealRef.current
+    if (reveal !== undefined) {
+      pendingToolboxRevealRef.current = undefined
+      void focusToolboxBrowserTab(reveal)
+    }
+  }, [focusToolboxBrowserTab, handleNavigate, hostTabsReady, openEmbeddedSessionUrl])
 
   const handleSelectTab = useCallback(async (tabId: string) => {
     /* v8 ignore next -- tab rows only render after a bound Workspace bootstrap. */

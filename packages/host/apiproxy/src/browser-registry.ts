@@ -15,6 +15,8 @@ import {
 import {
   type BrowserDelivery,
   type DesktopBrowserSurface,
+  getDesktopBrowserSurface,
+  notifyDesktopBrowserHumanReveal,
   requireDesktopBrowserSurface,
 } from './browser-delivery.ts'
 import {
@@ -163,8 +165,9 @@ export class BrowserRegistry {
     this.launchPersistentContext = internals.launchPersistentContext ?? chromium.launchPersistentContext.bind(chromium)
     this.connectOverCDP = internals.connectOverCDP ?? chromium.connectOverCDP.bind(chromium)
     this.chromiumExecutablePath = internals.chromiumExecutablePath ?? (() => chromium.executablePath())
-    this.delivery = internals.delivery ?? 'web'
-    this.desktopSurface = internals.desktopSurface
+    const registeredSurface = internals.desktopSurface ?? getDesktopBrowserSurface()
+    this.delivery = registeredSurface !== undefined ? 'desktop' : (internals.delivery ?? 'web')
+    this.desktopSurface = registeredSurface
     this.headless = internals.headless ?? false
   }
 
@@ -205,6 +208,7 @@ export class BrowserRegistry {
       await this.syncTabMetadata(tab)
       await this.assertNavigationSucceeded(tab)
       await this.revealTab(workspaceId, tab)
+      if (url !== 'about:blank') this.notifyHumanToolboxReveal(workspaceId, tab)
       return { tabId }
     }
 
@@ -228,6 +232,7 @@ export class BrowserRegistry {
     await this.syncTabMetadata(tab)
     await this.assertNavigationSucceeded(tab)
     await this.revealTab(workspaceId, tab)
+    if (url !== 'about:blank') this.notifyHumanToolboxReveal(workspaceId, tab)
     return { tabId }
   }
 
@@ -291,6 +296,8 @@ export class BrowserRegistry {
     tab.lastRequestedUrl = url
     await tab.page.goto(url, { waitUntil: 'domcontentloaded' })
     await this.revealTab(workspaceId, tab)
+    await this.syncTabMetadata(tab)
+    this.notifyHumanToolboxReveal(workspaceId, tab)
     return this.pageMetadata(tab)
   }
 
@@ -555,6 +562,19 @@ export class BrowserRegistry {
     } catch (error: unknown) {
       if (isTargetClosedError(error)) throw new BrowserTabNotFoundError(tab.tabId)
     }
+  }
+
+  /** Ask the desktop Renderer to open the toolbox browser segment on one tab. */
+  private notifyHumanToolboxReveal(workspaceId: WorkspaceId, tab: LiveTab): void {
+    if (this.delivery !== 'desktop' || this.headless) return
+    const surface = this.desktopSurface ?? getDesktopBrowserSurface()
+    const request = {
+      workspaceId,
+      tabId: tab.tabId,
+      url: tab.url,
+    }
+    if (surface?.revealForHuman !== undefined) surface.revealForHuman(request)
+    else notifyDesktopBrowserHumanReveal(request)
   }
 
   private async pageMetadata(tab: LiveTab): Promise<BrowserPageMetadata> {

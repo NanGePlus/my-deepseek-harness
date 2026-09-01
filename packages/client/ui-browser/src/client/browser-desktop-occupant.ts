@@ -24,10 +24,19 @@ export interface BrowserOccupantOverlay {
 /** Preload callback forwarding occupant bounds to Main IPC. */
 export type BrowserOccupantBoundsReporter = (bounds: BrowserOccupantBounds) => void
 
+/** Main request to focus the toolbox browser segment on one Host tab. */
+export interface DesktopToolboxBrowserRevealRequest {
+  workspaceId: string
+  tabId: string
+  url: string
+}
+
 type DshDesktopShell = {
   delivery?: string
+  fetch?: (request: unknown) => Promise<unknown>
   reportBrowserOccupantBounds?: BrowserOccupantBoundsReporter
   onOpenEmbeddedBrowser?: (listener: (url: string) => void) => () => void
+  onRevealToolboxBrowser?: (listener: (request: DesktopToolboxBrowserRevealRequest) => void) => () => void
   openExternalUrl?: (url: string) => Promise<{ opened: boolean }>
 }
 
@@ -38,6 +47,7 @@ type DshDesktopShell = {
 export function readDesktopBrowserOccupantReporter(): BrowserOccupantBoundsReporter | undefined {
   const bridge = (globalThis as { dsh?: DshDesktopShell }).dsh
   if (bridge?.delivery !== 'desktop') return undefined
+  if (typeof bridge.fetch !== 'function') return undefined
   if (typeof bridge.reportBrowserOccupantBounds !== 'function') return undefined
   const report = bridge.reportBrowserOccupantBounds
   return (bounds: BrowserOccupantBounds) => { report(bounds) }
@@ -54,6 +64,19 @@ export function subscribeDesktopEmbeddedBrowserOpen(
   if (bridge?.delivery !== 'desktop') return undefined
   if (typeof bridge.onOpenEmbeddedBrowser !== 'function') return undefined
   return bridge.onOpenEmbeddedBrowser(listener)
+}
+
+/**
+ * Subscribe to Host-driven requests to focus the toolbox browser segment.
+ * @returns disposer, or undefined when the integrated desktop preload is absent.
+ */
+export function subscribeDesktopToolboxBrowserReveal(
+  listener: (request: DesktopToolboxBrowserRevealRequest) => void,
+): (() => void) | undefined {
+  const bridge = (globalThis as { dsh?: DshDesktopShell }).dsh
+  if (bridge?.delivery !== 'desktop') return undefined
+  if (typeof bridge.onRevealToolboxBrowser !== 'function') return undefined
+  return bridge.onRevealToolboxBrowser(listener)
 }
 
 /**

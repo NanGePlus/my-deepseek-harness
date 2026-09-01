@@ -22,7 +22,7 @@ import { setDesktopBrowserSurface } from '@deepseek-ai/dsh-host-apiproxy'
 import { resolveDesktopAppIconPath } from './app-icon.ts'
 import { buildApplicationMenuTemplate } from './app-menu.ts'
 import { registerBrowserBoundsIpc } from './browser-bounds-ipc.ts'
-import { DesktopBrowserViewManager } from './browser-view-manager.ts'
+import { DesktopBrowserViewManager, defaultDesktopBrowserViewFactory } from './browser-view-manager.ts'
 import { composeDesktopBootGraph } from './boot-graph.ts'
 import { createExitGuardCoordinator } from './exit-guard.ts'
 import { DesktopHostController } from './host-boot.ts'
@@ -36,6 +36,7 @@ import {
   IPC_FOCUS_SETTINGS,
   IPC_OPEN_EMBEDDED_BROWSER,
   IPC_OPEN_EXTERNAL_URL,
+  IPC_REVEAL_TOOLBOX_BROWSER,
 } from './ipc-contract.ts'
 import { decideDesktopWindowOpen } from './window-open-policy.ts'
 import {
@@ -120,7 +121,12 @@ function writeDevBootGraph(): void {
 }
 
 function ensureBrowserViewManager(): DesktopBrowserViewManager {
-  browserViewManager ??= new DesktopBrowserViewManager(() => mainWindow, DESKTOP_CDP_PORT)
+  browserViewManager ??= new DesktopBrowserViewManager(
+    () => mainWindow,
+    DESKTOP_CDP_PORT,
+    defaultDesktopBrowserViewFactory,
+    (request) => { mainWindow?.webContents.send(IPC_REVEAL_TOOLBOX_BROWSER, request) },
+  )
   return browserViewManager
 }
 
