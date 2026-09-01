@@ -51,4 +51,27 @@ describe('dsh:// protocol seam', () => {
     expect(resolved).toBe(bundlePath)
     expect(readFileSync(resolved!, 'utf8')).toContain('plugin')
   })
+
+  it('serves monaco worker assets beside a registered client bundle', () => {
+    distRoot = mkdtempSync(join(tmpdir(), 'dsh-protocol-monaco-'))
+    const bundleDir = join(distRoot, 'bundle')
+    const monacoDir = join(bundleDir, 'monaco')
+    mkdirSync(monacoDir, { recursive: true })
+    const bundlePath = join(bundleDir, 'client.js')
+    const workerPath = join(monacoDir, 'ts.worker.js')
+    writeFileSync(bundlePath, 'console.log("plugin")\n')
+    writeFileSync(workerPath, 'self.onmessage = function(){};\n')
+    const bundles = new Map([['@deepseek-ai/dsh-client-ui-file-editor', {
+      id: '@deepseek-ai/dsh-client-ui-file-editor',
+      clientPath: bundlePath,
+    }]])
+    const resolved = resolveDshProtocolPath(
+      distRoot,
+      'dsh://app/plugins/@deepseek-ai/dsh-client-ui-file-editor/monaco/ts.worker.js',
+      undefined,
+      bundles,
+    )
+    expect(resolved).toBe(workerPath)
+    expect(readFileSync(resolved!, 'utf8')).toContain('onmessage')
+  })
 })

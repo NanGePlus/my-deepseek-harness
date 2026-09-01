@@ -9,8 +9,14 @@ import { chromium, type Browser, type BrowserContext, type CDPSession, type Page
 import type { WorkspaceId } from './api/workspace.ts'
 import type { BrowserScreencastFrame } from './api/host.ts'
 import {
+  BrowserNavigationFailedError,
+  isChromiumInternalErrorUrl,
+} from './browser-navigation-url.ts'
+import {
   type BrowserDelivery,
   type DesktopBrowserSurface,
+  getDesktopBrowserSurface,
+  notifyDesktopBrowserHumanReveal,
   requireDesktopBrowserSurface,
 } from './browser-delivery.ts'
 import {
@@ -119,6 +125,7 @@ interface LiveTab {
   viewportHeight: number
   devicePixelRatio: number
   cdp?: CDPSession
+  lastRequestedUrl?: string
 }
 
 interface WorkspaceBrowser {
@@ -158,8 +165,9 @@ export class BrowserRegistry {
     this.launchPersistentContext = internals.launchPersistentContext ?? chromium.launchPersistentContext.bind(chromium)
     this.connectOverCDP = internals.connectOverCDP ?? chromium.connectOverCDP.bind(chromium)
     this.chromiumExecutablePath = internals.chromiumExecutablePath ?? (() => chromium.executablePath())
-    this.delivery = internals.delivery ?? 'web'
-    this.desktopSurface = internals.desktopSurface
+    const registeredSurface = internals.desktopSurface ?? getDesktopBrowserSurface()
+    this.delivery = registeredSurface !== undefined ? 'desktop' : (internals.delivery ?? 'web')
+    this.desktopSurface = registeredSurface
     this.headless = internals.headless ?? false
   }
 
@@ -195,9 +203,12 @@ export class BrowserRegistry {
       await surface.ensureTab(workspaceId, tabId, url)
       const page = await surface.pageForTab(workspaceId, tabId)
       const tab = this.trackTab(workspace, tabId, page)
+      tab.lastRequestedUrl = url
       workspace.selectedTabId = tabId
       await this.syncTabMetadata(tab)
+      await this.assertNavigationSucceeded(tab)
       await this.revealTab(workspaceId, tab)
+      if (url !== 'about:blank') this.notifyHumanToolboxReveal(workspaceId, tab)
       return { tabId }
     }
 
@@ -216,9 +227,12 @@ export class BrowserRegistry {
       await page.goto(url, { waitUntil: 'domcontentloaded' })
     }
     const tab = this.trackTab(workspace, tabId, page)
+    tab.lastRequestedUrl = url
     workspace.selectedTabId = tabId
     await this.syncTabMetadata(tab)
+    await this.assertNavigationSucceeded(tab)
     await this.revealTab(workspaceId, tab)
+    if (url !== 'about:blank') this.notifyHumanToolboxReveal(workspaceId, tab)
     return { tabId }
   }
 
@@ -279,8 +293,11 @@ export class BrowserRegistry {
   /** Navigate one tab to a reachable http(s) URL. */
   async navigate(workspaceId: WorkspaceId, tabId: string, url: string): Promise<BrowserPageMetadata> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
+    tab.lastRequestedUrl = url
     await tab.page.goto(url, { waitUntil: 'domcontentloaded' })
     await this.revealTab(workspaceId, tab)
+    await this.syncTabMetadata(tab)
+    this.notifyHumanToolboxReveal(workspaceId, tab)
     return this.pageMetadata(tab)
   }
 
@@ -503,10 +520,11 @@ export class BrowserRegistry {
 
   private trackTab(workspace: WorkspaceBrowser, tabId: string, page: Page): LiveTab {
     const viewport = page.viewportSize() ?? { width: 1280, height: 720 }
+    const initialUrl = page.url()
     const tab: LiveTab = {
       tabId,
       page,
-      url: page.url(),
+      url: isChromiumInternalErrorUrl(initialUrl) ? 'about:blank' : initialUrl,
       title: '',
       canGoBack: false,
       canGoForward: false,
@@ -546,8 +564,22 @@ export class BrowserRegistry {
     }
   }
 
+  /** Ask the desktop Renderer to open the toolbox browser segment on one tab. */
+  private notifyHumanToolboxReveal(workspaceId: WorkspaceId, tab: LiveTab): void {
+    if (this.delivery !== 'desktop' || this.headless) return
+    const surface = this.desktopSurface ?? getDesktopBrowserSurface()
+    const request = {
+      workspaceId,
+      tabId: tab.tabId,
+      url: tab.url,
+    }
+    if (surface?.revealForHuman !== undefined) surface.revealForHuman(request)
+    else notifyDesktopBrowserHumanReveal(request)
+  }
+
   private async pageMetadata(tab: LiveTab): Promise<BrowserPageMetadata> {
     await this.syncTabMetadata(tab)
+    await this.assertNavigationSucceeded(tab)
     return {
       url: tab.url,
       title: tab.title,
@@ -556,9 +588,18 @@ export class BrowserRegistry {
     }
   }
 
+  private async assertNavigationSucceeded(tab: LiveTab): Promise<void> {
+    if (isChromiumInternalErrorUrl(tab.page.url())) {
+      throw new BrowserNavigationFailedError(tab.lastRequestedUrl ?? tab.url)
+    }
+  }
+
   private async syncTabMetadata(tab: LiveTab): Promise<void> {
-    tab.url = tab.page.url()
-    tab.title = await tab.page.title()
+    const liveUrl = tab.page.url()
+    if (!isChromiumInternalErrorUrl(liveUrl)) {
+      tab.url = liveUrl
+      tab.title = await tab.page.title()
+    }
     const navigation = await this.readNavigationState(tab.page)
     tab.canGoBack = navigation.canGoBack
     tab.canGoForward = navigation.canGoForward

@@ -1,11 +1,10 @@
 /** Embedded-browser occupant of the details column Browser tab. */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   Button,
   IconChevronLeftOutline14, IconChevronRightOutline14, IconCloseOutline16,
-  IconEllipsisOutline16,
   IconGlobeOutline14, IconLinkOutline16, IconLoadingOutline16, IconPlusOutline16, IconRefreshOutline16,
   Menu, type MenuEntry,
   Tooltip,
@@ -21,9 +20,6 @@ import {
   browserUrlHost, isExternalBrowserUrl, isLocalhostBrowserUrl, normalizeBrowserNavigateUrl,
 } from './browser-navigate-url.ts'
 import {
-  formatBrowserZoomLabel, isDefaultBrowserZoom, stepBrowserZoom,
-} from './browser-zoom.ts'
-import {
   browserTabCloseMenuState,
   type BrowserTabCloseScope,
   surviveTabIdAfterClose,
@@ -38,8 +34,9 @@ import {
   readDesktopBrowserOccupantReporter,
   reportBrowserOccupantBounds,
   subscribeDesktopEmbeddedBrowserOpen,
+  subscribeDesktopToolboxBrowserReveal,
+  type DesktopToolboxBrowserRevealRequest,
   openDesktopExternalUrl,
-  type BrowserOccupantOverlay,
 } from './browser-desktop-occupant.ts'
 import { planEmbeddedBrowserOpen } from './embedded-browser-open.ts'
 import css from './BrowserPanel.module.css'
@@ -178,9 +175,6 @@ export function BrowserPanel({
   const selectedTabId = useStore(state => workspaceId === undefined
     ? undefined
     : browserWorkspaceState(state, workspaceId).selectedTabId)
-  const zoom = useStore(state => workspaceId === undefined
-    ? 1
-    : browserWorkspaceState(state, workspaceId).zoom)
   const connecting = useStore(state => workspaceId === undefined
     ? false
     : browserWorkspaceState(state, workspaceId).connecting)
@@ -216,15 +210,12 @@ export function BrowserPanel({
   const [addressDraft, setAddressDraft] = useState('')
   const [revealAttempt, setRevealAttempt] = useState(0)
   const [navigating, setNavigating] = useState(false)
-  const [hardReloading, setHardReloading] = useState(false)
   const [tabMenu, setTabMenu] = useState<{ anchorTabId: string; rect: DOMRect } | null>(null)
-  const [overflowMenuOpen, setOverflowMenuOpen] = useState(false)
-  const [chromeMenuOverlay, setChromeMenuOverlay] = useState<BrowserOccupantOverlay | null>(null)
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
-  const overflowButtonRef = useRef<HTMLButtonElement>(null)
   const navRetryRef = useRef<(() => void) | null>(null)
   const pendingNavigateUrlRef = useRef<string | undefined>(undefined)
   const pendingEmbeddedUrlRef = useRef<string | undefined>(undefined)
+  const pendingToolboxRevealRef = useRef<DesktopToolboxBrowserRevealRequest | undefined>(undefined)
   const occupantRef = useRef<HTMLDivElement>(null)
   const desktopReporter = useMemo(() => readDesktopBrowserOccupantReporter(), [])
   const isDesktopOccupant = desktopReporter !== undefined
@@ -531,11 +522,57 @@ export function BrowserPanel({
   ])
   const openEmbeddedSessionUrlRef = useRef(openEmbeddedSessionUrl)
   openEmbeddedSessionUrlRef.current = openEmbeddedSessionUrl
+
+  const focusToolboxBrowserTab = useCallback(async (request: DesktopToolboxBrowserRevealRequest) => {
+    revealBrowserSegment()
+    if (workspaceId === undefined || workspaceId !== request.workspaceId) return
+    if (!hostTabsReady) {
+      pendingToolboxRevealRef.current = request
+      return
+    }
+    pendingToolboxRevealRef.current = undefined
+    const ac = new AbortController()
+    try {
+      actions.setInlineError(workspaceId, undefined)
+      actions.setNavError(workspaceId, undefined)
+      const listed = await browserList(workspaceId, ac.signal)
+      if (ac.signal.aborted) return
+      const mapped = rowsFromBrowserList(listed.tabs)
+      actions.setWorkspaceTabs(workspaceId, mapped.rows, request.tabId)
+      await selectEmbeddedTab(workspaceId, request.tabId, ac.signal)
+      const tab = listed.tabs.find(row => row.tabId === request.tabId)
+      if (tab !== undefined) {
+        actions.updateTabMetadata(
+          workspaceId,
+          request.tabId,
+          tab.url,
+          tab.title,
+          tab.canGoBack,
+          tab.canGoForward,
+        )
+        noteExternalVisit(tab.url)
+      } else {
+        noteExternalVisit(request.url)
+      }
+    } catch (error: unknown) {
+      if (ac.signal.aborted) return
+      reportBrowserFailure(actions, workspaceId, error)
+    }
+  }, [
+    actions, browserList, hostTabsReady, noteExternalVisit, revealBrowserSegment,
+    selectEmbeddedTab, workspaceId,
+  ])
+  const focusToolboxBrowserTabRef = useRef(focusToolboxBrowserTab)
+  focusToolboxBrowserTabRef.current = focusToolboxBrowserTab
   const handleNavigateRef = useRef(handleNavigate)
   handleNavigateRef.current = handleNavigate
 
   useEffect(() => subscribeDesktopEmbeddedBrowserOpen((url) => {
     void openEmbeddedSessionUrlRef.current(url)
+  }), [])
+
+  useEffect(() => subscribeDesktopToolboxBrowserReveal((request) => {
+    void focusToolboxBrowserTabRef.current(request)
   }), [])
 
   useEffect(() => {
@@ -546,7 +583,12 @@ export function BrowserPanel({
       pendingEmbeddedUrlRef.current = undefined
       void openEmbeddedSessionUrl(embedded)
     }
-  }, [handleNavigate, hostTabsReady, openEmbeddedSessionUrl])
+    const reveal = pendingToolboxRevealRef.current
+    if (reveal !== undefined) {
+      pendingToolboxRevealRef.current = undefined
+      void focusToolboxBrowserTab(reveal)
+    }
+  }, [focusToolboxBrowserTab, handleNavigate, hostTabsReady, openEmbeddedSessionUrl])
 
   const handleSelectTab = useCallback(async (tabId: string) => {
     /* v8 ignore next -- tab rows only render after a bound Workspace bootstrap. */
@@ -661,41 +703,6 @@ export function BrowserPanel({
     }
   }, [actions, workspaceId])
 
-  const copyCurrentUrl = useCallback(() => {
-    if (activeTab === undefined) return
-    void navigator.clipboard?.writeText(activeTab.url)
-    setOverflowMenuOpen(false)
-  }, [activeTab])
-
-  const hardReload = useCallback(() => {
-    /* v8 ignore next -- hard reload disables without a selected tab. */
-    if (workspaceId === undefined || selectedTabId === undefined) return
-    setOverflowMenuOpen(false)
-    setHardReloading(true)
-    setNavigating(true)
-    actions.setNavError(workspaceId, undefined)
-    void (async () => {
-      try {
-        let tabId = selectedTabId
-        const metadata = await browserReload(workspaceId, tabId, true).catch(async (error: unknown) => {
-          if (!isBrowserTabNotFoundError(error)) throw error
-          const recovered = await recoverMissingHostTab()
-          if (recovered === undefined) throw error
-          tabId = recovered
-          return browserReload(workspaceId, recovered, true)
-        })
-        applyPageMetadata(tabId, metadata)
-        noteExternalVisit(metadata.url)
-      } catch (error: unknown) {
-        navRetryRef.current = hardReload
-        reportBrowserFailure(actions, workspaceId, error, 'nav')
-      } finally {
-        setNavigating(false)
-        setHardReloading(false)
-      }
-    })()
-  }, [actions, applyPageMetadata, browserReload, noteExternalVisit, recoverMissingHostTab, selectedTabId, workspaceId])
-
   const runHistoryNav = useCallback((
     run: (tabId: string) => Promise<BrowserPageMetadata>,
   ) => {
@@ -807,33 +814,6 @@ export function BrowserPanel({
     return () => { ac.abort() }
   }, [actions, hostTabsReady, isDesktopOccupant, revealAttempt, revealWindow, selectedTabId, visible, workspaceId])
 
-  const chromeMenuOpen = overflowMenuOpen || tabMenu !== null
-
-  useLayoutEffect(() => {
-    if (!isDesktopOccupant || !chromeMenuOpen) {
-      setChromeMenuOverlay(null)
-      return
-    }
-    const readOverlay = (): void => {
-      const menu = document.querySelector('[role="menu"]')
-      if (!(menu instanceof HTMLElement)) return
-      const rect = menu.getBoundingClientRect()
-      if (rect.height <= 0) return
-      setChromeMenuOverlay({
-        top: rect.top,
-        bottom: rect.bottom,
-        left: rect.left,
-        right: rect.right,
-      })
-    }
-    readOverlay()
-    const menu = document.querySelector('[role="menu"]')
-    if (menu === null || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => { readOverlay() })
-    observer.observe(menu)
-    return () => { observer.disconnect() }
-  }, [chromeMenuOpen, isDesktopOccupant])
-
   useEffect(() => {
     if (!isDesktopOccupant) return
     const publish = (): void => {
@@ -841,7 +821,6 @@ export function BrowserPanel({
         desktopReporter,
         occupantRef.current,
         visible,
-        chromeMenuOverlay,
       )
     }
     if (!visible) {
@@ -855,7 +834,7 @@ export function BrowserPanel({
     observer.observe(element)
     return () => { observer.disconnect() }
   }, [
-    chromeMenuOverlay, desktopReporter, hostTabsReady, isDesktopOccupant,
+    desktopReporter, hostTabsReady, isDesktopOccupant,
     revealAttempt, selectedTabId, visible,
   ])
 
@@ -873,9 +852,11 @@ export function BrowserPanel({
 
   const addTabDisabled = creating || creatingRef.current
   const showPreparingOverlay = isDesktopOccupant && visible && !hostTabsReady
-  const showNavOverlay = navigating && !hardReloading
+  const showNavOverlay = navigating
   const showConnectingOverlay = !isDesktopOccupant && connecting
   const showLoadingOverlay = showPreparingOverlay || showNavOverlay || showConnectingOverlay
+  const chromeTooltipSide = isDesktopOccupant ? 'top' : 'bottom'
+  const chromeMenuSide = isDesktopOccupant ? 'top' : 'bottom'
   const loadingMessage = showPreparingOverlay
     ? t('browser.loading.preparing')
     : showConnectingOverlay
@@ -895,53 +876,6 @@ export function BrowserPanel({
       { id: 'all', label: t('browser.tab.closeAll'), danger: true, disabled: disabled.closeAllDisabled },
     ]
   }, [tabMenu, tabs, t])
-
-  const overflowItems = useMemo((): readonly MenuEntry[] => [
-    {
-      id: 'hard-reload',
-      label: t('browser.nav.hardReload'),
-      disabled: selectedTabId === undefined || browserUnavailable !== undefined,
-    },
-    {
-      id: 'copy-url',
-      label: t('browser.nav.copyUrl'),
-      disabled: externalUrl === undefined,
-    },
-  ], [browserUnavailable, externalUrl, selectedTabId, t])
-
-  const overflowFooter = useMemo((): readonly MenuEntry[] => [
-    { type: 'label', id: 'zoom-label', text: 'Zoom' },
-    { id: 'zoom-out', label: '−', disabled: stepBrowserZoom(zoom, -1) === zoom },
-    { type: 'label', id: 'zoom-value', text: formatBrowserZoomLabel(zoom) },
-    { id: 'zoom-in', label: '+', disabled: stepBrowserZoom(zoom, 1) === zoom },
-    {
-      id: 'zoom-reset',
-      label: t('browser.nav.zoomReset'),
-      disabled: isDefaultBrowserZoom(zoom),
-    },
-  ], [t, zoom])
-
-  const handleOverflowSelect = useCallback((id: string) => {
-    if (id === 'hard-reload') {
-      hardReload()
-      return
-    }
-    if (id === 'copy-url') {
-      copyCurrentUrl()
-      return
-    }
-    /* v8 ignore next -- zoom controls only render while a bound Workspace is mounted. */
-    if (workspaceId === undefined) return
-    if (id === 'zoom-out') {
-      actions.setZoom(workspaceId, stepBrowserZoom(zoom, -1))
-      return
-    }
-    if (id === 'zoom-in') {
-      actions.setZoom(workspaceId, stepBrowserZoom(zoom, 1))
-      return
-    }
-    if (id === 'zoom-reset') actions.setZoom(workspaceId, 1)
-  }, [actions, copyCurrentUrl, hardReload, workspaceId, zoom])
 
   if (workspaceId === undefined) {
     return (
@@ -1021,7 +955,7 @@ export function BrowserPanel({
             portal
             compact
             align="start"
-            side="bottom"
+            side={chromeMenuSide}
             anchor={<span aria-hidden="true" />}
             items={tabCloseMenuItems}
             onSelect={(id) => {
@@ -1033,7 +967,7 @@ export function BrowserPanel({
           />
         )}
         <div className={css.tabBarActions}>
-          <Tooltip label={t('browser.tab.new')} side="bottom" delayMs={500}>
+          <Tooltip label={t('browser.tab.new')} side={chromeTooltipSide} delayMs={500}>
             <button
               type="button"
               className={css.addButton}
@@ -1047,7 +981,7 @@ export function BrowserPanel({
         </div>
       </div>
       <div className={css.navBar}>
-        <Tooltip label={t('browser.nav.back')} side="bottom" delayMs={500}>
+        <Tooltip label={t('browser.nav.back')} side={chromeTooltipSide} delayMs={500}>
           <button
             type="button"
             className={css.navButton}
@@ -1062,7 +996,7 @@ export function BrowserPanel({
             <IconChevronLeftOutline14 size={14} />
           </button>
         </Tooltip>
-        <Tooltip label={t('browser.nav.forward')} side="bottom" delayMs={500}>
+        <Tooltip label={t('browser.nav.forward')} side={chromeTooltipSide} delayMs={500}>
           <button
             type="button"
             className={css.navButton}
@@ -1077,7 +1011,7 @@ export function BrowserPanel({
             <IconChevronRightOutline14 size={14} />
           </button>
         </Tooltip>
-        <Tooltip label={t('browser.nav.reload')} side="bottom" delayMs={500}>
+        <Tooltip label={t('browser.nav.reload')} side={chromeTooltipSide} delayMs={500}>
           <button
             type="button"
             className={css.navButton}
@@ -1104,7 +1038,7 @@ export function BrowserPanel({
             }
           }}
         />
-        <Tooltip label={t('browser.nav.openExternal')} side="bottom" delayMs={500}>
+        <Tooltip label={t('browser.nav.openExternal')} side={chromeTooltipSide} delayMs={500}>
           <button
             type="button"
             className={css.navButton}
@@ -1115,32 +1049,6 @@ export function BrowserPanel({
             <IconLinkOutline16 size={14} />
           </button>
         </Tooltip>
-        <Menu
-          open={overflowMenuOpen}
-          portal
-          compact
-          align="end"
-          anchor={(
-            <Tooltip label={t('browser.nav.overflow')} side="bottom" delayMs={500}>
-              <button
-                ref={overflowButtonRef}
-                type="button"
-                className={css.navButton}
-                aria-label={t('browser.nav.overflow')}
-                aria-haspopup="menu"
-                aria-expanded={overflowMenuOpen}
-                onClick={() => { setOverflowMenuOpen(open => !open) }}
-              >
-                <IconEllipsisOutline16 size={14} />
-              </button>
-            </Tooltip>
-          )}
-          items={overflowItems}
-          footer={overflowFooter}
-          onSelect={handleOverflowSelect}
-          onClose={() => { setOverflowMenuOpen(false) }}
-          getAnchorRect={() => overflowButtonRef.current?.getBoundingClientRect() ?? null}
-        />
       </div>
       {externalInfo !== undefined && (
         <div className={css.inlineInfo} role="status">

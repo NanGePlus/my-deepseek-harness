@@ -22,6 +22,7 @@ import {
   type SessionLogCompressionLevel,
 } from './session-export.ts'
 import type { BrowserDelivery } from './browser-delivery.ts'
+import { getDesktopBrowserSurface } from './browser-delivery.ts'
 
 export type * from './api/index.ts'
 export { RpcId } from './api/rpc.ts'
@@ -34,8 +35,10 @@ export {
   setDesktopBrowserSurface,
   resetDesktopBrowserSurface,
   getDesktopBrowserSurface,
+  setDesktopBrowserHumanRevealListener,
+  notifyDesktopBrowserHumanReveal,
 } from './browser-delivery.ts'
-export type { BrowserDelivery, DesktopBrowserSurface } from './browser-delivery.ts'
+export type { BrowserDelivery, DesktopBrowserSurface, DesktopBrowserHumanRevealRequest } from './browser-delivery.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -109,6 +112,10 @@ export class ApiProxyService extends Service implements ApiProxy {
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'apiProxy')
+    const desktopSurface = getDesktopBrowserSurface()
+    const delivery: BrowserDelivery = desktopSurface !== undefined
+      ? 'desktop'
+      : (config.browserDelivery ?? 'web')
     const api = createApiProxy(ctx, {
       defaultModelSelection: () => ctx.agentDefaultModel.currentSelection(),
       saveDefaultModelSelection: selection => ctx.agentDefaultModel.saveSelection(selection),
@@ -120,7 +127,10 @@ export class ApiProxyService extends Service implements ApiProxy {
       ...(config.coldBlankProbeMaxBytes === undefined
         ? {}
         : { coldBlankProbeMaxBytes: config.coldBlankProbeMaxBytes }),
-      browserRegistry: { delivery: config.browserDelivery ?? 'web' },
+      browserRegistry: {
+        delivery,
+        ...(desktopSurface === undefined ? {} : { desktopSurface }),
+      },
     })
     this.sessions = api.sessions
     this.subagents = api.subagents

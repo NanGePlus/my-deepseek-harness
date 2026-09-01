@@ -16,6 +16,7 @@ export const IPC_EXIT_GUARD_RESULT = 'dsh:exit-guard-result'
 export const IPC_FOCUS_SETTINGS = 'dsh:focus-settings'
 export const IPC_BROWSER_OCCUPANT_BOUNDS = 'dsh:browser-occupant-bounds'
 export const IPC_OPEN_EMBEDDED_BROWSER = 'dsh:open-embedded-browser'
+export const IPC_REVEAL_TOOLBOX_BROWSER = 'dsh:reveal-toolbox-browser'
 export const IPC_OPEN_EXTERNAL_URL = 'dsh:open-external-url'
 
 export const MUX_EVENTS_PATH = '/api/events.mux'

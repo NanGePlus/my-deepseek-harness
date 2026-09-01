@@ -82,6 +82,7 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
 function stubDesktop(reportBounds = vi.fn(), extra: Record<string, unknown> = {}) {
   vi.stubGlobal('dsh', {
     delivery: 'desktop',
+    fetch: vi.fn(),
     reportBrowserOccupantBounds: reportBounds,
     ...extra,
   })
@@ -189,6 +190,42 @@ describe('BrowserPanel desktop occupant', () => {
     })
     expect(panelStore.getSnapshot().byWorkspace[WID]?.selectedTabId).toBe('live-1')
     expect(browserCreateTab).not.toHaveBeenCalled()
+  })
+
+  it('reveals toolbox browser when Host requests focus after agent navigation', async () => {
+    const revealListeners: Array<(request: { workspaceId: string; tabId: string; url: string }) => void> = []
+    stubDesktop(vi.fn(), {
+      onRevealToolboxBrowser: (listener: (request: { workspaceId: string; tabId: string; url: string }) => void) => {
+        revealListeners.push(listener)
+        return () => {}
+      },
+    })
+    const revealBrowserSegment = vi.fn()
+    const browserList = vi.fn(async () => ({
+      tabs: [{
+        tabId: 'agent-tab-1',
+        url: 'http://127.0.0.1:3080/',
+        title: 'Harness',
+        selected: true,
+        canGoBack: false,
+        canGoForward: false,
+      }],
+    }))
+    const { browserSelectTab, panelStore } = mount({
+      revealBrowserSegment,
+      browserList,
+    })
+    await waitFor(() => { expect(revealListeners).toHaveLength(1) })
+    revealListeners[0]!({
+      workspaceId: WID,
+      tabId: 'agent-tab-1',
+      url: 'http://127.0.0.1:3080/',
+    })
+    await waitFor(() => { expect(revealBrowserSegment).toHaveBeenCalledTimes(1) })
+    await waitFor(() => {
+      expect(browserSelectTab).toHaveBeenCalledWith(WID, 'agent-tab-1', expect.any(AbortSignal))
+    })
+    expect(panelStore.getSnapshot().byWorkspace[WID]?.selectedTabId).toBe('agent-tab-1')
   })
 
   it('defers a session http URL until Host tabs are ready', async () => {
@@ -374,38 +411,6 @@ describe('BrowserPanel desktop occupant', () => {
       })
     })
     expect(browserCloseTab).not.toHaveBeenCalled()
-  })
-
-  it('overflow menu open: insets BrowserView below the menu and keeps the page attached', async () => {
-    const reportBounds = stubDesktop()
-    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
-      configurable: true,
-      value: function getBoundingClientRect(this: HTMLElement) {
-        if (this.getAttribute('role') === 'menu') {
-          return { x: 400, y: 100, width: 218, height: 180, top: 100, left: 400, right: 618, bottom: 280 }
-        }
-        if (this.id === 'browser-occupant') {
-          return { x: 12, y: 112, width: 640, height: 480, top: 112, left: 12, right: 652, bottom: 592 }
-        }
-        return { x: 600, y: 72, width: 24, height: 24, top: 72, left: 600, right: 624, bottom: 96 }
-      },
-    })
-    mount({ browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })) })
-    await waitFor(() => {
-      expect(reportBounds).toHaveBeenCalledWith({
-        x: 12, y: 112, width: 640, height: 480, visible: true,
-      })
-    })
-    reportBounds.mockClear()
-    fireEvent.click(screen.getByLabelText('更多操作'))
-    await waitFor(() => {
-      expect(screen.getByRole('menuitem', { name: 'Hard Reload' })).toBeTruthy()
-    })
-    await waitFor(() => {
-      expect(reportBounds).toHaveBeenCalledWith({
-        x: 12, y: 280, width: 640, height: 312, visible: true,
-      })
-    })
   })
 
   it('empty-unbound: shows 无法使用浏览器 without tab chrome on desktop', () => {

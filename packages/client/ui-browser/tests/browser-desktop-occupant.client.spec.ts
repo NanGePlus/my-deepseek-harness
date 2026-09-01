@@ -14,9 +14,18 @@ describe('browser-desktop-occupant', () => {
     expect(readDesktopBrowserOccupantReporter()).toBeUndefined()
   })
 
+  it('readDesktopBrowserOccupantReporter returns undefined without integrated IPC fetch', () => {
+    vi.stubGlobal('dsh', { delivery: 'desktop', reportBrowserOccupantBounds: vi.fn() })
+    expect(readDesktopBrowserOccupantReporter()).toBeUndefined()
+  })
+
   it('readDesktopBrowserOccupantReporter returns the preload reporter', () => {
     const report = vi.fn()
-    vi.stubGlobal('dsh', { delivery: 'desktop', reportBrowserOccupantBounds: report })
+    vi.stubGlobal('dsh', {
+      delivery: 'desktop',
+      fetch: vi.fn(),
+      reportBrowserOccupantBounds: report,
+    })
     readDesktopBrowserOccupantReporter()!({ x: 1, y: 2, width: 3, height: 4, visible: true })
     expect(report).toHaveBeenCalledWith({ x: 1, y: 2, width: 3, height: 4, visible: true })
   })
@@ -48,19 +57,14 @@ describe('browser-desktop-occupant', () => {
     )).toEqual({ x: 10, y: 180, width: 400, height: 220, visible: true })
   })
 
-  it('reportBrowserOccupantBounds insets when a chrome overlay overlaps the occupant', () => {
+  it('reportBrowserOccupantBounds publishes full occupant bounds', () => {
     const reporter = vi.fn()
     const element = {
       getBoundingClientRect: () => ({ x: 10, y: 100, width: 400, height: 300 }),
     } as HTMLElement
-    reportBrowserOccupantBounds(
-      reporter,
-      element,
-      true,
-      { top: 80, bottom: 180, left: 300, right: 500 },
-    )
+    reportBrowserOccupantBounds(reporter, element, true)
     expect(reporter).toHaveBeenCalledWith({
-      x: 10, y: 180, width: 400, height: 220, visible: true,
+      x: 10, y: 100, width: 400, height: 300, visible: true,
     })
   })
 

@@ -81,6 +81,7 @@ describe('SubprocessRuntime seam', () => {
     process.env.SCRUB_PROBE_TOKEN = 'secret'
     process.env.SCRUB_PROBE_PASSWORD = 'secret'
     process.env.SCRUB_PROBE_PLAIN = 'visible'
+    process.env.NODE_OPTIONS = '--import tsx/esm'
     try {
       const env = scrubbedParentEnv()
       expect(env.DSH_SCRUB_PROBE).toBeUndefined()
@@ -88,6 +89,7 @@ describe('SubprocessRuntime seam', () => {
       expect(env.SCRUB_PROBE_TOKEN).toBeUndefined()
       expect(env.SCRUB_PROBE_PASSWORD).toBeUndefined()
       expect(env.SCRUB_PROBE_PLAIN).toBe('visible')
+      expect(env.NODE_OPTIONS).toBeUndefined()
       expect(env.PATH).toBeDefined()
     } finally {
       delete process.env.DSH_SCRUB_PROBE
@@ -95,6 +97,7 @@ describe('SubprocessRuntime seam', () => {
       delete process.env.SCRUB_PROBE_TOKEN
       delete process.env.SCRUB_PROBE_PASSWORD
       delete process.env.SCRUB_PROBE_PLAIN
+      delete process.env.NODE_OPTIONS
     }
   })
 })

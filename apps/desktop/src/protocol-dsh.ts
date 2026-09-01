@@ -4,7 +4,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { join, normalize, sep } from 'node:path'
+import { dirname, join, normalize, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { injectBootManifest } from '@deepseek-ai/dsh-client-modules'
 import type { WebBootGraph } from '@deepseek-ai/dsh-client-modules'
@@ -37,6 +37,17 @@ export function resolveDshProtocolPath(
     if (rest.endsWith(bundleSuffix)) {
       const id = rest.slice(0, -bundleSuffix.length)
       return bundles.get(id)?.clientPath
+    }
+    const monacoPrefix = '/monaco/'
+    const monacoIndex = rest.indexOf(monacoPrefix)
+    if (monacoIndex >= 0) {
+      const id = rest.slice(0, monacoIndex)
+      const workerName = rest.slice(monacoIndex + monacoPrefix.length)
+      if (workerName.includes('/') || workerName.includes('\\') || !/^[a-z0-9.-]+\.js$/i.test(workerName)) {
+        return undefined
+      }
+      const clientPath = bundles.get(id)?.clientPath
+      return clientPath === undefined ? undefined : join(dirname(clientPath), 'monaco', workerName)
     }
     return undefined
   }

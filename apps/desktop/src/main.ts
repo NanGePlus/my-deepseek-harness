@@ -20,9 +20,10 @@ import {
 import type { ApiProxy } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { setDesktopBrowserSurface } from '@deepseek-ai/dsh-host-apiproxy'
 import { resolveDesktopAppIconPath } from './app-icon.ts'
+import { DESKTOP_APP_ABOUT_DETAIL, DESKTOP_APP_DISPLAY_NAME } from './app-branding.ts'
 import { buildApplicationMenuTemplate } from './app-menu.ts'
 import { registerBrowserBoundsIpc } from './browser-bounds-ipc.ts'
-import { DesktopBrowserViewManager } from './browser-view-manager.ts'
+import { DesktopBrowserViewManager, defaultDesktopBrowserViewFactory } from './browser-view-manager.ts'
 import { composeDesktopBootGraph } from './boot-graph.ts'
 import { createExitGuardCoordinator } from './exit-guard.ts'
 import { DesktopHostController } from './host-boot.ts'
@@ -36,6 +37,7 @@ import {
   IPC_FOCUS_SETTINGS,
   IPC_OPEN_EMBEDDED_BROWSER,
   IPC_OPEN_EXTERNAL_URL,
+  IPC_REVEAL_TOOLBOX_BROWSER,
 } from './ipc-contract.ts'
 import { decideDesktopWindowOpen } from './window-open-policy.ts'
 import {
@@ -49,6 +51,8 @@ import { installSingleInstanceLock } from './single-instance.ts'
 import { loadWindowBounds, saveWindowBounds } from './window-bounds.ts'
 import { applyPackagedRuntimeEnv } from './packaging-env.ts'
 import { resolvePackagingLayout } from './packaging-paths.ts'
+
+app.setName(DESKTOP_APP_DISPLAY_NAME)
 
 const repoRoot = fileURLToPath(new URL('../../..', import.meta.url))
 const packagingLayout = resolvePackagingLayout({
@@ -65,6 +69,7 @@ const DESKTOP_CDP_PORT = Number(process.env.DSH_DESKTOP_CDP_PORT ?? 9222)
 
 if (!shouldSkipHostBoot()) {
   app.commandLine.appendSwitch('remote-debugging-port', String(DESKTOP_CDP_PORT))
+  app.commandLine.appendSwitch('remote-allow-origins', '*')
 }
 
 protocol.registerSchemesAsPrivileged([
@@ -119,7 +124,12 @@ function writeDevBootGraph(): void {
 }
 
 function ensureBrowserViewManager(): DesktopBrowserViewManager {
-  browserViewManager ??= new DesktopBrowserViewManager(() => mainWindow, DESKTOP_CDP_PORT)
+  browserViewManager ??= new DesktopBrowserViewManager(
+    () => mainWindow,
+    DESKTOP_CDP_PORT,
+    defaultDesktopBrowserViewFactory,
+    (request) => { mainWindow?.webContents.send(IPC_REVEAL_TOOLBOX_BROWSER, request) },
+  )
   return browserViewManager
 }
 
@@ -210,7 +220,7 @@ function installApplicationMenu(): void {
         type: 'info',
         title: `About ${appName}`,
         message: appName,
-        detail: `Version ${app.getVersion()}\nDeepSeek Harness desktop shell.`,
+        detail: `Version ${app.getVersion()}\n${DESKTOP_APP_ABOUT_DETAIL}`,
       })
     },
     focusSettings: () => { mainWindow?.webContents.send(IPC_FOCUS_SETTINGS) },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isExternalBrowserUrl, isLocalhostBrowserUrl, browserUrlHost, normalizeBrowserNavigateUrl } from '../src/client/browser-navigate-url.ts'
+import { isExternalBrowserUrl, isLocalhostBrowserUrl, browserUrlHost, isChromiumInternalErrorUrl, normalizeBrowserNavigateUrl } from '../src/client/browser-navigate-url.ts'
 
 describe('normalizeBrowserNavigateUrl', () => {
   it('accepts explicit http and https URLs', () => {
@@ -15,6 +15,13 @@ describe('normalizeBrowserNavigateUrl', () => {
   it('rejects unsupported schemes and blank input', () => {
     expect(normalizeBrowserNavigateUrl('file:///tmp/a.html')).toBeUndefined()
     expect(normalizeBrowserNavigateUrl('   ')).toBeUndefined()
+  })
+})
+
+describe('isChromiumInternalErrorUrl', () => {
+  it('detects Chromium net-error documents', () => {
+    expect(isChromiumInternalErrorUrl('chrome-error://chromewebdata/')).toBe(true)
+    expect(isChromiumInternalErrorUrl('https://example.com/')).toBe(false)
   })
 })
 

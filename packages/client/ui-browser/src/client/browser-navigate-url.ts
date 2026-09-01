@@ -3,6 +3,14 @@
 const HTTP_SCHEME_RE = /^https?:\/\//i
 
 /**
+ * True when Chromium landed on a net-error document (`chrome-error://chromewebdata/`).
+ * @param url - live tab URL from Host metadata.
+ */
+export function isChromiumInternalErrorUrl(url: string): boolean {
+  return url.startsWith('chrome-error://')
+}
+
+/**
  * Return a navigable http(s) URL, or undefined when the input cannot be mapped.
  * @param input - raw address-bar text.
  */

@@ -9,13 +9,29 @@ export interface CdpPageLike {
   url(): string
 }
 
+/** Playwright browser subset used to detect a stale connectOverCDP handle. */
+export interface CdpBrowserLike {
+  isConnected(): boolean
+  contexts(): ReadonlyArray<{ pages(): readonly CdpPageLike[] }>
+}
+
+/**
+ * True when Chromium landed on a net-error document (`chrome-error://chromewebdata/`).
+ * @param url - `webContents.getURL()` or `page.url()`.
+ */
+export function isChromiumInternalErrorUrl(url: string): boolean {
+  return url.startsWith('chrome-error://')
+}
+
 /**
  * Collapse Electron's empty URL and Playwright `about:blank` to one blank document.
+ * Net-error URLs must not be reloaded when a BrowserView guest is revived.
  * @param url - `webContents.getURL()` or `page.url()`.
- * @returns `about:blank` for either blank form; otherwise the original URL.
+ * @returns `about:blank` for blank or net-error forms; otherwise the original URL.
  */
 export function normalizeDesktopBrowserUrl(url: string): string {
-  return url === '' || url === 'about:blank' ? 'about:blank' : url
+  if (url === '' || url === 'about:blank' || isChromiumInternalErrorUrl(url)) return 'about:blank'
+  return url
 }
 
 /**
@@ -31,4 +47,13 @@ export function findCdpPageByUrl<T extends CdpPageLike>(
 ): T | undefined {
   const want = normalizeDesktopBrowserUrl(targetUrl)
   return pages.find(page => normalizeDesktopBrowserUrl(page.url()) === want)
+}
+
+/**
+ * True when a cached Playwright CDP browser can still enumerate Electron targets.
+ * After `browser.close()`, Playwright keeps the object but `contexts()` is empty.
+ * @param browser - a Playwright browser returned from `connectOverCDP`.
+ */
+export function isDesktopCdpBrowserLive(browser: CdpBrowserLike): boolean {
+  return browser.isConnected() && browser.contexts().length > 0
 }
