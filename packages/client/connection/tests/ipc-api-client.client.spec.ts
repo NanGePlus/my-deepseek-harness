@@ -4,11 +4,13 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { InProcessApiClient, toFetchHandler } from '@deepseek-ai/dsh-host-apiproxy'
-import type { ApiProxy, HostFrame, MuxFrame, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { ApiProxy, HostFrame, MuxFrame, RpcRequest, WorkspaceId } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { readDesktopIpcBridge } from '../src/client/ipc-bridge.ts'
+import type { DesktopIpcBridge } from '../src/client/ipc-bridge.ts'
 import { IpcApiClient } from '../src/client/ipc-api-client.ts'
 import { ConnectionController } from '../src/client/connection.ts'
+import { BROWSER_WATCH_SCREENCAST_PATH, TERMINAL_STREAM_PATH } from '../src/api-path.ts'
 import { createHandlerBackedIpcBridge } from './ipc-bridge-fixture.client.ts'
 
 function fakeApi(): ApiProxy {
@@ -58,6 +60,58 @@ function fakeApiWithPersistentStreams(): ApiProxy {
   return api
 }
 
+/**
+ * Main unary fetch awaits `response.text()`, so SSE never completes.
+ * Terminal and screencast must use `openStream` instead.
+ */
+function hangingFetchStreamBridge(): DesktopIpcBridge & { fetchPaths: string[]; streamPaths: string[] } {
+  const fetchPaths: string[] = []
+  const streamPaths: string[] = []
+  const openedListeners = new Set<(id: string) => void>()
+  const frameListeners = new Set<(id: string, data: string) => void>()
+  const endListeners = new Set<(id: string) => void>()
+  return {
+    delivery: 'desktop',
+    fetchPaths,
+    streamPaths,
+    fetch(request) {
+      fetchPaths.push(request.path)
+      return new Promise(() => undefined)
+    },
+    cancelFetch() {},
+    async openStream(streamId, path) {
+      streamPaths.push(path)
+      const payload = path.startsWith(TERMINAL_STREAM_PATH)
+        ? { type: 'host/terminal-scrollback' as const, text: 'hi', truncated: false }
+        : { type: 'host/browser-screencast' as const, data: 'Zg==', width: 1, height: 1 }
+      const wire = JSON.stringify({
+        type: 'server-request',
+        rpcId: 'frame-1',
+        method: payload.type,
+        payload,
+      })
+      queueMicrotask(() => {
+        for (const listener of openedListeners) listener(streamId)
+        for (const listener of frameListeners) listener(streamId, wire)
+        for (const listener of endListeners) listener(streamId)
+      })
+    },
+    closeStream() {},
+    onStreamOpened(listener) {
+      openedListeners.add(listener)
+      return () => { openedListeners.delete(listener) }
+    },
+    onStreamFrame(listener) {
+      frameListeners.add(listener)
+      return () => { frameListeners.delete(listener) }
+    },
+    onStreamEnd(listener) {
+      endListeners.add(listener)
+      return () => { endListeners.delete(listener) }
+    },
+  }
+}
+
 describe('IpcApiClient protocol isomorphism', () => {
   it('unary host.describe matches InProcessApiClient on the same handler', async () => {
     const handler = toFetchHandler(fakeApi())
@@ -77,6 +131,31 @@ describe('IpcApiClient protocol isomorphism', () => {
     expect(mux.map(frame => frame.payload.type)).toEqual(['session/subscribed'])
     expect(host.map(frame => frame.payload.type)).toEqual(['host/session-removed'])
     expect(mux[0]?.payload).toMatchObject({ type: 'session/subscribed', sessionId: 's1' })
+  })
+
+  it('terminalStream and browserWatchScreencast ride openStream, not hanging unary fetch', async () => {
+    const bridge = hangingFetchStreamBridge()
+    const ipc = new IpcApiClient(bridge)
+    const ac = new AbortController()
+    const opened: string[] = []
+    const terminal = await collect(ipc.host.terminalStream(
+      { workspaceId: 'ws1' as WorkspaceId, sessionId: 'sess-1' },
+      ac.signal,
+      () => { opened.push('terminal') },
+    ))
+    const screencast = await collect(ipc.host.browserWatchScreencast(
+      { workspaceId: 'ws1' as WorkspaceId, tabId: 'tab-1' },
+      ac.signal,
+      () => { opened.push('screencast') },
+    ))
+    expect(bridge.fetchPaths).toEqual([])
+    expect(bridge.streamPaths).toEqual([
+      `${TERMINAL_STREAM_PATH}?workspaceId=ws1&sessionId=sess-1`,
+      `${BROWSER_WATCH_SCREENCAST_PATH}?workspaceId=ws1&tabId=tab-1`,
+    ])
+    expect(opened).toEqual(['terminal', 'screencast'])
+    expect(terminal[0]?.payload).toMatchObject({ type: 'host/terminal-scrollback', text: 'hi', truncated: false })
+    expect(screencast[0]?.payload).toMatchObject({ type: 'host/browser-screencast', width: 1, height: 1 })
   })
 
   it('stream loss triggers ConnectionController reconnect with backoff', async () => {

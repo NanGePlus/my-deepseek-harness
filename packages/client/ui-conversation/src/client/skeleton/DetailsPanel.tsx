@@ -133,6 +133,10 @@ export function DetailsPanel({
         >
           {renderSlot('conversation.details.browser', {
             visible: detailsTab === 'browser',
+            revealBrowserSegment: () => {
+              chatActions.setDetailsTab('browser')
+              openDetails()
+            },
           })}
         </div>
         <div

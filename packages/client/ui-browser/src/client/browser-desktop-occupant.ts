@@ -13,12 +13,22 @@ export interface BrowserOccupantBounds {
   visible: boolean
 }
 
+/** Screen-space rectangle of chrome that must not sit under BrowserView. */
+export interface BrowserOccupantOverlay {
+  top: number
+  bottom: number
+  left: number
+  right: number
+}
+
 /** Preload callback forwarding occupant bounds to Main IPC. */
 export type BrowserOccupantBoundsReporter = (bounds: BrowserOccupantBounds) => void
 
 type DshDesktopShell = {
   delivery?: string
   reportBrowserOccupantBounds?: BrowserOccupantBoundsReporter
+  onOpenEmbeddedBrowser?: (listener: (url: string) => void) => () => void
+  openExternalUrl?: (url: string) => Promise<{ opened: boolean }>
 }
 
 /**
@@ -31,6 +41,31 @@ export function readDesktopBrowserOccupantReporter(): BrowserOccupantBoundsRepor
   if (typeof bridge.reportBrowserOccupantBounds !== 'function') return undefined
   const report = bridge.reportBrowserOccupantBounds
   return (bounds: BrowserOccupantBounds) => { report(bounds) }
+}
+
+/**
+ * Subscribe to Main-routed http(s) popups for the toolbox browser.
+ * @returns disposer, or undefined when the desktop preload is absent.
+ */
+export function subscribeDesktopEmbeddedBrowserOpen(
+  listener: (url: string) => void,
+): (() => void) | undefined {
+  const bridge = (globalThis as { dsh?: DshDesktopShell }).dsh
+  if (bridge?.delivery !== 'desktop') return undefined
+  if (typeof bridge.onOpenEmbeddedBrowser !== 'function') return undefined
+  return bridge.onOpenEmbeddedBrowser(listener)
+}
+
+/**
+ * Open one http(s) URL in the system browser via Main (explicit toolbar action).
+ * @param url - live tab URL.
+ * @returns whether Main accepted the URL, or undefined when preload is absent.
+ */
+export function openDesktopExternalUrl(url: string): Promise<{ opened: boolean }> | undefined {
+  const bridge = (globalThis as { dsh?: DshDesktopShell }).dsh
+  if (bridge?.delivery !== 'desktop') return undefined
+  if (typeof bridge.openExternalUrl !== 'function') return undefined
+  return bridge.openExternalUrl(url)
 }
 
 /**
@@ -56,15 +91,41 @@ export function measureBrowserOccupantBounds(
 }
 
 /**
+ * Shrink occupant bounds so a chrome overlay is no longer covered by BrowserView.
+ * Insets from the top: dropdowns hang from the tab/nav bar into the occupant.
+ * @param bounds - measured `#browser-occupant` rectangle.
+ * @param overlay - open portal menu rectangle, or null when chrome has no overlay.
+ */
+export function insetOccupantBoundsForOverlay(
+  bounds: BrowserOccupantBounds,
+  overlay: BrowserOccupantOverlay | null,
+): BrowserOccupantBounds {
+  if (!bounds.visible || overlay === null) return bounds
+  const occupantBottom = bounds.y + bounds.height
+  const occupantRight = bounds.x + bounds.width
+  const overlaps = overlay.bottom > bounds.y
+    && overlay.top < occupantBottom
+    && overlay.right > bounds.x
+    && overlay.left < occupantRight
+  if (!overlaps) return bounds
+  const y = Math.max(bounds.y, overlay.bottom)
+  const height = occupantBottom - y
+  if (height <= 0) return { x: 0, y: 0, width: 0, height: 0, visible: false }
+  return { x: bounds.x, y, width: bounds.width, height, visible: true }
+}
+
+/**
  * Publish current occupant bounds when desktop delivery is active.
  * @param reporter - preload bridge callback.
  * @param element - occupant host element, if mounted.
  * @param segmentVisible - toolbox browser segment visibility.
+ * @param overlay - open chrome menu rectangle to keep above BrowserView.
  */
 export function reportBrowserOccupantBounds(
   reporter: BrowserOccupantBoundsReporter | undefined,
   element: HTMLElement | null,
   segmentVisible: boolean,
+  overlay: BrowserOccupantOverlay | null = null,
 ): void {
   if (reporter === undefined) return
   if (!segmentVisible) {
@@ -72,5 +133,8 @@ export function reportBrowserOccupantBounds(
     return
   }
   if (element === null) return
-  reporter(measureBrowserOccupantBounds(element, segmentVisible))
+  reporter(insetOccupantBoundsForOverlay(
+    measureBrowserOccupantBounds(element, segmentVisible),
+    overlay,
+  ))
 }

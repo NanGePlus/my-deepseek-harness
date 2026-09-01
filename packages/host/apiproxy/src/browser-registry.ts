@@ -190,14 +190,14 @@ export class BrowserRegistry {
       const workspace = await this.ensureWorkspace(workspaceId)
       const surface = this.desktopSurface ?? requireDesktopBrowserSurface()
       const tabId = randomUUID()
+      // ensureTab already loadURL; a second Playwright goto doubled wait and
+      // raced the 30s unary deadline while the guest document was on screen.
       await surface.ensureTab(workspaceId, tabId, url)
       const page = await surface.pageForTab(workspaceId, tabId)
-      if (url !== 'about:blank') {
-        await page.goto(url, { waitUntil: 'domcontentloaded' })
-      }
       const tab = this.trackTab(workspace, tabId, page)
       workspace.selectedTabId = tabId
       await this.syncTabMetadata(tab)
+      await this.revealTab(workspaceId, tab)
       return { tabId }
     }
 
@@ -218,7 +218,7 @@ export class BrowserRegistry {
     const tab = this.trackTab(workspace, tabId, page)
     workspace.selectedTabId = tabId
     await this.syncTabMetadata(tab)
-    await this.revealTab(tab)
+    await this.revealTab(workspaceId, tab)
     return { tabId }
   }
 
@@ -232,6 +232,10 @@ export class BrowserRegistry {
     const tab = workspace.tabs.get(tabId)
     if (tab === undefined) return { closed: true }
     workspace.tabs.delete(tabId)
+    if (this.delivery === 'desktop') {
+      const surface = this.desktopSurface ?? requireDesktopBrowserSurface()
+      await surface.closeTab(workspaceId, tabId)
+    }
     if (tab.cdp !== undefined) {
       try {
         await tab.cdp.detach()
@@ -256,24 +260,19 @@ export class BrowserRegistry {
     const workspace = this.requireWorkspace(workspaceId)
     const tab = this.requireTab(workspace, tabId)
     workspace.selectedTabId = tabId
-    await this.revealTab(tab)
+    await this.revealTab(workspaceId, tab)
     return { selected: true }
   }
 
   /**
-   * Raise the headed Chromium window for one tab so a human can operate it.
-   * Also marks the tab selected.
+   * Raise one tab for human viewing and mark it selected.
+   * Web delivery brings the headed Chromium window forward; desktop attaches the BrowserView.
    */
   async showWindow(workspaceId: WorkspaceId, tabId: string): Promise<{ shown: true }> {
     const workspace = this.requireWorkspace(workspaceId)
     const tab = this.requireTab(workspace, tabId)
     workspace.selectedTabId = tabId
-    if (this.delivery === 'desktop') {
-      const surface = this.desktopSurface ?? requireDesktopBrowserSurface()
-      await surface.selectTab?.(workspaceId, tabId)
-      return { shown: true }
-    }
-    await this.revealTab(tab)
+    await this.revealTab(workspaceId, tab)
     return { shown: true }
   }
 
@@ -281,7 +280,7 @@ export class BrowserRegistry {
   async navigate(workspaceId: WorkspaceId, tabId: string, url: string): Promise<BrowserPageMetadata> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.goto(url, { waitUntil: 'domcontentloaded' })
-    await this.revealTab(tab)
+    await this.revealTab(workspaceId, tab)
     return this.pageMetadata(tab)
   }
 
@@ -289,7 +288,7 @@ export class BrowserRegistry {
   async goBack(workspaceId: WorkspaceId, tabId: string): Promise<BrowserPageMetadata> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.goBack({ waitUntil: 'domcontentloaded' })
-    await this.revealTab(tab)
+    await this.revealTab(workspaceId, tab)
     return this.pageMetadata(tab)
   }
 
@@ -297,7 +296,7 @@ export class BrowserRegistry {
   async goForward(workspaceId: WorkspaceId, tabId: string): Promise<BrowserPageMetadata> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.goForward({ waitUntil: 'domcontentloaded' })
-    await this.revealTab(tab)
+    await this.revealTab(workspaceId, tab)
     return this.pageMetadata(tab)
   }
 
@@ -315,7 +314,7 @@ export class BrowserRegistry {
     } else {
       await tab.page.reload({ waitUntil: 'domcontentloaded' })
     }
-    await this.revealTab(tab)
+    await this.revealTab(workspaceId, tab)
     return this.pageMetadata(tab)
   }
 
@@ -330,7 +329,7 @@ export class BrowserRegistry {
   async click(workspaceId: WorkspaceId, tabId: string, x: number, y: number): Promise<{ clicked: true }> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.mouse.click(x, y)
-    await this.revealTab(tab)
+    await this.revealTab(workspaceId, tab)
     await this.syncTabMetadata(tab)
     return { clicked: true }
   }
@@ -339,7 +338,7 @@ export class BrowserRegistry {
   async type(workspaceId: WorkspaceId, tabId: string, text: string): Promise<{ typed: true }> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.keyboard.type(text)
-    await this.revealTab(tab)
+    await this.revealTab(workspaceId, tab)
     return { typed: true }
   }
 
@@ -372,7 +371,7 @@ export class BrowserRegistry {
   ): Promise<{ selected: true }> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.selectOption(selector, values)
-    await this.revealTab(tab)
+    await this.revealTab(workspaceId, tab)
     return { selected: true }
   }
 
@@ -527,9 +526,19 @@ export class BrowserRegistry {
     return tab
   }
 
-  /** Bring the headed Chromium window and tab to the front when the page is still open. */
-  private async revealTab(tab: LiveTab): Promise<void> {
-    if (this.delivery === 'desktop' || this.headless) return
+  /**
+   * Raise the tab for human viewing when the page is still open.
+   * Web delivery brings the headed Chromium window forward.
+   * Desktop delivery attaches the BrowserView and applies occupant bounds via {@link DesktopBrowserSurface.selectTab}.
+   * Headless skips both.
+   */
+  private async revealTab(workspaceId: WorkspaceId, tab: LiveTab): Promise<void> {
+    if (this.headless) return
+    if (this.delivery === 'desktop') {
+      const surface = this.desktopSurface ?? requireDesktopBrowserSurface()
+      await surface.selectTab(workspaceId, tab.tabId)
+      return
+    }
     try {
       await tab.page.bringToFront()
     } catch (error: unknown) {
@@ -666,7 +675,7 @@ export class BrowserRegistry {
     const selected = workspace.selectedTabId === undefined
       ? undefined
       : workspace.tabs.get(workspace.selectedTabId)
-    if (selected !== undefined) await this.revealTab(selected)
+    if (selected !== undefined) await this.revealTab(workspaceId, selected)
     return workspace
   }
 

@@ -7,9 +7,10 @@
 #
 # Desktop delivery boots the same Host capabilities as the Web surface — apiproxy,
 # Playwright browser registry, terminal/Git client roster, workspace, storage —
-# without `dsh-host-webserver`, HTTP static serving, or the loopback transport
-# rows (`connection`, `modules`, `client-hmr`). Electron Main owns IPC to the
-# Host; see ADR-0009 and Issue #116.
+# without `dsh-host-webserver`, HTTP static serving, or loopback-only transport
+# rows (`modules`, `client-hmr`). `connection` is mounted so its `dsh.client`
+# half enters the SPA boot graph; the node half waits on `webServer` and stays
+# idle. Renderer RPC uses IPC (`IpcApiClient`); see ADR-0009 and Issue #116.
 
 # ── surface-specific values the base deliberately omits ─────────────────────
 
@@ -164,7 +165,13 @@
     - id: cordis-host-runner
       name: '@deepseek-ai/dsh-cordis-host-runner'
 
-    # ── client plugin roster (dsh.client rows; IPC transport in Issue #116) ───
+    # ── client plugin roster (dsh.client rows; Renderer uses IpcApiClient) ───
+
+    # Dual-face: node half mounts HTTP `/api` only when `webServer` exists.
+    # Desktop Host has no webserver, so apply returns immediately; the browser
+    # half still provides `ctx.connection` over preload IPC.
+    - id: connection
+      name: '@deepseek-ai/dsh-client-connection'
 
     - id: api-remotes
       name: '@deepseek-ai/dsh-api-remotes'

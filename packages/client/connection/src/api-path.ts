@@ -15,3 +15,9 @@ export const HOST_EVENTS_PATH = `${API_PATH}/events.host`
 
 /** Browser host.watchPath WebSocket pathname (query carries workspaceId and path). */
 export const WATCH_PATH_PATH = `${API_PATH}/host.watchPath`
+
+/** Browser host.terminalStream SSE pathname (query carries workspaceId and sessionId). */
+export const TERMINAL_STREAM_PATH = `${API_PATH}/host.terminalStream`
+
+/** Browser host.browserWatchScreencast SSE pathname (query carries workspaceId and tabId). */
+export const BROWSER_WATCH_SCREENCAST_PATH = `${API_PATH}/host.browserWatchScreencast`

@@ -479,6 +479,8 @@ export interface DetailsTerminalOwnerProps {
 export interface DetailsBrowserOwnerProps {
   /** True while the toolbox Browser segment is selected. Hidden panels stay mounted. */
   visible: boolean
+  /** Switch the toolbox to the Browser segment and open the details column. */
+  revealBrowserSegment: () => void
 }
 
 /** Owner share of the toolbox Explorer occupant: whether the Explorer segment is selected. */

@@ -96,7 +96,9 @@ function bench(overrides?: Partial<Pick<DetailsSlotProps, 'renderSlot'>>) {
     if (key === 'conversation.details.browser') {
       const browserOwner = owner as unknown as DetailsBrowserOwnerProps
       return (
-        <div data-testid="browser-seat" data-visible={String(browserOwner.visible)} />
+        <div data-testid="browser-seat" data-visible={String(browserOwner.visible)}>
+          <button type="button" data-testid="reveal-browser" onClick={browserOwner.revealBrowserSegment} />
+        </div>
       )
     }
     return null
@@ -210,6 +212,14 @@ describe('DetailsPanel segmented tabs', () => {
     expect(view.getByTestId('git-panel-seat').getAttribute('data-visible')).toBe('false')
     expect(view.getByTestId('terminal-seat').getAttribute('data-visible')).toBe('false')
     expect(panels(view)[3]!.getAttribute('aria-hidden')).toBe('false')
+  })
+
+  it('revealBrowserSegment switches to 浏览器 and opens the details column', () => {
+    const { view, chat, openDetails } = bench()
+    fireEvent.click(view.getByTestId('reveal-browser'))
+    expect(chat.store.getSnapshot().detailsTab).toBe('browser')
+    expect(openDetails).toHaveBeenCalledTimes(1)
+    expect(view.getByTestId('browser-seat').getAttribute('data-visible')).toBe('true')
   })
 
   it('tab-leave-browser: leaving 浏览器 hides the seat without unmounting it', () => {

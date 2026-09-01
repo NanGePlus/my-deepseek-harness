@@ -619,6 +619,52 @@ describe('unary round trip (handler ⇄ client, no network)', () => {
     }
   })
 
+  it('lets host.browserCreateTab and host.browserNavigate finish after the default unary deadline', async () => {
+    vi.useFakeTimers()
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+      const controller = new AbortController()
+      setTimeout(() => {
+        controller.abort(new DOMException('signal timed out', 'TimeoutError'))
+      }, milliseconds)
+      return controller.signal
+    })
+    try {
+      const api = fakeApi()
+      api.host.browserCreateTab = async (request) => {
+        await new Promise(resolve => setTimeout(resolve, 30_001))
+        return { rpcId: request.rpcId, result: { ok: true, value: { tabId: 'slow-tab' } } }
+      }
+      api.host.browserNavigate = async (request) => {
+        await new Promise(resolve => setTimeout(resolve, 30_001))
+        return {
+          rpcId: request.rpcId,
+          result: { ok: true, value: { url: 'https://example.com/', title: 'Example', canGoBack: false, canGoForward: false } },
+        }
+      }
+      const created = client(api).host.browserCreateTab({ workspaceId: 'ws' as never })
+      const navigated = client(api).host.browserNavigate({
+        workspaceId: 'ws' as never,
+        tabId: 'slow-tab',
+        url: 'https://example.com/',
+      })
+      await Promise.all([
+        vi.advanceTimersByTimeAsync(30_001),
+        expect(created).resolves.toMatchObject({ result: { ok: true, value: { tabId: 'slow-tab' } } }),
+        expect(navigated).resolves.toMatchObject({
+          result: { ok: true, value: { url: 'https://example.com/' } },
+        }),
+      ])
+      const history = { workspaceId: 'ws' as never, tabId: 'slow-tab' }
+      await expect(client(api).host.browserGoBack(history)).resolves.toMatchObject({ result: { ok: true } })
+      await expect(client(api).host.browserGoForward(history)).resolves.toMatchObject({ result: { ok: true } })
+      await expect(client(api).host.browserReload(history)).resolves.toMatchObject({ result: { ok: true } })
+      expect(timeoutSpy).not.toHaveBeenCalled()
+    } finally {
+      timeoutSpy.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
   it('round-trips the subagent domain through the wire form', async () => {
     const c = client()
     expect((await c.subagents.list({ parentSessionId: 'parent' as never })).result)

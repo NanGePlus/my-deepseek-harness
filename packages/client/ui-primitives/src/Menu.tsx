@@ -132,10 +132,14 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
       const vh = window.innerHeight
       const listEl = listRef.current
       const lw = listEl?.offsetWidth ?? 0
-      const lh = listEl?.offsetHeight ?? 0
+      let lh = listEl?.offsetHeight ?? 0
+      if (listEl !== null && lh === 0) {
+        lh = listEl.getBoundingClientRect().height
+      }
 
       let x: number
       let y: number
+      let clipMaxHeight: number | undefined
       if (side === 'right') {
         x = r.right + 4
         y = r.top
@@ -148,9 +152,25 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
       }
 
       if (lw > 0) x = Math.min(Math.max(x, MARGIN), vw - lw - MARGIN)
-      if (lh > 0) y = Math.min(Math.max(y, MARGIN), vh - lh - MARGIN)
+      if (lh > 0) {
+        if (side === 'top') {
+          const maxBottom = r.top - 4
+          y = maxBottom - lh
+          if (y < MARGIN) {
+            y = MARGIN
+            clipMaxHeight = maxBottom - MARGIN
+          }
+        } else {
+          y = Math.min(Math.max(y, MARGIN), vh - lh - MARGIN)
+        }
+      }
 
-      setFixedPos({ left: x, top: y })
+      setFixedPos({
+        left: x,
+        top: y,
+        ...(clipMaxHeight !== undefined ? { maxHeight: clipMaxHeight } : {}),
+      })
+      if (listEl !== null && lh === 0) requestAnimationFrame(place)
     }
     // First run measures the hidden pre-render (same commit as `open`), so
     // end/top alignment and clamping use real dimensions before anything

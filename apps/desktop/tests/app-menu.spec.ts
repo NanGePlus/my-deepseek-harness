@@ -29,4 +29,15 @@ describe('desktop application menu seam', () => {
     expect(focusSettings).toHaveBeenCalledOnce()
     expect(requestQuit).toHaveBeenCalledOnce()
   })
+
+  it('keeps the platform Edit menu so clipboard accelerators stay bound', () => {
+    const template = buildApplicationMenuTemplate({
+      appName: 'DeepSeek Harness',
+      version: '1.2.3',
+      showAbout: () => undefined,
+      focusSettings: () => undefined,
+      requestQuit: () => undefined,
+    })
+    expect(template.some(item => item.role === 'editMenu')).toBe(true)
+  })
 })

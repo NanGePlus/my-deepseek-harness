@@ -204,7 +204,7 @@ The same domain tree as `ApiProxy`, but unary methods **take the business payloa
 | `callUnary` | mint → tap → POST full form → `serverResponseSchema` parse → **rpcId echo check** (mismatch throws) → tap → emit narrow form |
 | `readSse` | streaming fetch (not EventSource), `\n\n` framing, `data:` concatenation, ServerRequest full-form parse, tap, emit narrow `RpcRequest<frame>` |
 | `respond` | client-response passthrough (rpcId is an echo — never minted here); response body parsed by `rpcReceiptSchema` |
-| unary deadline | Ordinary unary calls use `AbortSignal.timeout` (default 30s, constructor-tunable); user-paced `host.pickDirectory` and `command.execute` omit that deadline but keep caller/connection cancellation; streams have no deadline |
+| unary deadline | Ordinary unary calls use `AbortSignal.timeout` (default 30s, constructor-tunable). `caller-signal-only` methods omit that deadline but keep caller/connection cancellation: user-paced `host.pickDirectory` and `command.execute`; long-running `host.gitPush` and `host.gitCommit({push})`; page-load `host.browserCreateTab`, `browserNavigate`, `browserGoBack`, `browserGoForward`, and `browserReload` ([desktop browser nav timeout](../bug-fix/2026-08-31-desktop-browser-nav-unary-timeout.md)). Streams have no deadline |
 | `resolveBase` | browser = same-origin origin; no-location environment (Node) = the `http://dsh.internal` fake authority |
 
 ### The instance-level envelope observation aspect
@@ -234,7 +234,7 @@ All four quadrant full forms pass through `onEnvelope`; the base implementation 
 
 ## Consequences
 
-Every client consumes one contract: adding a unary method is a five-step mechanical change from a single signature, swapping a carrier touches only a `doFetch` subclass, and every wire message is zod-validated, observable through the envelope tap, and reconcilable by rpcId. Ordinary unary calls remain bounded, while `host.pickDirectory` and `command.execute` may stay pending until the operation finishes or caller/connection cancellation arrives; this accepts that a non-cooperative user-paced operation can hang its request rather than treating valid operation duration as transport failure. The other accepted costs: two groups of packages need explicit tsconfig paths entries, and the reserved methods (fork/inject/task.list/listModels/hostInstanceId) stay dormant until a real consumer arrives.
+Every client consumes one contract: adding a unary method is a five-step mechanical change from a single signature, swapping a carrier touches only a `doFetch` subclass, and every wire message is zod-validated, observable through the envelope tap, and reconcilable by rpcId. Ordinary unary calls remain bounded, while `caller-signal-only` methods (`host.pickDirectory`, `command.execute`, `host.gitPush`, `host.gitCommit({push})`, and page-load `host.browser*` RPCs) may stay pending until the operation finishes or caller/connection cancellation arrives; this accepts that a non-cooperative user-paced or page-load operation can hang its request rather than treating valid operation duration as transport failure. The other accepted costs: two groups of packages need explicit tsconfig paths entries, and the reserved methods (fork/inject/task.list/listModels/hostInstanceId) stay dormant until a real consumer arrives.
 
 ## Alternatives considered
 

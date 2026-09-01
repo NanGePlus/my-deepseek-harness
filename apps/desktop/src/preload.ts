@@ -16,6 +16,8 @@ import {
   IPC_EXIT_REQUEST,
   IPC_FOCUS_SETTINGS,
   IPC_BROWSER_OCCUPANT_BOUNDS,
+  IPC_OPEN_EMBEDDED_BROWSER,
+  IPC_OPEN_EXTERNAL_URL,
 } from './ipc-contract.ts'
 
 function subscribe(channel: string, listener: (...args: unknown[]) => void): () => void {
@@ -35,6 +37,15 @@ const shell = {
     height: number
     visible: boolean
   }) => { ipcRenderer.send(IPC_BROWSER_OCCUPANT_BOUNDS, bounds) },
+  onOpenEmbeddedBrowser: (listener: (url: string) => void) => subscribe(
+    IPC_OPEN_EMBEDDED_BROWSER,
+    (...args) => {
+      const url = args[0]
+      if (typeof url === 'string') listener(url)
+    },
+  ),
+  openExternalUrl: (url: string): Promise<{ opened: boolean }> =>
+    ipcRenderer.invoke(IPC_OPEN_EXTERNAL_URL, url),
 }
 
 const shared = {

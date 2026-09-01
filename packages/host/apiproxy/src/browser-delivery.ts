@@ -20,8 +20,10 @@ export interface DesktopBrowserSurface {
   ensureTab(workspaceId: WorkspaceId, tabId: string, url: string): Promise<void>
   /** Resolve the Playwright page backing one embedded tab after {@link ensureTab}. */
   pageForTab(workspaceId: WorkspaceId, tabId: string): Promise<Page>
-  /** Raise the embedded tab for human viewing without an OS window (optional). */
-  selectTab?(workspaceId: WorkspaceId, tabId: string): Promise<void>
+  /** Raise the embedded tab for human viewing without an OS window. */
+  selectTab(workspaceId: WorkspaceId, tabId: string): Promise<void>
+  /** Drop the BrowserView for a closed tab before Playwright `page.close()`. */
+  closeTab(workspaceId: WorkspaceId, tabId: string): Promise<void>
 }
 
 let desktopSurface: DesktopBrowserSurface | undefined
