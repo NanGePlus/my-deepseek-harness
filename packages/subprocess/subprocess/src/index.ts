@@ -44,8 +44,8 @@ export type {
 export const SENSITIVE_ENV_PATTERN = /KEY|PASSWORD|SECRET|TOKEN/i
 
 /**
- * The ambient parent environment minus credential-shaped names and minus all
- * `DSH_*` names — the canonical base every harness child starts from. `PATH`,
+ * The ambient parent environment minus credential-shaped names, `NODE_OPTIONS`,
+ * and minus all `DSH_*` names — the canonical base every harness child starts from. `PATH`,
  * `HOME`, locale, and proxy variables survive, so child CLIs run normally;
  * harness identity never leaks implicitly (a deliberately forwarded
  * credential or current `DSH_*` fact goes through the spec's explicit `env`,
@@ -60,7 +60,11 @@ export const SENSITIVE_ENV_PATTERN = /KEY|PASSWORD|SECRET|TOKEN/i
 export function scrubbedParentEnv(): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined && !SENSITIVE_ENV_PATTERN.test(key) && !key.toUpperCase().startsWith(DSH_ENV_PREFIX)) env[key] = value
+    if (value === undefined) continue
+    if (key.toUpperCase() === 'NODE_OPTIONS') continue
+    if (SENSITIVE_ENV_PATTERN.test(key)) continue
+    if (key.toUpperCase().startsWith(DSH_ENV_PREFIX)) continue
+    env[key] = value
   }
   return env
 }
