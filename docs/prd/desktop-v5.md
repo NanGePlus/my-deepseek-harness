@@ -100,7 +100,7 @@ US-20：作为开发者，我想明确 V5 **不做** Linux 桌面、自动更新
 - **UI 设计描述**：
   1. **原生窗口**：单主窗口；macOS 使用标准标题栏 + 交通灯（**关闭即退出**，不隐藏到 Dock 驻留 Host）；Windows 使用可调整大小边框 + 标题栏 ✕（同义退出）。窗口最小尺寸须容纳 Web 三栏布局（具体像素在实现 Issue 中取自现有 Web 断点，PRD 不写死数值）。
   2. **Dock / Taskbar**：安装后显示 App 图标；**单实例**下二次启动聚焦本窗口（macOS `activate` / Windows 聚焦已有实例）。
-  3. **应用菜单（标准壳）**：macOS 菜单栏 / Windows 应用菜单：**About**（显示版本与简短说明）、**Settings**（聚焦 SPA 内既有设置入口，不新建独立设置窗口规格）、**Quit**（同 **关闭即退出**）。不含自动更新、最近文件、协议唤起菜单项（V5 范围外）。
+  3. **应用菜单（标准壳）**：macOS 菜单栏 / Windows 应用菜单：**About**（显示版本与简短说明）、**Settings**（聚焦 SPA 内既有设置入口，不新建独立设置窗口规格）、**Quit**（同 **关闭即退出**），以及平台 **Edit**（撤销 / 剪切 / 复制 / 粘贴 / 全选——`setApplicationMenu` 后必须自带，否则剪贴板快捷键全 App 失效）。不含自动更新、最近文件、协议唤起菜单项（V5 范围外）。
   4. **内容视口**：窗口客户区内 100% 嵌入现有 dsh Web SPA（Sidebar + 对话 + 工具箱），视觉与 `dsh web` 一致；不另做桌面专属配色。工具箱五段 Tab 文案与顺序不变。
   5. **窗口几何持久化**：退出前保存 bounds（x、y、width、height）；下次 **一体启动** 恢复。多显示器场景：若上次坐标不可见则回退安全默认居中（实现须处理，PRD 只要求不 off-screen 静默失败）。
   6. **退出守卫变体段**：关窗 / Quit 时若存在 dirty 编辑器 Tab，弹出与 Session 切换守卫 **同风格** 的逐文件保存 / 丢弃 / 取消对话框；取消则保持 App 运行。不因 PTY / 浏览器 Tab 弹窗。
@@ -115,7 +115,7 @@ US-20：作为开发者，我想明确 V5 **不做** Linux 桌面、自动更新
 - **主任务**：在工具箱 **浏览器** 段 occupant 内嵌 Web 页面，Agent 与人类共用实例
 - **覆盖的用户故事**：US-12~US-15
 - **DESIGN 复用**：Tab 栏 / 导航顶栏 / 地址栏 / 溢出菜单 / 空态 / Loading 同 [`browser-v4.md`](./browser-v4.md) 与 embedded-browser design-system Agent Note；occupant **不含**「显示窗口」卡片
-- **UI 设计描述**：继承 desktop **app-shell** 内工具箱；选中 **浏览器** 段。纵向 flex 与 V4 相同：① Tab 栏 ② 导航栏 ③ 可选提示条（外部站点 info / 导航 error）。④ **occupant（面板内 WebView）**：flex 1 最小高度 200px；Main `BrowserView` 通过 IPC bounds 精确覆盖此矩形；人类在 BrowserView 内直接点击 / 输入 / IME；**不**渲染「在本机浏览器窗口中查看」卡片与 **显示窗口** 按钮。切走 **浏览器** 段：Renderer 通知 Main detach BrowserView（或 zero bounds），页面不销毁；切回 reattach 并同步 bounds。硬刷新 App：从 workspace store 恢复 Tab 栏，BrowserView 按 URL 重载。Zoom 菜单仍持久化 Client store，不改变 BrowserView 内页面缩放语义（与 V4 一致）。**未绑定 / 不可用 / 导航失败** 变体同 V4 PRD 状态策略，错误与空态画在 occupant 上层（BrowserView detach 或置于其后）。Agent 操作后 BrowserView 内对应 Tab 保持选中，无需 `bringToFront` OS 窗口。
+- **UI 设计描述**：继承 desktop **app-shell** 内工具箱；选中 **浏览器** 段。纵向 flex 与 V4 相同：① Tab 栏 ② 导航栏 ③ 可选提示条（外部站点 info / 导航 error）。④ **occupant（面板内 WebView）**：flex 1 最小高度 200px；Main `BrowserView` 通过 IPC bounds 精确覆盖此矩形；人类在 BrowserView 内直接点击 / 输入 / IME；**不**渲染「在本机浏览器窗口中查看」卡片与 **显示窗口** 按钮。切走 **浏览器** 段：Renderer 通知 Main detach BrowserView（或 zero bounds），页面不销毁；切回 reattach 并同步 bounds。硬刷新 App：从 workspace store 恢复 Tab 栏，BrowserView 按 URL 重载。Zoom 菜单仍持久化 Client store，不改变 BrowserView 内页面缩放语义（与 V4 一致）。**未绑定 / 不可用 / 导航失败** 变体同 V4 PRD 状态策略，错误与空态画在 occupant 上层（BrowserView detach 或置于其后）。Agent 操作后 BrowserView 内对应 Tab 保持选中，无需 `bringToFront` OS 窗口。会话或 popup 打开网页后，Tab 栏选中刚打开的那个 Tab。
 
 ### DESIGN 合规自检
 
@@ -171,7 +171,7 @@ Main 或 preload 约定键（如 `desktop.windowBounds.v1`）持久化至 userDa
 
 ### 标准壳应用菜单
 
-About 显示 `app.getVersion()`；Settings 向 Renderer 发送 focus-settings 事件（打开 SPA 内既有设置 UI）；Quit 触发退出守卫链。
+About 显示 `app.getVersion()`；Settings 向 Renderer 发送 focus-settings 事件（打开 SPA 内既有设置 UI）；Quit 触发退出守卫链。模板在自定义 App 菜单之外包含 Electron 平台 **Edit** 菜单（撤销 / 剪切 / 复制 / 粘贴 / 全选）：`Menu.setApplicationMenu` 会整体替换 Chromium 默认菜单，缺 Edit 则全 App 剪贴板快捷键失效。
 
 ### BrowserRegistry 交付形态分叉
 
@@ -179,11 +179,11 @@ Host `BrowserRegistry` 识别 **交付形态**（环境或 config）：**web** �
 
 ### BrowserView bounds IPC
 
-Renderer `ui-browser` occupant 使用 `ResizeObserver` + 段 `visible` 上报 `{x,y,width,height}`（屏幕坐标）；Main `setBounds` / hide 时 detach。每 Workspace 选中 Tab 对应 BrowserView 展示目标 webContents。
+Renderer `ui-browser` occupant 使用 `ResizeObserver` + 段 `visible` 上报 `{x,y,width,height}`（屏幕坐标）；Main `setBounds` / hide 时 detach。guest `webContents` 已销毁时不得 `addBrowserView`；Main 按上次 URL 重建 BrowserView 再挂载。每 Workspace 选中 Tab 对应 BrowserView 展示目标 webContents。
 
 ### ui-browser 桌面 occupant
 
-`@deepseek-ai/dsh-client-ui-browser` 检测 desktop 交付：移除「显示窗口」卡片与 `browserShowWindow` 主路径；occupant 渲染占位 div（`#browser-occupant`）并驱动 bounds IPC。Tab 栏 / 导航 / store / Zoom **不变**。
+`@deepseek-ai/dsh-client-ui-browser` 检测 desktop 交付：移除「显示窗口」卡片与 `browserShowWindow` 主路径；occupant 渲染占位 div（`#browser-occupant`）并驱动 bounds IPC。Tab 栏 / 导航 / store / Zoom **不变**。会话与页面内 `http(s)` 链接（`target=_blank` / `window.open`）由 Main 拦截，在工具箱 **浏览器** 段打开，不新开 OS 窗口；打开后选中新建或复用的 Tab。Host 尚未对齐 Tab 时，地址栏提交与会话打开先排队；`browser-tab-not-found` 时按 `list` / store 重建后对活 Tab 重试。导航栏「在外部浏览器打开」仍经 `shell.openExternal` 交给系统浏览器。页面加载类 `host.browserCreateTab` / `browserNavigate` / `browserGoBack` / `browserGoForward` / `browserReload` 不走 30s 一元超时；桌面 `createTab` 在 Main `loadURL` 之后不再二次 Playwright `goto`。
 
 ### 外挂 Host attach 模式
 
@@ -219,7 +219,7 @@ Mock Electron debug URL + CDP：desktop 形态下 `createTab` / `navigate` / `sn
 
 ### BrowserView bounds seam
 
-上报 bounds 变化时 Main mock 收到 `setBounds`；段 `visible=false` 时 detach。PRD 依据：`PRD 实现决策 › BrowserView bounds IPC`。
+上报 bounds 变化时 Main mock 收到 `setBounds`；段 `visible=false` 时 detach；guest 已销毁时 `addBrowserView` 不抛、按 last URL 重建。PRD 依据：`PRD 实现决策 › BrowserView bounds IPC`。
 
 ### ui-browser 桌面 occupant seam
 

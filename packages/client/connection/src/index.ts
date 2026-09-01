@@ -54,7 +54,7 @@ function assertImageBodyCapacity(ctx: Context, maxRequestBodyBytes: number): voi
 }
 
 /** Services required before providing Connection; API Proxy is an optional `/api` fallback. */
-export const inject = ['webServer']
+export const inject: string[] = []
 
 /** Plugin config: the deployment's non-loopback serving authorities. */
 export interface ConnectionConfig {
@@ -129,8 +129,10 @@ const PRIVILEGED_METHODS = new Set([
 ])
 
 /**
- * Mounts the API gateway under the browser transport prefix. Every request on
- * the prefix passes the browser-trust fence first (DNS-rebinding and
+ * Mounts the API gateway under the browser transport prefix when `webServer`
+ * is present. Desktop Host has no webserver; apply then returns so the
+ * `dsh.client` row can still enter the SPA boot graph. Every request on the
+ * prefix passes the browser-trust fence first (DNS-rebinding and
  * cross-site defense — [api-request-trust](./api-request-trust.ts));
  * privileged methods additionally pass it with an empty trust list, which
  * pins them to loopback.
@@ -145,6 +147,7 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
   // silently authorizing its hostname prefix at request time.
   for (const entry of trustedHosts) assertTrustedAuthority(entry)
   if (ctx.get('apiProxy') !== undefined) assertImageBodyCapacity(ctx, maxRequestBodyBytes)
+  if (ctx.get('webServer') === undefined) return
   const connection = new HostConnectionService(ctx, trustedHosts)
   const fetchHandler = connection.createSharedFetchHandler(API_PATH, {
     async fetch(request) {

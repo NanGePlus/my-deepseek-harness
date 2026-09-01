@@ -15,7 +15,8 @@ export interface ApplicationMenuActions {
 }
 
 /**
- * Build the macOS-style application menu (also used on Windows as the app menu).
+ * Build the application menu. Includes the platform Edit menu: replacing the
+ * default menu without copy/paste roles unbinds clipboard accelerators in every webContents.
  * @param actions - menu callbacks.
  * @returns Electron menu template.
  */
@@ -42,5 +43,5 @@ export function buildApplicationMenuTemplate(
         click: () => { actions.requestQuit() },
       },
     ],
-  }]
+  }, { role: 'editMenu' }]
 }

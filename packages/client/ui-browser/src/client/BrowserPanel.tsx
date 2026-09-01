@@ -1,6 +1,6 @@
 /** Embedded-browser occupant of the details column Browser tab. */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   Button,
@@ -37,7 +37,11 @@ import { browserTabDisplayTitle, DEFAULT_BROWSER_TAB_URL } from './browser-tab-t
 import {
   readDesktopBrowserOccupantReporter,
   reportBrowserOccupantBounds,
+  subscribeDesktopEmbeddedBrowserOpen,
+  openDesktopExternalUrl,
+  type BrowserOccupantOverlay,
 } from './browser-desktop-occupant.ts'
+import { planEmbeddedBrowserOpen } from './embedded-browser-open.ts'
 import css from './BrowserPanel.module.css'
 
 /** How often the toolbox Tab bar rereads Host metadata while the segment is visible. */
@@ -158,7 +162,7 @@ export type BrowserPanelProps =
  * @returns the embedded browser surface.
  */
 export function BrowserPanel({
-  t, visible, useSessions, useWorkspaces, useStore, actions,
+  t, visible, revealBrowserSegment, useSessions, useWorkspaces, useStore, actions,
   browserList, browserCreateTab, browserCloseTab, browserSelectTab,
   browserNavigate, browserGoBack, browserGoForward, browserReload,
   browserShowWindow,
@@ -215,9 +219,12 @@ export function BrowserPanel({
   const [hardReloading, setHardReloading] = useState(false)
   const [tabMenu, setTabMenu] = useState<{ anchorTabId: string; rect: DOMRect } | null>(null)
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false)
+  const [chromeMenuOverlay, setChromeMenuOverlay] = useState<BrowserOccupantOverlay | null>(null)
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
   const overflowButtonRef = useRef<HTMLButtonElement>(null)
   const navRetryRef = useRef<(() => void) | null>(null)
+  const pendingNavigateUrlRef = useRef<string | undefined>(undefined)
+  const pendingEmbeddedUrlRef = useRef<string | undefined>(undefined)
   const occupantRef = useRef<HTMLDivElement>(null)
   const desktopReporter = useMemo(() => readDesktopBrowserOccupantReporter(), [])
   const isDesktopOccupant = desktopReporter !== undefined
@@ -338,6 +345,20 @@ export function BrowserPanel({
     return undefined
   }, [actions, browserList, recreateHostTabsFromStore, workspaceId])
 
+  const runHostTabCall = useCallback(async (
+    tabId: string,
+    run: (liveTabId: string) => Promise<BrowserPageMetadata>,
+  ): Promise<{ tabId: string; value: BrowserPageMetadata }> => {
+    try {
+      return { tabId, value: await run(tabId) }
+    } catch (error: unknown) {
+      if (!isBrowserTabNotFoundError(error)) throw error
+      const recovered = await recoverMissingHostTab()
+      if (recovered === undefined) throw error
+      return { tabId: recovered, value: await run(recovered) }
+    }
+  }, [recoverMissingHostTab])
+
   const revealWindow = useCallback(async (tabId: string, signal?: AbortSignal) => {
     /* v8 ignore next -- reveal only runs while a bound Workspace tab is active. */
     if (workspaceId === undefined) return
@@ -376,9 +397,18 @@ export function BrowserPanel({
   }, [actions, browserList, workspaceId])
 
   const handleNavigate = useCallback(async () => {
-    /* v8 ignore next 2 -- navigation chrome disables without a bound tab or empty URL. */
-    if (workspaceId === undefined || selectedTabId === undefined) return
-    const url = normalizeBrowserNavigateUrl(addressDraft)
+    /* v8 ignore next -- navigation chrome disables without a bound Workspace. */
+    if (workspaceId === undefined) return
+    const draft = pendingNavigateUrlRef.current ?? addressDraft
+    if (!hostTabsReady) {
+      pendingNavigateUrlRef.current = normalizeBrowserNavigateUrl(draft) ?? draft
+      return
+    }
+    pendingNavigateUrlRef.current = undefined
+    const tabId = selectedTabIdRef.current
+    /* v8 ignore next -- address submit is ignored until a tab is selected. */
+    if (tabId === undefined) return
+    const url = normalizeBrowserNavigateUrl(draft)
     if (url === undefined) {
       actions.setInlineError(workspaceId, t('browser.error.invalidUrl'))
       return
@@ -388,12 +418,15 @@ export function BrowserPanel({
       setNavigating(true)
       actions.setInlineError(workspaceId, undefined)
       actions.setNavError(workspaceId, undefined)
-      const metadata = await browserNavigate(workspaceId, selectedTabId, url, ac.signal)
+      const { tabId: liveTabId, value: metadata } = await runHostTabCall(
+        tabId,
+        liveId => browserNavigate(workspaceId, liveId, url, ac.signal),
+      )
       /* v8 ignore next -- superseded navigate calls abort before settlement. */
       if (ac.signal.aborted) return
       actions.updateTabMetadata(
         workspaceId,
-        selectedTabId,
+        liveTabId,
         metadata.url,
         metadata.title,
         metadata.canGoBack,
@@ -403,13 +436,117 @@ export function BrowserPanel({
     } catch (error: unknown) {
       /* v8 ignore next -- superseded navigate calls abort before settlement. */
       if (ac.signal.aborted) return
-      navRetryRef.current = () => { void handleNavigate() }
+      navRetryRef.current = () => { void handleNavigateRef.current() }
       reportBrowserFailure(actions, workspaceId, error, 'nav')
     } finally {
       /* v8 ignore next -- aborted navigations leave navigating state to the replacement call. */
       if (!ac.signal.aborted) setNavigating(false)
     }
-  }, [actions, addressDraft, browserNavigate, noteExternalVisit, selectedTabId, t, workspaceId])
+  }, [
+    actions, addressDraft, browserNavigate, hostTabsReady, noteExternalVisit, runHostTabCall, t,
+    workspaceId,
+  ])
+
+  const selectEmbeddedTab = useCallback(async (
+    boundWorkspaceId: WorkspaceId,
+    tabId: string,
+    signal: AbortSignal,
+  ) => {
+    actions.setSelectedTab(boundWorkspaceId, tabId)
+    await browserSelectTab(boundWorkspaceId, tabId, signal)
+  }, [actions, browserSelectTab])
+
+  const openEmbeddedSessionUrl = useCallback(async (rawUrl: string) => {
+    if (workspaceId === undefined) {
+      revealBrowserSegment()
+      return
+    }
+    if (!hostTabsReady) {
+      pendingEmbeddedUrlRef.current = rawUrl
+      revealBrowserSegment()
+      return
+    }
+    pendingEmbeddedUrlRef.current = undefined
+    const selected = selectedTabIdRef.current === undefined
+      ? undefined
+      : tabsRef.current.find(tab => tab.tabId === selectedTabIdRef.current)
+    const plan = planEmbeddedBrowserOpen(rawUrl, selected)
+    if (plan.kind === 'none') {
+      revealBrowserSegment()
+      return
+    }
+    const ac = new AbortController()
+    try {
+      actions.setInlineError(workspaceId, undefined)
+      actions.setNavError(workspaceId, undefined)
+      if (plan.kind === 'navigate') {
+        setNavigating(true)
+        const { tabId: liveTabId, value: metadata } = await runHostTabCall(
+          plan.tabId,
+          liveId => browserNavigate(workspaceId, liveId, plan.url, ac.signal),
+        )
+        /* v8 ignore next -- superseded navigate calls abort before settlement. */
+        if (ac.signal.aborted) return
+        actions.updateTabMetadata(
+          workspaceId,
+          liveTabId,
+          metadata.url,
+          metadata.title,
+          metadata.canGoBack,
+          metadata.canGoForward,
+        )
+        noteExternalVisit(metadata.url)
+        await selectEmbeddedTab(workspaceId, liveTabId, ac.signal)
+        revealBrowserSegment()
+        return
+      }
+      actions.setCreating(workspaceId, true)
+      const created = await browserCreateTab(workspaceId, plan.url, ac.signal)
+      /* v8 ignore next -- superseded create calls abort before settlement. */
+      if (ac.signal.aborted) return
+      actions.upsertTab(workspaceId, {
+        tabId: created.tabId,
+        url: plan.url,
+        title: '',
+        canGoBack: false,
+        canGoForward: false,
+      })
+      await selectEmbeddedTab(workspaceId, created.tabId, ac.signal)
+      noteExternalVisit(plan.url)
+      revealBrowserSegment()
+    } catch (error: unknown) {
+      /* v8 ignore next -- abort means a superseded open. */
+      if (ac.signal.aborted) return
+      reportBrowserFailure(actions, workspaceId, error, plan.kind === 'navigate' ? 'nav' : undefined)
+      revealBrowserSegment()
+    } finally {
+      if (!ac.signal.aborted) {
+        setNavigating(false)
+        actions.setCreating(workspaceId, false)
+      }
+    }
+  }, [
+    actions, browserCreateTab, browserNavigate, hostTabsReady, noteExternalVisit, revealBrowserSegment,
+    runHostTabCall, selectEmbeddedTab, workspaceId,
+  ])
+  const openEmbeddedSessionUrlRef = useRef(openEmbeddedSessionUrl)
+  openEmbeddedSessionUrlRef.current = openEmbeddedSessionUrl
+  const handleNavigateRef = useRef(handleNavigate)
+  handleNavigateRef.current = handleNavigate
+
+  useEffect(() => subscribeDesktopEmbeddedBrowserOpen((url) => {
+    void openEmbeddedSessionUrlRef.current(url)
+  }), [])
+
+  useEffect(() => {
+    if (!hostTabsReady) return
+    if (pendingNavigateUrlRef.current !== undefined) void handleNavigate()
+    const embedded = pendingEmbeddedUrlRef.current
+    if (embedded !== undefined) {
+      pendingEmbeddedUrlRef.current = undefined
+      void openEmbeddedSessionUrl(embedded)
+    }
+  }, [handleNavigate, hostTabsReady, openEmbeddedSessionUrl])
 
   const handleSelectTab = useCallback(async (tabId: string) => {
     /* v8 ignore next -- tab rows only render after a bound Workspace bootstrap. */
@@ -498,6 +635,11 @@ export function BrowserPanel({
 
   const openExternalBrowser = useCallback(() => {
     if (externalUrl === undefined) return
+    const desktopOpen = openDesktopExternalUrl(externalUrl)
+    if (desktopOpen !== undefined) {
+      void desktopOpen
+      return
+    }
     window.open(externalUrl, '_blank', 'noopener,noreferrer')
   }, [externalUrl])
 
@@ -555,19 +697,20 @@ export function BrowserPanel({
   }, [actions, applyPageMetadata, browserReload, noteExternalVisit, recoverMissingHostTab, selectedTabId, workspaceId])
 
   const runHistoryNav = useCallback((
-    run: () => Promise<BrowserPageMetadata>,
+    run: (tabId: string) => Promise<BrowserPageMetadata>,
   ) => {
+    const tabId = selectedTabIdRef.current
     /* v8 ignore next -- history nav buttons disable without a selected tab. */
-    if (workspaceId === undefined || selectedTabId === undefined) return
+    if (workspaceId === undefined || tabId === undefined) return
     actions.setNavError(workspaceId, undefined)
     navRetryRef.current = () => { runHistoryNav(run) }
-    void run().then((metadata) => {
-      applyPageMetadata(selectedTabId, metadata)
+    void runHostTabCall(tabId, run).then(({ tabId: liveTabId, value: metadata }) => {
+      applyPageMetadata(liveTabId, metadata)
       noteExternalVisit(metadata.url)
     }).catch((error: unknown) => {
       reportBrowserFailure(actions, workspaceId, error, 'nav')
     })
-  }, [actions, applyPageMetadata, noteExternalVisit, selectedTabId, workspaceId])
+  }, [actions, applyPageMetadata, noteExternalVisit, runHostTabCall, workspaceId])
 
   const runSoftReload = useCallback(() => {
     /* v8 ignore next -- reload disables without a selected tab. */
@@ -664,10 +807,42 @@ export function BrowserPanel({
     return () => { ac.abort() }
   }, [actions, hostTabsReady, isDesktopOccupant, revealAttempt, revealWindow, selectedTabId, visible, workspaceId])
 
+  const chromeMenuOpen = overflowMenuOpen || tabMenu !== null
+
+  useLayoutEffect(() => {
+    if (!isDesktopOccupant || !chromeMenuOpen) {
+      setChromeMenuOverlay(null)
+      return
+    }
+    const readOverlay = (): void => {
+      const menu = document.querySelector('[role="menu"]')
+      if (!(menu instanceof HTMLElement)) return
+      const rect = menu.getBoundingClientRect()
+      if (rect.height <= 0) return
+      setChromeMenuOverlay({
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+      })
+    }
+    readOverlay()
+    const menu = document.querySelector('[role="menu"]')
+    if (menu === null || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => { readOverlay() })
+    observer.observe(menu)
+    return () => { observer.disconnect() }
+  }, [chromeMenuOpen, isDesktopOccupant])
+
   useEffect(() => {
     if (!isDesktopOccupant) return
     const publish = (): void => {
-      reportBrowserOccupantBounds(desktopReporter, occupantRef.current, visible)
+      reportBrowserOccupantBounds(
+        desktopReporter,
+        occupantRef.current,
+        visible,
+        chromeMenuOverlay,
+      )
     }
     if (!visible) {
       publish()
@@ -680,7 +855,8 @@ export function BrowserPanel({
     observer.observe(element)
     return () => { observer.disconnect() }
   }, [
-    desktopReporter, hostTabsReady, isDesktopOccupant, revealAttempt, selectedTabId, visible,
+    chromeMenuOverlay, desktopReporter, hostTabsReady, isDesktopOccupant,
+    revealAttempt, selectedTabId, visible,
   ])
 
   useEffect(() => {
@@ -880,7 +1056,7 @@ export function BrowserPanel({
             onClick={() => {
               /* v8 ignore next -- nav buttons disable without a selected tab. */
               if (workspaceId === undefined || selectedTabId === undefined) return
-              runHistoryNav(() => browserGoBack(workspaceId, selectedTabId))
+              runHistoryNav(id => browserGoBack(workspaceId, id))
             }}
           >
             <IconChevronLeftOutline14 size={14} />
@@ -895,7 +1071,7 @@ export function BrowserPanel({
             onClick={() => {
               /* v8 ignore next -- nav buttons disable without a selected tab. */
               if (workspaceId === undefined || selectedTabId === undefined) return
-              runHistoryNav(() => browserGoForward(workspaceId, selectedTabId))
+              runHistoryNav(id => browserGoForward(workspaceId, id))
             }}
           >
             <IconChevronRightOutline14 size={14} />

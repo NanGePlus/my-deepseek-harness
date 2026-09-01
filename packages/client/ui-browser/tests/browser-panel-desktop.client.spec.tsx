@@ -79,10 +79,11 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
   }
 }
 
-function stubDesktop(reportBounds = vi.fn()) {
+function stubDesktop(reportBounds = vi.fn(), extra: Record<string, unknown> = {}) {
   vi.stubGlobal('dsh', {
     delivery: 'desktop',
     reportBrowserOccupantBounds: reportBounds,
+    ...extra,
   })
   return reportBounds
 }
@@ -125,6 +126,7 @@ function mount(over: MountOverrides = {}) {
     browserReload,
     browserShowWindow,
     ...over,
+    revealBrowserSegment: over.revealBrowserSegment ?? vi.fn(),
   }
   const view = render(<BrowserPanel {...props} />)
   return {
@@ -156,6 +158,162 @@ describe('BrowserPanel desktop occupant', () => {
     expect(screen.queryByText('显示窗口')).toBeNull()
     expect(screen.queryByText('在本机浏览器窗口中查看')).toBeNull()
     expect(browserShowWindow).not.toHaveBeenCalled()
+  })
+
+  it('routes a session http URL into the blank toolbox tab', async () => {
+    const listeners: Array<(url: string) => void> = []
+    stubDesktop(vi.fn(), {
+      onOpenEmbeddedBrowser: (listener: (url: string) => void) => {
+        listeners.push(listener)
+        return () => {}
+      },
+    })
+    const revealBrowserSegment = vi.fn()
+    const { browserCreateTab, browserNavigate, browserSelectTab, panelStore } = mount({
+      revealBrowserSegment,
+      browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })),
+    })
+    await waitFor(() => { expect(listeners).toHaveLength(1) })
+    listeners[0]!('https://example.com/from-session')
+    await waitFor(() => {
+      expect(revealBrowserSegment).toHaveBeenCalledTimes(1)
+      expect(browserNavigate).toHaveBeenCalledWith(
+        WID,
+        'live-1',
+        'https://example.com/from-session',
+        expect.any(AbortSignal),
+      )
+    })
+    await waitFor(() => {
+      expect(browserSelectTab).toHaveBeenCalledWith(WID, 'live-1', expect.any(AbortSignal))
+    })
+    expect(panelStore.getSnapshot().byWorkspace[WID]?.selectedTabId).toBe('live-1')
+    expect(browserCreateTab).not.toHaveBeenCalled()
+  })
+
+  it('defers a session http URL until Host tabs are ready', async () => {
+    const listeners: Array<(url: string) => void> = []
+    stubDesktop(vi.fn(), {
+      onOpenEmbeddedBrowser: (listener: (url: string) => void) => {
+        listeners.push(listener)
+        return () => {}
+      },
+    })
+    let resolveList!: (value: { tabs: typeof BLANK_TAB[] }) => void
+    const browserList = vi.fn(() => new Promise<{ tabs: typeof BLANK_TAB[] }>((resolve) => {
+      resolveList = resolve
+    }))
+    const revealBrowserSegment = vi.fn()
+    const { browserNavigate } = mount({ revealBrowserSegment, browserList })
+    await waitFor(() => { expect(listeners).toHaveLength(1) })
+    listeners[0]!('https://example.com/from-session')
+    expect(browserNavigate).not.toHaveBeenCalled()
+    resolveList({ tabs: [BLANK_TAB] })
+    await waitFor(() => {
+      expect(browserNavigate).toHaveBeenCalledWith(
+        WID,
+        'live-1',
+        'https://example.com/from-session',
+        expect.any(AbortSignal),
+      )
+    })
+    expect(revealBrowserSegment).toHaveBeenCalled()
+  })
+
+  it('ignores non-http popups after revealing the browser segment', async () => {
+    const listeners: Array<(url: string) => void> = []
+    stubDesktop(vi.fn(), {
+      onOpenEmbeddedBrowser: (listener: (url: string) => void) => {
+        listeners.push(listener)
+        return () => {}
+      },
+    })
+    const revealBrowserSegment = vi.fn()
+    const { browserCreateTab, browserNavigate } = mount({
+      revealBrowserSegment,
+      browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })),
+    })
+    await waitFor(() => { expect(listeners).toHaveLength(1) })
+    listeners[0]!('javascript:alert(1)')
+    await waitFor(() => { expect(revealBrowserSegment).toHaveBeenCalledTimes(1) })
+    expect(browserNavigate).not.toHaveBeenCalled()
+    expect(browserCreateTab).not.toHaveBeenCalled()
+  })
+
+  it('reveals the browser segment when no workspace is bound', async () => {
+    const listeners: Array<(url: string) => void> = []
+    stubDesktop(vi.fn(), {
+      onOpenEmbeddedBrowser: (listener: (url: string) => void) => {
+        listeners.push(listener)
+        return () => {}
+      },
+    })
+    const revealBrowserSegment = vi.fn()
+    const { browserCreateTab } = mount({
+      revealBrowserSegment,
+      noCurrentSession: true,
+      items: [],
+    })
+    await waitFor(() => { expect(listeners).toHaveLength(1) })
+    listeners[0]!('https://example.com/')
+    await waitFor(() => { expect(revealBrowserSegment).toHaveBeenCalledTimes(1) })
+    expect(browserCreateTab).not.toHaveBeenCalled()
+  })
+
+  it('creates a toolbox tab when the selected tab is not blank', async () => {
+    const listeners: Array<(url: string) => void> = []
+    stubDesktop(vi.fn(), {
+      onOpenEmbeddedBrowser: (listener: (url: string) => void) => {
+        listeners.push(listener)
+        return () => {}
+      },
+    })
+    const { browserCreateTab, browserSelectTab, panelStore } = mount({
+      revealBrowserSegment: vi.fn(),
+      browserList: vi.fn(async () => ({
+        tabs: [{
+          tabId: 'live-1',
+          url: 'https://example.com/',
+          title: 'Example',
+          selected: true,
+          canGoBack: false,
+          canGoForward: false,
+        }],
+      })),
+    })
+    await waitFor(() => { expect(listeners).toHaveLength(1) })
+    listeners[0]!('http://127.0.0.1:3080/')
+    await waitFor(() => {
+      expect(browserCreateTab).toHaveBeenCalledWith(WID, 'http://127.0.0.1:3080/', expect.any(AbortSignal))
+    })
+    await waitFor(() => {
+      expect(browserSelectTab).toHaveBeenCalledWith(WID, 'tab-1', expect.any(AbortSignal))
+    })
+    expect(panelStore.getSnapshot().byWorkspace[WID]?.selectedTabId).toBe('tab-1')
+  })
+
+  it('toolbar 在外部浏览器打开 uses Main shell.openExternal, not window.open', async () => {
+    const openExternalUrl = vi.fn(async () => ({ opened: true }))
+    stubDesktop(vi.fn(), { openExternalUrl })
+    const originalOpen = window.open
+    window.open = vi.fn() as typeof window.open
+    mount({
+      browserList: vi.fn(async () => ({
+        tabs: [{
+          tabId: 'live-1',
+          url: 'https://example.com/',
+          title: 'Example',
+          selected: true,
+          canGoBack: false,
+          canGoForward: false,
+        }],
+      })),
+    })
+    await waitFor(() => { expect(screen.getByLabelText('在外部浏览器打开')).toBeTruthy() })
+    fireEvent.click(screen.getByLabelText('在外部浏览器打开'))
+    expect(openExternalUrl).toHaveBeenCalledWith('https://example.com/')
+    expect(window.open).not.toHaveBeenCalled()
+    window.open = originalOpen
   })
 
   it('renders #browser-occupant and reports screen bounds when visible', async () => {
@@ -218,6 +376,38 @@ describe('BrowserPanel desktop occupant', () => {
     expect(browserCloseTab).not.toHaveBeenCalled()
   })
 
+  it('overflow menu open: insets BrowserView below the menu and keeps the page attached', async () => {
+    const reportBounds = stubDesktop()
+    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: function getBoundingClientRect(this: HTMLElement) {
+        if (this.getAttribute('role') === 'menu') {
+          return { x: 400, y: 100, width: 218, height: 180, top: 100, left: 400, right: 618, bottom: 280 }
+        }
+        if (this.id === 'browser-occupant') {
+          return { x: 12, y: 112, width: 640, height: 480, top: 112, left: 12, right: 652, bottom: 592 }
+        }
+        return { x: 600, y: 72, width: 24, height: 24, top: 72, left: 600, right: 624, bottom: 96 }
+      },
+    })
+    mount({ browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })) })
+    await waitFor(() => {
+      expect(reportBounds).toHaveBeenCalledWith({
+        x: 12, y: 112, width: 640, height: 480, visible: true,
+      })
+    })
+    reportBounds.mockClear()
+    fireEvent.click(screen.getByLabelText('更多操作'))
+    await waitFor(() => {
+      expect(screen.getByRole('menuitem', { name: 'Hard Reload' })).toBeTruthy()
+    })
+    await waitFor(() => {
+      expect(reportBounds).toHaveBeenCalledWith({
+        x: 12, y: 280, width: 640, height: 312, visible: true,
+      })
+    })
+  })
+
   it('empty-unbound: shows 无法使用浏览器 without tab chrome on desktop', () => {
     stubDesktop()
     mount({ noCurrentSession: true, items: [workspace({ sessionIds: [] })] })
@@ -275,6 +465,145 @@ describe('BrowserPanel desktop occupant', () => {
     expect(screen.getByText('无法加载此页')).toBeTruthy()
     expect(document.getElementById('browser-occupant')).toBeTruthy()
     expect(screen.queryByText('显示窗口')).toBeNull()
+  })
+
+  it('address-bar submit recovers when Host no longer has the persisted tab', async () => {
+    stubDesktop()
+    const staleTab = {
+      tabId: 'stale-1',
+      url: 'http://127.0.0.1:3080/',
+      title: 'Host',
+      selected: true,
+      canGoBack: false,
+      canGoForward: false,
+    }
+    const liveTab = {
+      tabId: 'live-1',
+      url: 'http://127.0.0.1:3080/',
+      title: 'Host',
+      selected: true,
+      canGoBack: false,
+      canGoForward: false,
+    }
+    const tabNotFound = new DirectoryBrowseError({
+      code: 'browser-tab-not-found',
+      message: 'browser tab not found: stale-1',
+      details: { workspaceId: WID, tabId: 'stale-1' },
+    })
+    const browserList = vi.fn()
+      .mockResolvedValueOnce({ tabs: [staleTab] })
+      .mockResolvedValue({ tabs: [liveTab] })
+    const browserNavigate = vi.fn()
+      .mockRejectedValueOnce(tabNotFound)
+      .mockResolvedValue({
+        url: 'http://127.0.0.1:3080/',
+        title: 'Host',
+        canGoBack: false,
+        canGoForward: false,
+      })
+    mount({ browserList, browserNavigate })
+    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
+    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
+    await waitFor(() => {
+      expect(browserNavigate).toHaveBeenCalledWith(
+        WID, 'live-1', 'http://127.0.0.1:3080/', expect.any(AbortSignal),
+      )
+    })
+    expect(screen.queryByText('browser tab not found: stale-1')).toBeNull()
+  })
+
+  it('history back recovers when Host no longer has the persisted tab', async () => {
+    stubDesktop()
+    const staleTab = {
+      tabId: 'stale-1',
+      url: 'http://127.0.0.1:3080/',
+      title: 'Host',
+      selected: true,
+      canGoBack: true,
+      canGoForward: false,
+    }
+    const liveTab = {
+      tabId: 'live-1',
+      url: 'http://127.0.0.1:3080/',
+      title: 'Host',
+      selected: true,
+      canGoBack: true,
+      canGoForward: false,
+    }
+    const tabNotFound = new DirectoryBrowseError({
+      code: 'browser-tab-not-found',
+      message: 'browser tab not found: stale-1',
+      details: { workspaceId: WID, tabId: 'stale-1' },
+    })
+    const browserList = vi.fn()
+      .mockResolvedValueOnce({ tabs: [staleTab] })
+      .mockResolvedValue({ tabs: [liveTab] })
+    const browserGoBack = vi.fn()
+      .mockRejectedValueOnce(tabNotFound)
+      .mockResolvedValue({
+        url: 'http://127.0.0.1:3080/',
+        title: 'Host',
+        canGoBack: false,
+        canGoForward: true,
+      })
+    mount({ browserList, browserGoBack })
+    await waitFor(() => { expect(screen.getByLabelText('后退')).toBeTruthy() })
+    fireEvent.click(screen.getByLabelText('后退'))
+    await waitFor(() => {
+      expect(browserGoBack).toHaveBeenCalledWith(WID, 'live-1')
+    })
+    expect(screen.queryByText('browser tab not found: stale-1')).toBeNull()
+  })
+
+  it('defers address-bar submit until Host tabs are remapped after restart', async () => {
+    stubDesktop()
+    const panelStore = createBrowserPanelStore().create()
+    panelStore.actions.setWorkspaceTabs(WID, [{
+      tabId: 'stale-1',
+      url: 'http://127.0.0.1:3080/',
+      title: 'Host',
+      canGoBack: false,
+      canGoForward: false,
+    }], 'stale-1')
+    let resolveList!: (value: { tabs: typeof BLANK_TAB[] }) => void
+    const browserList = vi.fn()
+      .mockImplementationOnce(() => new Promise<{ tabs: typeof BLANK_TAB[] }>((resolve) => {
+        resolveList = resolve
+      }))
+      .mockResolvedValue({
+        tabs: [{
+          tabId: 'live-1',
+          url: 'http://127.0.0.1:3080/',
+          title: 'Host',
+          selected: true,
+          canGoBack: false,
+          canGoForward: false,
+        }],
+      })
+    const browserCreateTab = vi.fn(async () => ({ tabId: 'live-1' }))
+    const browserNavigate = vi.fn(async (_wid, _tabId, url: string) => ({
+      url, title: 'Host', canGoBack: false, canGoForward: false,
+    }))
+    mount({
+      useStore: hookOf(panelStore),
+      actions: panelStore.actions,
+      browserList,
+      browserCreateTab,
+      browserNavigate,
+    })
+    await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
+    fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
+    expect(browserNavigate).not.toHaveBeenCalled()
+    resolveList({ tabs: [] })
+    await waitFor(() => {
+      expect(browserNavigate).toHaveBeenCalledWith(
+        WID, 'live-1', 'http://127.0.0.1:3080/', expect.any(AbortSignal),
+      )
+    })
+    expect(browserNavigate).not.toHaveBeenCalledWith(
+      WID, 'stale-1', expect.any(String), expect.any(AbortSignal),
+    )
+    expect(screen.queryByText(/browser tab not found/)).toBeNull()
   })
 
   it('unavailable: bootstrap failure shows retry card without show-window chrome', async () => {

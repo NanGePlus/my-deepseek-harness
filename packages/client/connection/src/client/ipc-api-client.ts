@@ -1,12 +1,22 @@
 /** Desktop IPC carrier: uplink invoke + Main→Renderer downlink event streams. */
 
-import type { ApiProxy, HostFrame, MuxFrame, RpcRequest, ServerRequest, WatchPathFrame } from './api.ts'
+import type { ApiProxy, BrowserScreencastFrame, HostFrame, MuxFrame, RpcRequest, ServerRequest, TerminalStreamFrame, WatchPathFrame } from './api.ts'
 import { AbstractApiClient } from './api.ts'
 import type { DesktopIpcBridge } from './ipc-bridge.ts'
 import { hostFrameSchema, muxFrameSchema } from '@deepseek-ai/dsh-host-apiproxy/api/events.schema'
-import { watchPathFrameSchema } from '@deepseek-ai/dsh-host-apiproxy/api/host.schema'
+import {
+  browserScreencastFrameSchema,
+  terminalStreamFrameSchema,
+  watchPathFrameSchema,
+} from '@deepseek-ai/dsh-host-apiproxy/api/host.schema'
 import { serverRequestSchema } from '@deepseek-ai/dsh-host-apiproxy/api/rpc.schema'
-import { HOST_EVENTS_PATH, MUX_EVENTS_PATH, WATCH_PATH_PATH } from '../api-path.ts'
+import {
+  BROWSER_WATCH_SCREENCAST_PATH,
+  HOST_EVENTS_PATH,
+  MUX_EVENTS_PATH,
+  TERMINAL_STREAM_PATH,
+  WATCH_PATH_PATH,
+} from '../api-path.ts'
 import { randomUuid } from './random-uuid.ts'
 
 type StreamItem<F> = { kind: 'frame'; envelope: RpcRequest<F> } | { kind: 'end' }
@@ -78,6 +88,29 @@ export class IpcApiClient extends AbstractApiClient {
   ): AsyncIterable<RpcRequest<WatchPathFrame>> {
     const query = new URLSearchParams({ workspaceId: payload.workspaceId, path: payload.path })
     return this.readIpcStream(`${WATCH_PATH_PATH}?${query.toString()}`, signal, watchPathFrameSchema, onOpen)
+  }
+
+  protected override openTerminalStream(
+    payload: { workspaceId: Parameters<ApiProxy['host']['terminalStream']>[0]['payload']['workspaceId']; sessionId: string },
+    signal: AbortSignal,
+    onOpen?: () => void,
+  ): AsyncIterable<RpcRequest<TerminalStreamFrame>> {
+    const query = new URLSearchParams({ workspaceId: payload.workspaceId, sessionId: payload.sessionId })
+    return this.readIpcStream(`${TERMINAL_STREAM_PATH}?${query.toString()}`, signal, terminalStreamFrameSchema, onOpen)
+  }
+
+  protected override openBrowserWatchScreencast(
+    payload: { workspaceId: Parameters<ApiProxy['host']['browserWatchScreencast']>[0]['payload']['workspaceId']; tabId: string },
+    signal: AbortSignal,
+    onOpen?: () => void,
+  ): AsyncIterable<RpcRequest<BrowserScreencastFrame>> {
+    const query = new URLSearchParams({ workspaceId: payload.workspaceId, tabId: payload.tabId })
+    return this.readIpcStream(
+      `${BROWSER_WATCH_SCREENCAST_PATH}?${query.toString()}`,
+      signal,
+      browserScreencastFrameSchema,
+      onOpen,
+    )
   }
 
   private async *readIpcStream<F>(

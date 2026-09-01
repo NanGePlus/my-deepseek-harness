@@ -90,6 +90,14 @@ async function mounted(config?: { trustedHosts?: string[] }): Promise<{
 }
 
 describe('connection node half', () => {
+  it('declares no required inject so desktop Host can load the dsh.client row without webServer', async () => {
+    expect(inject).toEqual([])
+    const ctx = new Context()
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    await fiber.dispose()
+  })
+
   it('fails loud when the carrier cap cannot hold the configured image batch', () => {
     const ctx = new Context()
     const routes: WebRoute[] = []

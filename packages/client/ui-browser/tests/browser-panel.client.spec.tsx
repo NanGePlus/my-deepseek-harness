@@ -105,6 +105,7 @@ function mount(over: MountOverrides = {}) {
     browserReload,
     browserShowWindow,
     ...over,
+    revealBrowserSegment: over.revealBrowserSegment ?? vi.fn(),
   }
   const view = render(<BrowserPanel {...props} />)
   return {

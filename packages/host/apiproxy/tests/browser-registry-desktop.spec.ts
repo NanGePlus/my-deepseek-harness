@@ -53,6 +53,8 @@ function desktopRegistry(page: Page, surface: Partial<DesktopBrowserSurface> = {
     cdpEndpoint: () => 'http://127.0.0.1:9222',
     ensureTab: vi.fn(async () => {}),
     pageForTab: async () => page,
+    selectTab: vi.fn(async () => {}),
+    closeTab: vi.fn(async () => {}),
     ...surface,
   }
   return new BrowserRegistry(root, {
@@ -67,16 +69,21 @@ describe('BrowserRegistry desktop CDP seam', () => {
   it('creates, navigates, and snapshots a tab via CDP without bringToFront', async () => {
     const page = createMockPage()
     const ensureTab = vi.fn(async () => {})
-    const registry = desktopRegistry(page, { ensureTab })
+    const selectTab = vi.fn(async () => {})
+    const registry = desktopRegistry(page, { ensureTab, selectTab })
     const workspaceId = 'ws-desktop' as WorkspaceId
 
     const created = await registry.createTab(workspaceId, 'https://example.com')
     expect(created.tabId.length).toBeGreaterThan(0)
     expect(ensureTab).toHaveBeenCalledWith(workspaceId, created.tabId, 'https://example.com')
+    expect(selectTab).toHaveBeenCalledWith(workspaceId, created.tabId)
+    expect(page.goto).not.toHaveBeenCalled()
     expect(page.bringToFront).not.toHaveBeenCalled()
 
+    selectTab.mockClear()
     const metadata = await registry.navigate(workspaceId, created.tabId, 'https://example.org')
     expect(metadata.url).toBe('https://example.org')
+    expect(selectTab).toHaveBeenCalledWith(workspaceId, created.tabId)
     expect(page.bringToFront).not.toHaveBeenCalled()
 
     const snapshot = await registry.snapshot(workspaceId, created.tabId)
@@ -84,12 +91,27 @@ describe('BrowserRegistry desktop CDP seam', () => {
     expect(page.bringToFront).not.toHaveBeenCalled()
   })
 
-  it('no-ops showWindow on desktop delivery', async () => {
+  it('selectTab raises the desktop BrowserView', async () => {
     const page = createMockPage()
-    const registry = desktopRegistry(page)
+    const selectTab = vi.fn(async () => {})
+    const registry = desktopRegistry(page, { selectTab })
+    const workspaceId = 'ws-select' as WorkspaceId
+    const created = await registry.createTab(workspaceId)
+    selectTab.mockClear()
+    await expect(registry.selectTab(workspaceId, created.tabId)).resolves.toEqual({ selected: true })
+    expect(selectTab).toHaveBeenCalledWith(workspaceId, created.tabId)
+    expect(page.bringToFront).not.toHaveBeenCalled()
+  })
+
+  it('showWindow raises the desktop BrowserView without bringToFront', async () => {
+    const page = createMockPage()
+    const selectTab = vi.fn(async () => {})
+    const registry = desktopRegistry(page, { selectTab })
     const workspaceId = 'ws-show' as WorkspaceId
     const created = await registry.createTab(workspaceId)
+    selectTab.mockClear()
     await expect(registry.showWindow(workspaceId, created.tabId)).resolves.toEqual({ shown: true })
+    expect(selectTab).toHaveBeenCalledWith(workspaceId, created.tabId)
     expect(page.bringToFront).not.toHaveBeenCalled()
   })
 
@@ -105,6 +127,19 @@ describe('BrowserRegistry desktop CDP seam', () => {
     await registry.click(workspaceId, created.tabId, 10, 20)
     expect(page.mouse.click).toHaveBeenCalledWith(10, 20)
     expect(ensureTab).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes the desktop BrowserView before Playwright page.close', async () => {
+    const page = createMockPage()
+    const order: string[] = []
+    page.close = vi.fn(async () => { order.push('page') })
+    const closeTab = vi.fn(async () => { order.push('surface') })
+    const registry = desktopRegistry(page, { closeTab })
+    const workspaceId = 'ws-close' as WorkspaceId
+    const created = await registry.createTab(workspaceId)
+    await expect(registry.closeTab(workspaceId, created.tabId)).resolves.toEqual({ closed: true })
+    expect(closeTab).toHaveBeenCalledWith(workspaceId, created.tabId)
+    expect(order).toEqual(['surface', 'page'])
   })
 })
 

@@ -36,6 +36,12 @@ export function createBrowserBoundsHandler(
   return (_event: unknown, payload: unknown): void => {
     const bounds = parseBrowserOccupantBounds(payload)
     if (bounds === undefined) return
-    manager.applyOccupantBounds(bounds)
+    try {
+      manager.applyOccupantBounds(bounds)
+    } catch (error: unknown) {
+      // Occupant ResizeObserver ticks must not take down Main. Electron throws
+      // when addBrowserView runs against a WebContentsView whose native view is gone.
+      console.error('desktop: browser occupant bounds apply failed:', error)
+    }
   }
 }

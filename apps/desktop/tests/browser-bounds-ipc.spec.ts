@@ -52,4 +52,19 @@ describe('browser bounds IPC handler wiring', () => {
     expect(applied).toHaveLength(2)
     expect(applied[1]).toMatchObject({ visible: false })
   })
+
+  it('does not throw when applyOccupantBounds throws', () => {
+    const handler = createBrowserBoundsHandler({
+      applyOccupantBounds: () => {
+        throw new Error("Can't add a destroyed child view to a parent view")
+      },
+    } as never)
+    expect(() => handler({}, {
+      x: 10,
+      y: 20,
+      width: 400,
+      height: 300,
+      visible: true,
+    })).not.toThrow()
+  })
 })

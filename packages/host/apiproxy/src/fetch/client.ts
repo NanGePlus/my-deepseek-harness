@@ -669,14 +669,27 @@ export abstract class AbstractApiClient implements IApiClient {
     watchPath: (payload, signal, onOpen) => this.openWatchPath(payload, signal, onOpen),
     terminalStream: (payload, signal, onOpen) => this.openTerminalStream(payload, signal, onOpen),
     browserList: (payload, signal) => this.callUnary('host.browserList', payload, signal),
-    browserCreateTab: (payload, signal) => this.callUnary('host.browserCreateTab', payload, signal),
+    // Page load is user-paced (external sites, TLS, second document). The 30s
+    // unary deadline would abort with Chromium's "signal timed out" while the
+    // guest document is already visible. Caller/connection aborts remain.
+    browserCreateTab: (payload, signal) => this.callUnary(
+      'host.browserCreateTab', payload, signal, 'caller-signal-only',
+    ),
     browserCloseTab: (payload, signal) => this.callUnary('host.browserCloseTab', payload, signal),
     browserSelectTab: (payload, signal) => this.callUnary('host.browserSelectTab', payload, signal),
     browserShowWindow: (payload, signal) => this.callUnary('host.browserShowWindow', payload, signal),
-    browserNavigate: (payload, signal) => this.callUnary('host.browserNavigate', payload, signal),
-    browserGoBack: (payload, signal) => this.callUnary('host.browserGoBack', payload, signal),
-    browserGoForward: (payload, signal) => this.callUnary('host.browserGoForward', payload, signal),
-    browserReload: (payload, signal) => this.callUnary('host.browserReload', payload, signal),
+    browserNavigate: (payload, signal) => this.callUnary(
+      'host.browserNavigate', payload, signal, 'caller-signal-only',
+    ),
+    browserGoBack: (payload, signal) => this.callUnary(
+      'host.browserGoBack', payload, signal, 'caller-signal-only',
+    ),
+    browserGoForward: (payload, signal) => this.callUnary(
+      'host.browserGoForward', payload, signal, 'caller-signal-only',
+    ),
+    browserReload: (payload, signal) => this.callUnary(
+      'host.browserReload', payload, signal, 'caller-signal-only',
+    ),
     browserSnapshot: (payload, signal) => this.callUnary('host.browserSnapshot', payload, signal),
     browserClick: (payload, signal) => this.callUnary('host.browserClick', payload, signal),
     browserType: (payload, signal) => this.callUnary('host.browserType', payload, signal),

@@ -15,6 +15,7 @@ import {
   nativeImage,
   protocol,
   screen,
+  shell,
 } from 'electron'
 import type { ApiProxy } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { setDesktopBrowserSurface } from '@deepseek-ai/dsh-host-apiproxy'
@@ -33,7 +34,10 @@ import {
   IPC_EXIT_GUARD_RESULT,
   IPC_EXIT_REQUEST,
   IPC_FOCUS_SETTINGS,
+  IPC_OPEN_EMBEDDED_BROWSER,
+  IPC_OPEN_EXTERNAL_URL,
 } from './ipc-contract.ts'
+import { decideDesktopWindowOpen } from './window-open-policy.ts'
 import {
   DSH_APP_AUTHORITY,
   DSH_PROTOCOL_SCHEME,
@@ -228,7 +232,7 @@ function createMainWindow(): void {
     ...bounds,
     icon: iconPath,
     webPreferences: {
-      preload: fileURLToPath(new URL('./preload.js', import.meta.url)),
+      preload: join(repoRoot, 'apps/desktop/lib/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -256,6 +260,16 @@ async function retryHostBoot(): Promise<{ ok: boolean; error?: string }> {
   }
 }
 
+app.on('web-contents-created', (_event, contents) => {
+  contents.setWindowOpenHandler(({ url }) => {
+    const decision = decideDesktopWindowOpen(url)
+    if ('embedUrl' in decision) {
+      mainWindow?.webContents.send(IPC_OPEN_EMBEDDED_BROWSER, decision.embedUrl)
+    }
+    return { action: 'deny' }
+  })
+})
+
 if (!installSingleInstanceLock({
   requestSingleInstanceLock: () => app.requestSingleInstanceLock(),
   onSecondInstance: (listener) => { app.on('second-instance', listener) },
@@ -281,6 +295,13 @@ if (!installSingleInstanceLock({
 }
 
 ipcMain.handle('dsh:host-boot-retry', () => retryHostBoot())
+ipcMain.handle(IPC_OPEN_EXTERNAL_URL, async (_event, url: unknown) => {
+  if (typeof url !== 'string') return { opened: false }
+  const decision = decideDesktopWindowOpen(url)
+  if (!('embedUrl' in decision)) return { opened: false }
+  await shell.openExternal(decision.embedUrl)
+  return { opened: true }
+})
 ipcMain.on(IPC_EXIT_GUARD_RESULT, (_event, result: { proceed?: boolean }) => {
   exitGuard.handleExitGuardResult({ proceed: result.proceed === true })
 })

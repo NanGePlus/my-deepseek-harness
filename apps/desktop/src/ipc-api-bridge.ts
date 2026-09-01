@@ -6,11 +6,9 @@
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
 import { ipcMain } from 'electron'
-import type { RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { ApiProxy, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { RpcId, toFetchHandler } from '@deepseek-ai/dsh-host-apiproxy'
-import { hostWatchPathQuerySchema } from '@deepseek-ai/dsh-host-apiproxy/api/host.schema'
 import {
-  HOST_EVENTS_PATH,
   IPC_API_FETCH,
   IPC_API_FETCH_CANCEL,
   IPC_API_STREAM_CLOSE,
@@ -18,14 +16,14 @@ import {
   IPC_API_STREAM_FRAME,
   IPC_API_STREAM_OPEN,
   IPC_API_STREAM_OPENED,
-  MUX_EVENTS_PATH,
-  WATCH_PATH_PATH,
 } from './ipc-contract.ts'
+import { openApiProxyDownlink } from './ipc-downlink.ts'
 
-type ApiProxy = import('@deepseek-ai/dsh-host-apiproxy/api').ApiProxy
 type DownlinkFrame = import('@deepseek-ai/dsh-host-apiproxy/api').MuxFrame
   | import('@deepseek-ai/dsh-host-apiproxy/api').HostFrame
   | import('@deepseek-ai/dsh-host-apiproxy/api').WatchPathFrame
+  | import('@deepseek-ai/dsh-host-apiproxy/api').TerminalStreamFrame
+  | import('@deepseek-ai/dsh-host-apiproxy/api').BrowserScreencastFrame
 
 function toServerRequestWire(frame: RpcRequest<DownlinkFrame>) {
   return {
@@ -104,7 +102,7 @@ async function pumpDownlink(
 ): Promise<void> {
   const signal = abort.signal
   try {
-    const frames = openDownlink(api, path, signal)
+    const frames = openApiProxyDownlink(api, path, signal)
     sender.send(IPC_API_STREAM_OPENED, streamId)
     for await (const frame of frames) {
       if (signal.aborted) return
@@ -125,20 +123,4 @@ async function pumpDownlink(
     sender.send(IPC_API_STREAM_END, streamId)
     abort.abort()
   }
-}
-
-function openDownlink(api: ApiProxy, path: string, signal: AbortSignal) {
-  const url = new URL(path, 'http://dsh.internal')
-  if (url.pathname === MUX_EVENTS_PATH) {
-    return api.events.mux({ rpcId: RpcId(randomUUID()), payload: {} }, signal)
-  }
-  if (url.pathname === HOST_EVENTS_PATH) {
-    return api.events.host({ rpcId: RpcId(randomUUID()), payload: {} }, signal)
-  }
-  if (url.pathname === WATCH_PATH_PATH) {
-    const parsed = hostWatchPathQuerySchema.safeParse(Object.fromEntries(url.searchParams))
-    if (!parsed.success) throw new Error('missing or invalid workspaceId or path query parameter')
-    return api.host.watchPath({ rpcId: RpcId(randomUUID()), payload: parsed.data }, signal)
-  }
-  throw new Error(`unsupported IPC downlink path: ${url.pathname}`)
 }
