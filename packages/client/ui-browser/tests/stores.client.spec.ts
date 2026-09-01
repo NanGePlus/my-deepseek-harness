@@ -141,6 +141,17 @@ describe('browser panel store', () => {
     expect(state.tabs[1]?.title).toBe('B')
   })
 
+  it('ignores Chromium net-error URLs when syncing tab metadata', () => {
+    const store = createBrowserPanelStore().create()
+    store.actions.setWorkspaceTabs(WID, [tab({ url: 'http://127.0.0.1:3080/', title: 'DSH' })])
+    store.actions.updateTabMetadata(
+      WID, 'a', 'chrome-error://chromewebdata/', 'chromewebdata', false, false,
+    )
+    const state = browserWorkspaceState(store.getSnapshot(), WID)
+    expect(state.tabs[0]?.url).toBe('http://127.0.0.1:3080/')
+    expect(state.tabs[0]?.title).toBe('DSH')
+  })
+
   it('preserves the selected tab when closing an inactive tab', () => {
     const store = createBrowserPanelStore().create()
     store.actions.setWorkspaceTabs(WID, [

@@ -119,13 +119,11 @@ export function insetOccupantBoundsForOverlay(
  * @param reporter - preload bridge callback.
  * @param element - occupant host element, if mounted.
  * @param segmentVisible - toolbox browser segment visibility.
- * @param overlay - open chrome menu rectangle to keep above BrowserView.
  */
 export function reportBrowserOccupantBounds(
   reporter: BrowserOccupantBoundsReporter | undefined,
   element: HTMLElement | null,
   segmentVisible: boolean,
-  overlay: BrowserOccupantOverlay | null = null,
 ): void {
   if (reporter === undefined) return
   if (!segmentVisible) {
@@ -133,8 +131,5 @@ export function reportBrowserOccupantBounds(
     return
   }
   if (element === null) return
-  reporter(insetOccupantBoundsForOverlay(
-    measureBrowserOccupantBounds(element, segmentVisible),
-    overlay,
-  ))
+  reporter(measureBrowserOccupantBounds(element, segmentVisible))
 }

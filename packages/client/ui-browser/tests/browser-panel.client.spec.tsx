@@ -10,7 +10,6 @@ import type {
 import { createSnapshotStore, DirectoryBrowseError } from '@deepseek-ai/dsh-client-runtime/client'
 import { BrowserPanel, type BrowserPanelProps } from '../src/client/BrowserPanel.tsx'
 import { createBrowserPanelStore, browserWorkspaceState } from '../src/client/stores.ts'
-import { formatBrowserZoomLabel } from '../src/client/browser-zoom.ts'
 import { DEFAULT_BROWSER_TAB_URL } from '../src/client/browser-tab-title.ts'
 import { zh } from '../src/client/locales.ts'
 
@@ -526,43 +525,6 @@ describe('BrowserPanel', () => {
     fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
     await waitFor(() => { expect(screen.getByText('正在访问外部站点')).toBeTruthy() })
     expect(screen.queryByRole('dialog')).toBeNull()
-  })
-
-  it('US-14 / menu-overflow: overflow menu exposes Hard Reload, Copy URL, and Zoom controls', async () => {
-    const panelStore = createBrowserPanelStore().create()
-    const browserReload = vi.fn(async () => ({
-      url: 'https://example.com', title: 'Example', canGoBack: false, canGoForward: false,
-    }))
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
-    mount({
-      browserList: vi.fn(async () => ({
-        tabs: [{
-          tabId: 'live-1',
-          url: 'https://example.com',
-          title: 'Example',
-          selected: true,
-          canGoBack: false,
-          canGoForward: false,
-        }],
-      })),
-      browserReload,
-      useStore: hookOf(panelStore),
-      actions: panelStore.actions,
-    })
-    await waitFor(() => { expect(screen.getByLabelText('更多操作')).toBeTruthy() })
-    fireEvent.click(screen.getByLabelText('更多操作'))
-    fireEvent.click(await screen.findByText('Hard Reload'))
-    await waitFor(() => {
-      expect(browserReload).toHaveBeenCalledWith(WID, 'live-1', true)
-    })
-    fireEvent.click(screen.getByLabelText('更多操作'))
-    fireEvent.click(await screen.findByText('Copy Current URL'))
-    expect(writeText).toHaveBeenCalledWith('https://example.com')
-    fireEvent.click(screen.getByLabelText('更多操作'))
-    fireEvent.click(await screen.findByText('+'))
-    expect(browserWorkspaceState(panelStore.getSnapshot(), WID).zoom).toBe(1.25)
-    expect(formatBrowserZoomLabel(1.25)).toBe('125%')
   })
 
   it('segment-hidden: hiding the Browser segment does not close Host tabs', async () => {

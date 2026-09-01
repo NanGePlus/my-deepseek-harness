@@ -376,38 +376,6 @@ describe('BrowserPanel desktop occupant', () => {
     expect(browserCloseTab).not.toHaveBeenCalled()
   })
 
-  it('overflow menu open: insets BrowserView below the menu and keeps the page attached', async () => {
-    const reportBounds = stubDesktop()
-    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
-      configurable: true,
-      value: function getBoundingClientRect(this: HTMLElement) {
-        if (this.getAttribute('role') === 'menu') {
-          return { x: 400, y: 100, width: 218, height: 180, top: 100, left: 400, right: 618, bottom: 280 }
-        }
-        if (this.id === 'browser-occupant') {
-          return { x: 12, y: 112, width: 640, height: 480, top: 112, left: 12, right: 652, bottom: 592 }
-        }
-        return { x: 600, y: 72, width: 24, height: 24, top: 72, left: 600, right: 624, bottom: 96 }
-      },
-    })
-    mount({ browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })) })
-    await waitFor(() => {
-      expect(reportBounds).toHaveBeenCalledWith({
-        x: 12, y: 112, width: 640, height: 480, visible: true,
-      })
-    })
-    reportBounds.mockClear()
-    fireEvent.click(screen.getByLabelText('更多操作'))
-    await waitFor(() => {
-      expect(screen.getByRole('menuitem', { name: 'Hard Reload' })).toBeTruthy()
-    })
-    await waitFor(() => {
-      expect(reportBounds).toHaveBeenCalledWith({
-        x: 12, y: 280, width: 640, height: 312, visible: true,
-      })
-    })
-  })
-
   it('empty-unbound: shows 无法使用浏览器 without tab chrome on desktop', () => {
     stubDesktop()
     mount({ noCurrentSession: true, items: [workspace({ sessionIds: [] })] })

@@ -7,6 +7,7 @@ import type { BrowserView, BrowserWindow } from 'electron'
 import type { WorkspaceId } from '@deepseek-ai/dsh-host-apiproxy/api/workspace'
 import { DesktopBrowserViewManager } from '../src/browser-view-manager.ts'
 
+const connectOverCDP = vi.fn()
 vi.mock('electron', () => ({
   BrowserView: class BrowserView {
     readonly stub = true
@@ -14,7 +15,7 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('playwright', () => ({
-  chromium: { connectOverCDP: async () => ({ contexts: () => [] }) },
+  chromium: { connectOverCDP: (...args: unknown[]) => connectOverCDP(...args) },
 }))
 
 const DESTROYED_CHILD = "Can't add a destroyed child view to a parent view"
@@ -129,5 +130,33 @@ describe('DesktopBrowserViewManager occupant attach', () => {
       visible: true,
     })).not.toThrow()
     expect(window.attached).toHaveLength(0)
+  })
+
+  it('reconnects over CDP when the cached browser has no contexts', async () => {
+    const deadBrowser = {
+      isConnected: () => true,
+      contexts: () => [] as const,
+      close: vi.fn(async () => {}),
+    }
+    const livePage = { url: () => 'https://example.com/' }
+    const liveBrowser = {
+      isConnected: () => true,
+      contexts: () => [{ pages: () => [livePage] }],
+      close: vi.fn(async () => {}),
+    }
+    connectOverCDP
+      .mockResolvedValueOnce(deadBrowser)
+      .mockResolvedValueOnce(liveBrowser)
+
+    const window = createFakeWindow()
+    const manager = new DesktopBrowserViewManager(
+      () => window as unknown as BrowserWindow,
+      9222,
+      () => createFakeView() as unknown as BrowserView,
+    )
+    await manager.ensureTab(workspaceId, 'tab-1', 'https://example.com/')
+    await expect(manager.pageForTab(workspaceId, 'tab-1')).resolves.toBe(livePage)
+    expect(deadBrowser.close).toHaveBeenCalledOnce()
+    expect(connectOverCDP).toHaveBeenCalledTimes(2)
   })
 })

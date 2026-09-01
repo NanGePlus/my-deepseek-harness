@@ -4,6 +4,7 @@
  */
 import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
+import { isChromiumInternalErrorUrl } from './browser-navigate-url.ts'
 
 /** One live browser tab row mirrored from Host list/create. */
 export interface BrowserTabRow {
@@ -183,6 +184,9 @@ export function createBrowserPanelStore(): EngineStoreHandle<BrowserPanelState, 
           ...current,
           tabs: current.tabs.map((row): BrowserTabRow => {
             if (row.tabId !== tabId) return row
+            if (isChromiumInternalErrorUrl(url)) {
+              return { ...row, canGoBack, canGoForward }
+            }
             return { ...row, url, title, canGoBack, canGoForward }
           }),
         }

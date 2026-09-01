@@ -9,6 +9,10 @@ import { chromium, type Browser, type BrowserContext, type CDPSession, type Page
 import type { WorkspaceId } from './api/workspace.ts'
 import type { BrowserScreencastFrame } from './api/host.ts'
 import {
+  BrowserNavigationFailedError,
+  isChromiumInternalErrorUrl,
+} from './browser-navigation-url.ts'
+import {
   type BrowserDelivery,
   type DesktopBrowserSurface,
   requireDesktopBrowserSurface,
@@ -119,6 +123,7 @@ interface LiveTab {
   viewportHeight: number
   devicePixelRatio: number
   cdp?: CDPSession
+  lastRequestedUrl?: string
 }
 
 interface WorkspaceBrowser {
@@ -195,8 +200,10 @@ export class BrowserRegistry {
       await surface.ensureTab(workspaceId, tabId, url)
       const page = await surface.pageForTab(workspaceId, tabId)
       const tab = this.trackTab(workspace, tabId, page)
+      tab.lastRequestedUrl = url
       workspace.selectedTabId = tabId
       await this.syncTabMetadata(tab)
+      await this.assertNavigationSucceeded(tab)
       await this.revealTab(workspaceId, tab)
       return { tabId }
     }
@@ -216,8 +223,10 @@ export class BrowserRegistry {
       await page.goto(url, { waitUntil: 'domcontentloaded' })
     }
     const tab = this.trackTab(workspace, tabId, page)
+    tab.lastRequestedUrl = url
     workspace.selectedTabId = tabId
     await this.syncTabMetadata(tab)
+    await this.assertNavigationSucceeded(tab)
     await this.revealTab(workspaceId, tab)
     return { tabId }
   }
@@ -279,6 +288,7 @@ export class BrowserRegistry {
   /** Navigate one tab to a reachable http(s) URL. */
   async navigate(workspaceId: WorkspaceId, tabId: string, url: string): Promise<BrowserPageMetadata> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
+    tab.lastRequestedUrl = url
     await tab.page.goto(url, { waitUntil: 'domcontentloaded' })
     await this.revealTab(workspaceId, tab)
     return this.pageMetadata(tab)
@@ -503,10 +513,11 @@ export class BrowserRegistry {
 
   private trackTab(workspace: WorkspaceBrowser, tabId: string, page: Page): LiveTab {
     const viewport = page.viewportSize() ?? { width: 1280, height: 720 }
+    const initialUrl = page.url()
     const tab: LiveTab = {
       tabId,
       page,
-      url: page.url(),
+      url: isChromiumInternalErrorUrl(initialUrl) ? 'about:blank' : initialUrl,
       title: '',
       canGoBack: false,
       canGoForward: false,
@@ -548,6 +559,7 @@ export class BrowserRegistry {
 
   private async pageMetadata(tab: LiveTab): Promise<BrowserPageMetadata> {
     await this.syncTabMetadata(tab)
+    await this.assertNavigationSucceeded(tab)
     return {
       url: tab.url,
       title: tab.title,
@@ -556,9 +568,18 @@ export class BrowserRegistry {
     }
   }
 
+  private async assertNavigationSucceeded(tab: LiveTab): Promise<void> {
+    if (isChromiumInternalErrorUrl(tab.page.url())) {
+      throw new BrowserNavigationFailedError(tab.lastRequestedUrl ?? tab.url)
+    }
+  }
+
   private async syncTabMetadata(tab: LiveTab): Promise<void> {
-    tab.url = tab.page.url()
-    tab.title = await tab.page.title()
+    const liveUrl = tab.page.url()
+    if (!isChromiumInternalErrorUrl(liveUrl)) {
+      tab.url = liveUrl
+      tab.title = await tab.page.title()
+    }
     const navigation = await this.readNavigationState(tab.page)
     tab.canGoBack = navigation.canGoBack
     tab.canGoForward = navigation.canGoForward

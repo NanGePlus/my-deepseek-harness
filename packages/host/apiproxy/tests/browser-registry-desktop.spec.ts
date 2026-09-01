@@ -11,11 +11,15 @@ import type { WorkspaceId } from '../src/api/workspace.ts'
 import { BrowserRegistry } from '../src/browser-registry.ts'
 import type { DesktopBrowserSurface } from '../src/browser-delivery.ts'
 
-function createMockPage(initialUrl = 'about:blank'): Page & { bringToFront: ReturnType<typeof vi.fn> } {
+function createMockPage(initialUrl = 'about:blank'): Page & {
+  bringToFront: ReturnType<typeof vi.fn>
+  setPageUrl: (next: string) => void
+} {
   let url = initialUrl
   const bringToFront = vi.fn(async () => {})
   return {
     url: () => url,
+    setPageUrl(next: string) { url = next },
     title: async () => 'Mock title',
     viewportSize: () => ({ width: 1280, height: 720 }),
     on: vi.fn(),
@@ -38,7 +42,10 @@ function createMockPage(initialUrl = 'about:blank'): Page & { bringToFront: Retu
     waitForLoadState: vi.fn(),
     context: () => ({ newCDPSession: vi.fn() } as unknown as BrowserContext),
     screenshot: vi.fn(),
-  } as unknown as Page & { bringToFront: ReturnType<typeof vi.fn> }
+  } as unknown as Page & {
+    bringToFront: ReturnType<typeof vi.fn>
+    setPageUrl: (next: string) => void
+  }
 }
 
 function desktopRegistry(page: Page, surface: Partial<DesktopBrowserSurface> = {}): BrowserRegistry {
@@ -140,6 +147,22 @@ describe('BrowserRegistry desktop CDP seam', () => {
     await expect(registry.closeTab(workspaceId, created.tabId)).resolves.toEqual({ closed: true })
     expect(closeTab).toHaveBeenCalledWith(workspaceId, created.tabId)
     expect(order).toEqual(['surface', 'page'])
+  })
+
+  it('rejects navigation that lands on a Chromium net-error page', async () => {
+    const page = createMockPage()
+    page.goto = vi.fn(async () => {
+      page.setPageUrl('chrome-error://chromewebdata/')
+      return null
+    })
+    const registry = desktopRegistry(page)
+    const workspaceId = 'ws-nav-fail' as WorkspaceId
+    const created = await registry.createTab(workspaceId)
+    await expect(
+      registry.navigate(workspaceId, created.tabId, 'http://127.0.0.1:3080/'),
+    ).rejects.toThrow('Failed to load http://127.0.0.1:3080/')
+    const listed = registry.list(workspaceId)
+    expect(listed.tabs[0]?.url).not.toContain('chrome-error://')
   })
 })
 

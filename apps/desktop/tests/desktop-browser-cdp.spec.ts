@@ -4,12 +4,13 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { findCdpPageByUrl, normalizeDesktopBrowserUrl } from '../src/desktop-browser-cdp.ts'
+import { findCdpPageByUrl, isDesktopCdpBrowserLive, normalizeDesktopBrowserUrl } from '../src/desktop-browser-cdp.ts'
 
 describe('normalizeDesktopBrowserUrl', () => {
   it('collapses empty Electron URL and about:blank', () => {
     expect(normalizeDesktopBrowserUrl('')).toBe('about:blank')
     expect(normalizeDesktopBrowserUrl('about:blank')).toBe('about:blank')
+    expect(normalizeDesktopBrowserUrl('chrome-error://chromewebdata/')).toBe('about:blank')
     expect(normalizeDesktopBrowserUrl('https://example.com/')).toBe('https://example.com/')
   })
 })
@@ -26,5 +27,23 @@ describe('findCdpPageByUrl', () => {
     const spa = { url: () => 'http://127.0.0.1:5173/' }
     expect(findCdpPageByUrl([spa], 'about:blank')).toBeUndefined()
     expect(findCdpPageByUrl([spa], 'https://example.com/')).toBeUndefined()
+  })
+})
+
+describe('isDesktopCdpBrowserLive', () => {
+  it('is false when Playwright reports no contexts after close()', () => {
+    const browser = {
+      isConnected: () => true,
+      contexts: () => [] as const,
+    }
+    expect(isDesktopCdpBrowserLive(browser)).toBe(false)
+  })
+
+  it('is true when connected and at least one context exists', () => {
+    const browser = {
+      isConnected: () => true,
+      contexts: () => [{ pages: () => [] }],
+    }
+    expect(isDesktopCdpBrowserLive(browser)).toBe(true)
   })
 })

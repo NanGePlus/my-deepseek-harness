@@ -65,6 +65,7 @@ const DESKTOP_CDP_PORT = Number(process.env.DSH_DESKTOP_CDP_PORT ?? 9222)
 
 if (!shouldSkipHostBoot()) {
   app.commandLine.appendSwitch('remote-debugging-port', String(DESKTOP_CDP_PORT))
+  app.commandLine.appendSwitch('remote-allow-origins', '*')
 }
 
 protocol.registerSchemesAsPrivileged([

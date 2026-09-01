@@ -4,7 +4,7 @@
  */
 
 import { BrowserView, type BrowserWindow } from 'electron'
-import { chromium, type Browser, type Page } from 'playwright'
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
 import type { WorkspaceId } from '@deepseek-ai/dsh-host-apiproxy/api/workspace'
 import type { DesktopBrowserSurface } from '@deepseek-ai/dsh-host-apiproxy'
 import {
@@ -14,7 +14,11 @@ import {
   type BrowserViewHost,
   type BrowserViewLike,
 } from './browser-view-bounds.ts'
-import { findCdpPageByUrl, normalizeDesktopBrowserUrl } from './desktop-browser-cdp.ts'
+import {
+  findCdpPageByUrl,
+  isDesktopCdpBrowserLive,
+  normalizeDesktopBrowserUrl,
+} from './desktop-browser-cdp.ts'
 
 interface TabRecord {
   view: BrowserView
@@ -135,8 +139,7 @@ export class DesktopBrowserViewManager implements DesktopBrowserSurface {
     }
     this.tabs.clear()
     this.pages.clear()
-    void this.cdpBrowser?.close()
-    this.cdpBrowser = undefined
+    void this.dropCdpBrowser()
   }
 
   private syncOccupantBounds(): void {
@@ -241,9 +244,34 @@ export class DesktopBrowserViewManager implements DesktopBrowserSurface {
   }
 
   private async ensureCdpBrowser(): Promise<Browser> {
-    if (this.cdpBrowser !== undefined) return this.cdpBrowser
-    this.cdpBrowser = await chromium.connectOverCDP(this.cdpEndpoint())
-    return this.cdpBrowser
+    if (this.cdpBrowser !== undefined && isDesktopCdpBrowserLive(this.cdpBrowser)) {
+      return this.cdpBrowser
+    }
+    await this.dropCdpBrowser()
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const browser = await chromium.connectOverCDP(this.cdpEndpoint())
+      if (isDesktopCdpBrowserLive(browser)) {
+        this.cdpBrowser = browser
+        return browser
+      }
+      try {
+        await browser.close()
+      } catch {
+        // CDP socket already dropped; try one fresh connect.
+      }
+    }
+    throw new Error('desktop browser CDP: no default context')
+  }
+
+  private async dropCdpBrowser(): Promise<void> {
+    if (this.cdpBrowser === undefined) return
+    try {
+      await this.cdpBrowser.close()
+    } catch {
+      // CDP socket already dropped; discard the dead handle.
+    }
+    this.cdpBrowser = undefined
+    this.pages.clear()
   }
 
   private async resolvePage(browser: Browser, targetUrl: string): Promise<Page> {
@@ -252,12 +280,21 @@ export class DesktopBrowserViewManager implements DesktopBrowserSurface {
       targetUrl,
     )
     if (existing !== undefined) return existing
-    const context = browser.contexts()[0]
-    if (context === undefined) throw new Error('desktop browser CDP: no default context')
+    const context = await this.waitForDefaultContext(browser)
     return context.waitForEvent('page', {
       predicate: page => findCdpPageByUrl([page], targetUrl) !== undefined,
       timeout: 10_000,
     })
+  }
+
+  private async waitForDefaultContext(browser: Browser): Promise<BrowserContext> {
+    const deadline = Date.now() + 10_000
+    while (Date.now() < deadline) {
+      const context = browser.contexts()[0]
+      if (context !== undefined) return context
+      await new Promise<void>((resolve) => { setTimeout(resolve, 50) })
+    }
+    throw new Error('desktop browser CDP: no default context')
   }
 }
 
