@@ -16,6 +16,10 @@ execSync('pnpm exec tsx apps/desktop/scripts/bundle-preload.ts', {
   cwd: repoRoot,
   stdio: 'inherit',
 })
+execSync('pnpm exec tsx apps/desktop/scripts/brand-dev-electron.ts', {
+  cwd: repoRoot,
+  stdio: 'inherit',
+})
 
 const electron = createRequire(join(repoRoot, 'apps/cli/package.json'))('electron') as string
 const desktopMain = join(repoRoot, 'apps/desktop/src/main.ts')

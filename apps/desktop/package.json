@@ -3,6 +3,7 @@
   "description": "Electron desktop shell: Main Host boot, dsh:// SPA loading, dev:desktop entry",
   "version": "0.1.0-rc.5",
   "private": true,
+  "productName": "NanGeAGI",
   "type": "module",
   "main": "lib/main.js",
   "scripts": {

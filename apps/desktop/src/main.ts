@@ -20,6 +20,7 @@ import {
 import type { ApiProxy } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { setDesktopBrowserSurface } from '@deepseek-ai/dsh-host-apiproxy'
 import { resolveDesktopAppIconPath } from './app-icon.ts'
+import { DESKTOP_APP_ABOUT_DETAIL, DESKTOP_APP_DISPLAY_NAME } from './app-branding.ts'
 import { buildApplicationMenuTemplate } from './app-menu.ts'
 import { registerBrowserBoundsIpc } from './browser-bounds-ipc.ts'
 import { DesktopBrowserViewManager, defaultDesktopBrowserViewFactory } from './browser-view-manager.ts'
@@ -50,6 +51,8 @@ import { installSingleInstanceLock } from './single-instance.ts'
 import { loadWindowBounds, saveWindowBounds } from './window-bounds.ts'
 import { applyPackagedRuntimeEnv } from './packaging-env.ts'
 import { resolvePackagingLayout } from './packaging-paths.ts'
+
+app.setName(DESKTOP_APP_DISPLAY_NAME)
 
 const repoRoot = fileURLToPath(new URL('../../..', import.meta.url))
 const packagingLayout = resolvePackagingLayout({
@@ -217,7 +220,7 @@ function installApplicationMenu(): void {
         type: 'info',
         title: `About ${appName}`,
         message: appName,
-        detail: `Version ${app.getVersion()}\nDeepSeek Harness desktop shell.`,
+        detail: `Version ${app.getVersion()}\n${DESKTOP_APP_ABOUT_DETAIL}`,
       })
     },
     focusSettings: () => { mainWindow?.webContents.send(IPC_FOCUS_SETTINGS) },

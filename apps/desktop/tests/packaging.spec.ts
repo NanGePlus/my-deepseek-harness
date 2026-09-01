@@ -116,7 +116,7 @@ describe('packaging layout resolution', () => {
   })
 
   it('maps production extraResources beside process.resourcesPath', () => {
-    const resourcesPath = join(tmpdir(), 'DeepSeek Harness.app', 'Contents', 'Resources')
+    const resourcesPath = join(tmpdir(), 'NanGeAGI.app', 'Contents', 'Resources')
     const layout = resolvePackagingLayout({
       packaged: true,
       resourcesPath,

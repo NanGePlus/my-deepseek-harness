@@ -3,6 +3,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
+import { DESKTOP_APP_DISPLAY_NAME } from '../src/app-branding.ts'
 import { buildApplicationMenuTemplate } from '../src/app-menu.ts'
 
 describe('desktop application menu seam', () => {
@@ -11,17 +12,17 @@ describe('desktop application menu seam', () => {
     const focusSettings = vi.fn()
     const requestQuit = vi.fn()
     const template = buildApplicationMenuTemplate({
-      appName: 'DeepSeek Harness',
+      appName: DESKTOP_APP_DISPLAY_NAME,
       version: '1.2.3',
       showAbout,
       focusSettings,
       requestQuit,
     })
     const appMenu = template[0]
-    expect(appMenu?.label).toBe('DeepSeek Harness')
+    expect(appMenu?.label).toBe('NanGeAGI')
     const items = (appMenu?.submenu as Array<{ label?: string; click?: () => void }> | undefined)
       ?.filter(item => item.label !== undefined)
-    expect(items?.map(item => item.label)).toEqual(['About DeepSeek Harness', 'Settings…', 'Quit'])
+    expect(items?.map(item => item.label)).toEqual(['About NanGeAGI', 'Settings…', 'Quit'])
     items?.[0]?.click?.()
     items?.[1]?.click?.()
     items?.[2]?.click?.()
@@ -32,7 +33,7 @@ describe('desktop application menu seam', () => {
 
   it('keeps the platform Edit menu so clipboard accelerators stay bound', () => {
     const template = buildApplicationMenuTemplate({
-      appName: 'DeepSeek Harness',
+      appName: DESKTOP_APP_DISPLAY_NAME,
       version: '1.2.3',
       showAbout: () => undefined,
       focusSettings: () => undefined,

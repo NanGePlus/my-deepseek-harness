@@ -235,7 +235,8 @@
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
-| 2026-09-01 | 分支 `test/desktop-v5-validation`：Agent `browser_navigate` 后未切到工具箱浏览器，且弹出外部 about:blank 窗口；**切换其他工具箱 Tab 立刻弹回浏览器** | Host desktop `revealTab` 经 `DesktopBrowserSurface.revealForHuman` + IPC `dsh:reveal-toolbox-browser` 通知 Renderer；**human reveal 仅限 `navigate` 与带 URL 的 `createTab`**，不再挂在每次 `selectTab`/`showWindow`；`setDesktopBrowserSurface` 同步 `globalThis`；attach 模式不再伪装 occupant；`dev:desktop` 启动前自动 bundle preload |
+| 2026-09-01 | 桌面壳 macOS 菜单栏 dev 仍显示 **Electron**（应用子菜单已是 About NanGeAGI） | macOS 菜单栏/Cmd+Tab 读 Electron.app `Info.plist` 的 `CFBundleName`，`app.setName()` 无法覆盖；`dev:desktop` 启动前跑 `brand-dev-electron.ts` 补丁 |
+| 2026-09-01 | 分支 `test/desktop-v5-validation`：Agent `browser_navigate` 后未切到工具箱浏览器，且弹出外部 about:blank 窗口；**切换其他工具箱 Tab 立刻弹回浏览器** | Host desktop human reveal 仅限 `navigate` 与带 URL 的 `createTab`；`DesktopBrowserSurface.revealForHuman` + IPC；`dev:desktop` 启动前 bundle preload |
 | 2026-09-01 | 分支 `test/desktop-v5-validation`：工具箱浏览器 tab 显示 `chromewebdata` / `ERR_FAILED (-2)` | 导航失败时 Chromium 落到 `chrome-error://chromewebdata/`，Host 误当作成功 URL 写回 tab；重试会再次加载该内部页。`BrowserRegistry` 拒绝 net-error URL；Client 不持久化该 URL；`normalizeDesktopBrowserUrl` 复活 guest 时回退 `about:blank` |
 | 2026-09-01 | 分支 `test/desktop-v5-validation`：`dev:desktop` 资源管理器代码文件无 LSP 错误/方法提示 | `dev:desktop` 为 Electron Main 设 `NODE_OPTIONS=--import tsx/esm`，LSP 子进程继承后在 workspace 目录解析 tsx 失败并退出；`scrubbedParentEnv()` 不再转发 `NODE_OPTIONS`。生产 `dsh://` 另修：`protocol-dsh.ts` serve monaco worker |
 | 2026-09-01 | 分支 `test/desktop-v5-validation`：移除工具箱浏览器「更多操作」溢出菜单 | Web / Desktop 共用 `BrowserPanel`：删除 … 按钮及 Hard Reload、Copy URL、Zoom 下拉能力 |
