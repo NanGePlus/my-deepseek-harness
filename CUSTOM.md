@@ -117,6 +117,8 @@
 | `apps/cli/src/bin.ts` | **2026-08-31**（#115）desktop 模式 spawn Electron | 2026-08-31 |
 | `apps/cli/src/desktop-launcher.ts` | **新文件**（#115）：解析 Electron 可执行文件与 Main 入口并 spawn | 2026-08-31 |
 | `packages/subprocess/subprocess/src/index.ts` | **2026-09-01** `scrubbedParentEnv()` 剥离 `NODE_OPTIONS`，避免 `dev:desktop` 的 tsx 预加载污染 LSP 等 Host 子进程 | 2026-09-01 |
+| `packages/session/session-persistence/src/coordinator.ts` | **2026-09-02** 已 materialized 会话追加前校验磁盘 event 数与 coordinator cursor 一致，避免桌面 Host 冷恢复后重复 seq；`appendLiveBatch` 过滤后空 batch 不再写盘 | 2026-09-02 |
+| `scripts/repair-session-log.ts` | **新文件**（2026-09-02）：修复 zstd 会话日志 committed 区 duplicate seq（`end-seed` 后重复 `agent/inbox/spliced`）；备份后重写 | 2026-09-02 |
 | `apps/desktop/` | **新包**（#115）：Electron Main Host boot / teardown、`dsh://` SPA 加载、preload 骨架、`DSH_DESKTOP_ATTACH`、Host 启动失败 loud error + 重试；**#116** `registerIpcApiBridge` + preload IPC carrier；**#117** 单实例聚焦、退出守卫 IPC、窗口 bounds 持久化、About/Settings/Quit 菜单、Dock/Taskbar 图标；**#118** `BrowserRegistry` desktop CDP 分叉、`DesktopBrowserViewManager`、occupant bounds IPC（`dsh:browser-occupant-bounds`）；**#120** `electron-builder.yml`（dmg + NSIS）、packaging paths/env/smoke、`applyPackagedRuntimeEnv`；**2026-08-31** sandbox preload 改为 CJS bundle（Electron 不能加载 ESM `import`）；**2026-08-31** IPC 下行覆盖 `terminalStream`；BrowserView `about:blank` 与 Playwright CDP 空 URL 对齐；**2026-08-31** 应用菜单补平台 `editMenu`（否则全 App 无法复制粘贴）；**2026-08-31** 会话 `http(s)` `window.open`/`target=_blank` 拦截进工具箱浏览器；**2026-08-31** 切到浏览器段时不 `addBrowserView` 已销毁 guest，按 last URL 重建；**2026-09-01** `protocol-dsh.ts` serve `/plugins/<id>/monaco/*.worker.js`（文件编辑器 LSP 诊断/hover 依赖 Monaco 实例）；**2026-09-01** `DesktopBrowserViewManager` 检测 stale CDP（`contexts()` 空）自动重连，`remote-allow-origins=*` | 2026-09-01 |
 | `apps/desktop-host-pkg/` | **新包**（#120）：`dsh-desktop-host-pkg` pnpm deploy 根，定义 packaged Host runtime 闭包 | 2026-08-31 |
 | `packages/host/apiproxy/src/browser-delivery.ts` | **新文件**（#118）：`DesktopBrowserSurface` + Main 注册 hook；**2026-08-31** `selectTab` 改为必选（桌面 `revealTab` 靠它 attach BrowserView）；**2026-08-31** 必选 `closeTab`（先丢 BrowserView 再 `page.close()`） | 2026-08-31 |
@@ -235,6 +237,9 @@
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-09-02 | 分支 `test/desktop-v5-validation`：桌面端会话历史加载失败 `seq gap … expected 28664, got 28663` | 根因：Host 冷恢复写 `session/end-seed` 后内存 cursor 与磁盘不同步，再发消息时 `agent/inbox/spliced` 复用 seq。`PersistenceCoordinator.appendCore` 追加前校验 stored 前缀；`appendLiveBatch` 空 batch 跳过；`scripts/repair-session-log.ts` 修复已损坏 zstd 日志；已修复 `session-745c04f7-…` |
+| 2026-09-02 | 分支 `test/desktop-v5-validation`：拖拽文件悬停未展开文件夹时自动展开 | 悬停 600ms 后调用现有 `toggleDirectory`；Web/桌面共用 |
+| 2026-09-02 | 分支 `test/desktop-v5-validation`：资源管理器树底 root drop 空白过大 | 底部投放区由 4 行减为 2 行（44px），仍保留拖到根目录能力 |
 | 2026-09-02 | 分支 `test/desktop-v5-validation`：编辑 Python 加空行后 Tab/文件树误报 1 个 LSP 错误，切换 Session 后消失 | pyright 连发多次 `publishDiagnostics`，Host 需 300ms settle 后再返回；Client 过滤超行号诊断、编辑清标记、有 error 时 600ms 二次 sync。此前 `build:lib:host` 因 pyright e2e 测试类型错误失败，`lib/` 未更新导致桌面 Host 仍跑旧 100ms 逻辑 |
 | 2026-09-02 | 分支 `test/desktop-v5-validation`：Markdown 源码 / Monaco 按 Cmd+Z 撤销异常（露出拼音） | Electron 全量 `editMenu` 把 Cmd+Z 绑到 `webContents.undo()`，与 Monaco undo 栈冲突；Edit 子菜单去掉 undo/redo；桌面 Renderer 捕获 Cmd+Z 并 `trigger` Monaco/TipTap undo |
 | 2026-09-02 | 分支 `test/desktop-v5-validation`：Agent 在嵌套目录写文件后资源管理器不更新、点 **刷新** 无效 | 手动刷新只重拉 Workspace 根；根 `watchPath` 不递归。改为 **刷新** / 切回资源管理器重载根+已展开层；对已展开文件夹注册 `watchPath` |

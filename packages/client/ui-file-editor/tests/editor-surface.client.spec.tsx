@@ -1609,6 +1609,19 @@ describe('EditorSurface file operations', () => {
     })
   })
 
+  it('drag-move: dropping on the root drop pad moves a nested file to the workspace root', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    await selectRow('src')
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    const pad = document.querySelector('[data-tree-root-drop="true"]') as HTMLElement
+    expect(pad).toBeTruthy()
+    dragRowOnto(treeRow('app.ts'), pad)
+    await waitFor(() => {
+      expect(b.movePath).toHaveBeenCalledWith(WID, `${ROOT}/src/app.ts`, ROOT)
+    })
+  })
+
   it('drag-move: dropping onto a file or the source folder does not call Host move', async () => {
     const b = mount()
     await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
@@ -1789,6 +1802,28 @@ describe('EditorSurface file operations', () => {
     await waitFor(() => {
       expect(b.movePath).toHaveBeenCalledWith(WID, `${ROOT}/src`, `${ROOT}/node_modules`)
     })
+  })
+
+  it('drag-move: hovering a collapsed folder auto-expands it after a delay', async () => {
+    mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    expect(screen.queryByText('app.ts')).toBeNull()
+    const dataTransfer = {
+      effectAllowed: 'none',
+      dropEffect: 'none',
+      setData: () => {},
+      getData: () => '',
+    }
+    vi.useFakeTimers()
+    try {
+      fireEvent.dragStart(treeRow('untracked.ts'), { dataTransfer })
+      fireEvent.dragOver(treeRow('src', { directory: true }), { dataTransfer })
+      await act(async () => { await vi.advanceTimersByTimeAsync(600) })
+    } finally {
+      vi.useRealTimers()
+    }
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    fireEvent.dragEnd(treeRow('untracked.ts'), { dataTransfer })
   })
 
   it('drag-move: drag-over blank chrome highlights the root drop target', async () => {

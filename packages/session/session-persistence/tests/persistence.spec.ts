@@ -863,7 +863,7 @@ describe('PersistenceCoordinator session preparations', () => {
         events: [...oneTurnLog(), { seq: 6 }, { seq: 7 }],
       })
       await expect(append).resolves.toBeUndefined()
-      expect(backend.loadAttempts).toBe(2)
+      expect(backend.loadAttempts).toBe(3)
       expect(backend.store.get(id)?.events).toHaveLength(oneTurnLog().length + 1)
     } finally {
       await fiber.dispose()
@@ -896,7 +896,7 @@ describe('PersistenceCoordinator session preparations', () => {
         meta: { id },
         events: [...oneTurnLog(), { seq: 6 }, { seq: 7 }],
       })
-      expect(backend.loadAttempts).toBe(2)
+      expect(backend.loadAttempts).toBe(3)
       expect(backend.store.get(id)?.events).toHaveLength(oneTurnLog().length + 1)
     } finally {
       await fiber.dispose()
@@ -927,7 +927,7 @@ describe('PersistenceCoordinator session preparations', () => {
         data: { turn: 2 },
       }])
 
-      expect(backend.loadAttempts).toBe(2)
+      expect(backend.loadAttempts).toBe(3)
       expect(backend.appendAttempts).toBe(1)
       expect(backend.store.get(id)?.events).toHaveLength(oneTurnLog().length + 1)
     } finally {
@@ -1161,6 +1161,45 @@ describe('PersistenceCoordinator session preparations', () => {
       }])).rejects.toThrow(/persisted preparation is reserved/)
     } finally {
       preparation?.[Symbol.dispose]()
+      await fiber.dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('rejects append when the stored prefix advanced outside this coordinator', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const backend = new ControlledBackend()
+    const id = SessionId('external-prefix-advance')
+    backend.store.set(id, { meta: meta(id), events: oneTurnLog() })
+    let coordinator!: PersistenceCoordinator<never>
+    const fiber = await ctx.plugin(Object.assign((inner: Context) => {
+      coordinator = new PersistenceCoordinator(inner, backend)
+    }, { inject: ['sessions'] }))
+
+    try {
+      const preparation = await coordinator.prepare(id)
+      const detach = ctx.sessions.enter(preparation.session)
+      try {
+        ctx.sessions.announce(preparation.session)
+        await ctx.sessions.flush(preparation.session)
+        backend.store.get(id)!.events.push({
+          type: 'session/end-seed',
+          seq: oneTurnLog().length,
+          time: 8,
+          data: {},
+        } as SessionEvent)
+        await expect(coordinator.append(id, [{
+          type: 'agent/inbox/spliced',
+          seq: oneTurnLog().length,
+          time: 9,
+          data: { target: 'next-turn', start: 0, inserted: [] },
+        }])).rejects.toThrow(/append cursor mismatch/)
+      } finally {
+        detach()
+        preparation[Symbol.dispose]()
+      }
+    } finally {
       await fiber.dispose()
       await ctx.fiber.dispose()
     }
