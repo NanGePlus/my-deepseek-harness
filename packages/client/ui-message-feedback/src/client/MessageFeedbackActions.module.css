@@ -101,8 +101,10 @@
 }
 
 .failure {
+  flex-shrink: 0;
   padding-left: 4px;
   color: var(--dsw-alias-label-tertiary);
   font-size: 13px;
   line-height: 28px;
+  white-space: nowrap;
 }

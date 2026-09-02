@@ -17,7 +17,6 @@ import {
   screen,
   shell,
 } from 'electron'
-import type { ApiProxy } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { setDesktopBrowserSurface } from '@deepseek-ai/dsh-host-apiproxy'
 import { resolveDesktopAppIconPath } from './app-icon.ts'
 import { DESKTOP_APP_ABOUT_DETAIL, DESKTOP_APP_DISPLAY_NAME } from './app-branding.ts'
@@ -161,9 +160,8 @@ function wireIpcApiBridge(): void {
   disposeIpcBridge = undefined
   const ctx = hostController.context
   if (ctx === undefined) return
-  const api = ctx.get('apiProxy') as ApiProxy | undefined
-  if (api === undefined) return
-  disposeIpcBridge = registerIpcApiBridge(api)
+  if (ctx.get('apiProxy') === undefined) return
+  disposeIpcBridge = registerIpcApiBridge(ctx)
 }
 
 function buildIndexHtml(): string {

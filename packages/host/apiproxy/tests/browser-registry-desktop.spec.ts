@@ -76,7 +76,9 @@ function desktopRegistry(page: Page, surface: Partial<DesktopBrowserSurface> = {
 describe('BrowserRegistry desktop CDP seam', () => {
   it('creates, navigates, and snapshots a tab via CDP without bringToFront', async () => {
     const page = createMockPage()
-    const ensureTab = vi.fn(async () => {})
+    const ensureTab = vi.fn(async (_workspaceId, _tabId, url: string) => {
+      page.setPageUrl(url)
+    })
     const selectTab = vi.fn(async () => {})
     const registry = desktopRegistry(page, { ensureTab, selectTab })
     const workspaceId = 'ws-desktop' as WorkspaceId
@@ -92,6 +94,8 @@ describe('BrowserRegistry desktop CDP seam', () => {
     const metadata = await registry.navigate(workspaceId, created.tabId, 'https://example.org')
     expect(metadata.url).toBe('https://example.org')
     expect(selectTab).toHaveBeenCalledWith(workspaceId, created.tabId)
+    expect(page.goto).not.toHaveBeenCalled()
+    expect(ensureTab).toHaveBeenCalledWith(workspaceId, created.tabId, 'https://example.org')
     expect(page.bringToFront).not.toHaveBeenCalled()
 
     const snapshot = await registry.snapshot(workspaceId, created.tabId)
@@ -185,7 +189,10 @@ describe('BrowserRegistry desktop CDP seam', () => {
   it('notifies human reveal after navigate', async () => {
     const revealForHuman = vi.fn()
     const page = createMockPage()
-    const registry = desktopRegistry(page, { revealForHuman })
+    const ensureTab = vi.fn(async (_workspaceId, _tabId, url: string) => {
+      page.setPageUrl(url)
+    })
+    const registry = desktopRegistry(page, { revealForHuman, ensureTab })
     const workspaceId = 'ws-nav-reveal' as WorkspaceId
     const created = await registry.createTab(workspaceId)
     revealForHuman.mockClear()
@@ -215,20 +222,21 @@ describe('BrowserRegistry desktop CDP seam', () => {
     }
   })
 
-  it('rejects navigation that lands on a Chromium net-error page', async () => {
+  it('recovers unreachable navigation to about:blank on desktop', async () => {
     const page = createMockPage()
-    page.goto = vi.fn(async () => {
-      page.setPageUrl('chrome-error://chromewebdata/')
-      return null
+    const ensureTab = vi.fn(async (_workspaceId, _tabId, url: string) => {
+      page.setPageUrl(url === 'http://127.0.0.1:3080/'
+        ? 'chrome-error://chromewebdata/'
+        : url)
     })
-    const registry = desktopRegistry(page)
+    const registry = desktopRegistry(page, { ensureTab })
     const workspaceId = 'ws-nav-fail' as WorkspaceId
     const created = await registry.createTab(workspaceId)
-    await expect(
-      registry.navigate(workspaceId, created.tabId, 'http://127.0.0.1:3080/'),
-    ).rejects.toThrow('Failed to load http://127.0.0.1:3080/')
+    const metadata = await registry.navigate(workspaceId, created.tabId, 'http://127.0.0.1:3080/')
+    expect(metadata.url).toBe('about:blank')
+    expect(ensureTab).toHaveBeenLastCalledWith(workspaceId, created.tabId, 'http://127.0.0.1:3080/')
     const listed = registry.list(workspaceId)
-    expect(listed.tabs[0]?.url).not.toContain('chrome-error://')
+    expect(listed.tabs[0]?.url).toBe('about:blank')
   })
 })
 

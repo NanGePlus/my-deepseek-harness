@@ -9,8 +9,8 @@
 # Playwright browser registry, terminal/Git client roster, workspace, storage —
 # without `dsh-host-webserver`, HTTP static serving, or loopback-only transport
 # rows (`modules`, `client-hmr`). `connection` is mounted so its `dsh.client`
-# half enters the SPA boot graph; the node half waits on `webServer` and stays
-# idle. Renderer RPC uses IPC (`IpcApiClient`); see ADR-0009 and Issue #116.
+# half enters the SPA boot graph; the node half registers Host `ctx.connection`
+# even without webServer so Typert Gateway can intercept IPC Typert Remotes.
 
 # ── surface-specific values the base deliberately omits ─────────────────────
 

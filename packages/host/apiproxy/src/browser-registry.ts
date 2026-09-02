@@ -206,7 +206,7 @@ export class BrowserRegistry {
       tab.lastRequestedUrl = url
       workspace.selectedTabId = tabId
       await this.syncTabMetadata(tab)
-      await this.assertNavigationSucceeded(tab)
+      await this.recoverNetErrorDocument(workspaceId, tab)
       await this.revealTab(workspaceId, tab)
       if (url !== 'about:blank') this.notifyHumanToolboxReveal(workspaceId, tab)
       return { tabId }
@@ -230,7 +230,7 @@ export class BrowserRegistry {
     tab.lastRequestedUrl = url
     workspace.selectedTabId = tabId
     await this.syncTabMetadata(tab)
-    await this.assertNavigationSucceeded(tab)
+    await this.recoverNetErrorDocument(workspaceId, tab)
     await this.revealTab(workspaceId, tab)
     if (url !== 'about:blank') this.notifyHumanToolboxReveal(workspaceId, tab)
     return { tabId }
@@ -294,11 +294,17 @@ export class BrowserRegistry {
   async navigate(workspaceId: WorkspaceId, tabId: string, url: string): Promise<BrowserPageMetadata> {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     tab.lastRequestedUrl = url
-    await tab.page.goto(url, { waitUntil: 'domcontentloaded' })
+    if (this.delivery === 'desktop') {
+      const surface = this.desktopSurface ?? requireDesktopBrowserSurface()
+      await surface.ensureTab(workspaceId, tab.tabId, url)
+      tab.page = await surface.pageForTab(workspaceId, tab.tabId)
+    } else {
+      await tab.page.goto(url, { waitUntil: 'domcontentloaded' })
+    }
     await this.revealTab(workspaceId, tab)
     await this.syncTabMetadata(tab)
     this.notifyHumanToolboxReveal(workspaceId, tab)
-    return this.pageMetadata(tab)
+    return this.pageMetadata(workspaceId, tab)
   }
 
   /** Navigate back when history allows. */
@@ -306,7 +312,7 @@ export class BrowserRegistry {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.goBack({ waitUntil: 'domcontentloaded' })
     await this.revealTab(workspaceId, tab)
-    return this.pageMetadata(tab)
+    return this.pageMetadata(workspaceId, tab)
   }
 
   /** Navigate forward when history allows. */
@@ -314,7 +320,7 @@ export class BrowserRegistry {
     const tab = this.requireTab(this.requireWorkspace(workspaceId), tabId)
     await tab.page.goForward({ waitUntil: 'domcontentloaded' })
     await this.revealTab(workspaceId, tab)
-    return this.pageMetadata(tab)
+    return this.pageMetadata(workspaceId, tab)
   }
 
   /**
@@ -332,7 +338,7 @@ export class BrowserRegistry {
       await tab.page.reload({ waitUntil: 'domcontentloaded' })
     }
     await this.revealTab(workspaceId, tab)
-    return this.pageMetadata(tab)
+    return this.pageMetadata(workspaceId, tab)
   }
 
   /** Return the accessibility tree for one tab. */
@@ -577,9 +583,9 @@ export class BrowserRegistry {
     else notifyDesktopBrowserHumanReveal(request)
   }
 
-  private async pageMetadata(tab: LiveTab): Promise<BrowserPageMetadata> {
+  private async pageMetadata(workspaceId: WorkspaceId, tab: LiveTab): Promise<BrowserPageMetadata> {
     await this.syncTabMetadata(tab)
-    await this.assertNavigationSucceeded(tab)
+    await this.recoverNetErrorDocument(workspaceId, tab)
     return {
       url: tab.url,
       title: tab.title,
@@ -588,10 +594,23 @@ export class BrowserRegistry {
     }
   }
 
-  private async assertNavigationSucceeded(tab: LiveTab): Promise<void> {
-    if (isChromiumInternalErrorUrl(tab.page.url())) {
-      throw new BrowserNavigationFailedError(tab.lastRequestedUrl ?? tab.url)
+  /**
+   * Desktop delivery lands on `chrome-error://` when a URL is unreachable; reset
+   * to `about:blank` so tab creation and the occupant stay usable. Web delivery
+   * still surfaces {@link BrowserNavigationFailedError} to the Client.
+   */
+  private async recoverNetErrorDocument(workspaceId: WorkspaceId, tab: LiveTab): Promise<void> {
+    if (this.delivery !== 'desktop') {
+      if (isChromiumInternalErrorUrl(tab.page.url())) {
+        throw new BrowserNavigationFailedError(tab.lastRequestedUrl ?? tab.url)
+      }
+      return
     }
+    if (!isChromiumInternalErrorUrl(tab.page.url())) return
+    const surface = this.desktopSurface ?? requireDesktopBrowserSurface()
+    tab.page = await surface.pageForTab(workspaceId, tab.tabId)
+    tab.url = 'about:blank'
+    await this.syncTabMetadata(tab)
   }
 
   private async syncTabMetadata(tab: LiveTab): Promise<void> {

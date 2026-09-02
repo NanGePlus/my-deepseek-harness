@@ -1,6 +1,6 @@
 /** Embedded-browser occupant of the details column Browser tab. */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   Button,
@@ -35,6 +35,7 @@ import {
   reportBrowserOccupantBounds,
   subscribeDesktopEmbeddedBrowserOpen,
   subscribeDesktopToolboxBrowserReveal,
+  type BrowserOccupantOverlay,
   type DesktopToolboxBrowserRevealRequest,
   openDesktopExternalUrl,
 } from './browser-desktop-occupant.ts'
@@ -211,6 +212,7 @@ export function BrowserPanel({
   const [revealAttempt, setRevealAttempt] = useState(0)
   const [navigating, setNavigating] = useState(false)
   const [tabMenu, setTabMenu] = useState<{ anchorTabId: string; rect: DOMRect } | null>(null)
+  const [chromeMenuOverlay, setChromeMenuOverlay] = useState<BrowserOccupantOverlay | null>(null)
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
   const navRetryRef = useRef<(() => void) | null>(null)
   const pendingNavigateUrlRef = useRef<string | undefined>(undefined)
@@ -292,6 +294,7 @@ export function BrowserPanel({
       creatingRef.current = true
       actions.setCreating(workspaceId, true)
       actions.setInlineError(workspaceId, undefined)
+      actions.setNavError(workspaceId, undefined)
       actions.setBrowserUnavailable(workspaceId, undefined)
       const listed = await browserList(workspaceId, ac.signal)
       /* v8 ignore next -- superseded create calls abort before settlement. */
@@ -594,6 +597,7 @@ export function BrowserPanel({
     /* v8 ignore next -- tab rows only render after a bound Workspace bootstrap. */
     if (workspaceId === undefined) return
     actions.setSelectedTab(workspaceId, tabId)
+    if (isDesktopOccupant) actions.setNavError(workspaceId, undefined)
     const ac = new AbortController()
     try {
       await browserSelectTab(workspaceId, tabId, ac.signal)
@@ -603,7 +607,7 @@ export function BrowserPanel({
       /* v8 ignore next -- unexpected Host failures propagate to the runtime error boundary. */
       throw error
     }
-  }, [actions, browserSelectTab, workspaceId])
+  }, [actions, browserSelectTab, isDesktopOccupant, workspaceId])
 
   const handleCloseTab = useCallback(async (tabId: string) => {
     /* v8 ignore next -- the close affordance hides while only one tab remains. */
@@ -787,8 +791,8 @@ export function BrowserPanel({
       } catch (error: unknown) {
         /* v8 ignore next -- bootstrap aborts when the segment hides or Workspace changes. */
         if (ac.signal.aborted) return
-        setHostTabsReady(false)
         reportBrowserFailure(actions, workspaceId, error)
+        setHostTabsReady(isDesktopOccupant)
       }
     })()
     return () => {
@@ -797,7 +801,7 @@ export function BrowserPanel({
     }
   }, [
     actions, bootstrapAttempt, browserList, createBlankTab, deferAutoCreate,
-    recreateHostTabsFromStore, visible, workspaceId,
+    isDesktopOccupant, recreateHostTabsFromStore, visible, workspaceId,
   ])
 
   useEffect(() => {
@@ -814,6 +818,33 @@ export function BrowserPanel({
     return () => { ac.abort() }
   }, [actions, hostTabsReady, isDesktopOccupant, revealAttempt, revealWindow, selectedTabId, visible, workspaceId])
 
+  const chromeMenuOpen = tabMenu !== null
+
+  useLayoutEffect(() => {
+    if (!isDesktopOccupant || !chromeMenuOpen) {
+      setChromeMenuOverlay(null)
+      return
+    }
+    const readOverlay = (): void => {
+      const menu = document.querySelector('[role="menu"]')
+      if (!(menu instanceof HTMLElement)) return
+      const rect = menu.getBoundingClientRect()
+      if (rect.height <= 0) return
+      setChromeMenuOverlay({
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+      })
+    }
+    readOverlay()
+    const menu = document.querySelector('[role="menu"]')
+    if (menu === null || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => { readOverlay() })
+    observer.observe(menu)
+    return () => { observer.disconnect() }
+  }, [chromeMenuOpen, isDesktopOccupant])
+
   useEffect(() => {
     if (!isDesktopOccupant) return
     const publish = (): void => {
@@ -821,6 +852,7 @@ export function BrowserPanel({
         desktopReporter,
         occupantRef.current,
         visible,
+        chromeMenuOverlay,
       )
     }
     if (!visible) {
@@ -834,7 +866,7 @@ export function BrowserPanel({
     observer.observe(element)
     return () => { observer.disconnect() }
   }, [
-    desktopReporter, hostTabsReady, isDesktopOccupant,
+    chromeMenuOverlay, desktopReporter, hostTabsReady, isDesktopOccupant,
     revealAttempt, selectedTabId, visible,
   ])
 
@@ -856,7 +888,6 @@ export function BrowserPanel({
   const showConnectingOverlay = !isDesktopOccupant && connecting
   const showLoadingOverlay = showPreparingOverlay || showNavOverlay || showConnectingOverlay
   const chromeTooltipSide = isDesktopOccupant ? 'top' : 'bottom'
-  const chromeMenuSide = isDesktopOccupant ? 'top' : 'bottom'
   const loadingMessage = showPreparingOverlay
     ? t('browser.loading.preparing')
     : showConnectingOverlay
@@ -955,7 +986,7 @@ export function BrowserPanel({
             portal
             compact
             align="start"
-            side={chromeMenuSide}
+            side="bottom"
             anchor={<span aria-hidden="true" />}
             items={tabCloseMenuItems}
             onSelect={(id) => {
@@ -1055,7 +1086,7 @@ export function BrowserPanel({
           {externalInfo}
         </div>
       )}
-      {navError !== undefined && (
+      {navError !== undefined && !isDesktopOccupant && (
         <div className={css.inlineError} role="alert">
           <span className={css.inlineErrorMessage}>{navError}</span>
           <button type="button" className={css.inlineErrorRetry} onClick={retryNav}>
@@ -1063,7 +1094,7 @@ export function BrowserPanel({
           </button>
         </div>
       )}
-      {inlineError !== undefined && (
+      {inlineError !== undefined && !isDesktopOccupant && (
         <div className={css.inlineError} role="alert">
           <span className={css.inlineErrorMessage}>{inlineError}</span>
           <button type="button" className={css.inlineErrorRetry} onClick={retryInline}>
@@ -1126,7 +1157,7 @@ export function BrowserPanel({
             </div>
           </div>
         )}
-        {navError !== undefined && browserUnavailable === undefined && (
+        {navError !== undefined && !isDesktopOccupant && browserUnavailable === undefined && (
           <div className={css.navFailureOverlay} role="alert">
             <span className={css.navFailureIcon} aria-hidden="true">
               <IconGlobeOutline14 size={48} />

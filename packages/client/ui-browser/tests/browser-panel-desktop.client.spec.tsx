@@ -372,6 +372,32 @@ describe('BrowserPanel desktop occupant', () => {
     })
   })
 
+  it('tab context menu: insets occupant bounds below the portaled menu on desktop', async () => {
+    const reportBounds = stubDesktop()
+    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: function (this: HTMLElement) {
+        if (this.getAttribute('role') === 'menu') {
+          return { x: 12, y: 72, width: 160, height: 180, top: 72, left: 12, right: 172, bottom: 252 }
+        }
+        if (this.id === 'browser-occupant') {
+          return { x: 12, y: 112, width: 640, height: 480, top: 112, left: 12, right: 652, bottom: 592 }
+        }
+        return { x: 12, y: 40, width: 120, height: 32, top: 40, left: 12, right: 132, bottom: 72 }
+      },
+    })
+    mount({ browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })) })
+    await waitFor(() => { expect(screen.getByRole('tablist')).toBeTruthy() })
+    reportBounds.mockClear()
+    fireEvent.contextMenu(screen.getByRole('tab', { name: /about:blank/ }))
+    await waitFor(() => { expect(screen.getByRole('menuitem', { name: '关闭' })).toBeTruthy() })
+    await waitFor(() => {
+      expect(reportBounds).toHaveBeenCalledWith({
+        x: 12, y: 252, width: 640, height: 340, visible: true,
+      })
+    })
+  })
+
   it('keeps V4 navigation and tab chrome on fake desktop', async () => {
     stubDesktop()
     const browserNavigate = vi.fn(async (_wid, _tabId, url: string) => ({
@@ -434,6 +460,30 @@ describe('BrowserPanel desktop occupant', () => {
     expect(screen.queryByText('正在准备浏览器…')).toBeNull()
   })
 
+  it('loading: desktop bootstrap failure still dismisses preparing overlay', async () => {
+    stubDesktop()
+    const panelStore = createBrowserPanelStore().create()
+    panelStore.actions.setWorkspaceTabs(WID, [{
+      tabId: 'stale-1',
+      url: 'http://127.0.0.1:3080/',
+      title: 'Host',
+      canGoBack: false,
+      canGoForward: false,
+    }], 'stale-1')
+    mount({
+      useStore: hookOf(panelStore),
+      actions: panelStore.actions,
+      browserList: vi.fn(async () => ({ tabs: [] })),
+      browserCreateTab: vi.fn(async () => {
+        throw new Error('desktop browser CDP: Timeout 10000ms exceeded')
+      }),
+    })
+    await waitFor(() => {
+      expect(screen.queryByText('正在准备浏览器…')).toBeNull()
+    })
+    expect(screen.getByRole('tablist')).toBeTruthy()
+  })
+
   it('loading: shows aria-busy occupant while navigation is in flight', async () => {
     stubDesktop()
     let resolveNav!: (value: BrowserPageMetadata) => void
@@ -456,20 +506,28 @@ describe('BrowserPanel desktop occupant', () => {
     })
   })
 
-  it('nav-error: surfaces inline error and occupant failure copy on desktop', async () => {
+  it('nav-failure: desktop recovers to about:blank without blocking browser chrome', async () => {
     stubDesktop()
-    const browserNavigate = vi.fn(async () => Promise.reject(new Error('dns failed')))
+    const browserNavigate = vi.fn(async () => ({
+      url: 'about:blank',
+      title: '',
+      canGoBack: false,
+      canGoForward: false,
+    }))
+    const browserCreateTab = vi.fn(async () => ({ tabId: 'live-2' }))
     mount({
       browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })),
       browserNavigate,
+      browserCreateTab,
     })
     await waitFor(() => { expect(screen.getByLabelText('地址栏')).toBeTruthy() })
-    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'https://missing.example' } })
+    fireEvent.change(screen.getByLabelText('地址栏'), { target: { value: 'http://127.0.0.1:3080/' } })
     fireEvent.keyDown(screen.getByLabelText('地址栏'), { key: 'Enter' })
-    await waitFor(() => { expect(screen.getByText('dns failed')).toBeTruthy() })
-    expect(screen.getByText('无法加载此页')).toBeTruthy()
-    expect(document.getElementById('browser-occupant')).toBeTruthy()
-    expect(screen.queryByText('显示窗口')).toBeNull()
+    await waitFor(() => { expect(browserNavigate).toHaveBeenCalled() })
+    expect(screen.queryByText('无法加载此页')).toBeNull()
+    expect(screen.queryByText('ERR_CONNECTION_REFUSED')).toBeNull()
+    fireEvent.click(screen.getByLabelText('新建标签页'))
+    await waitFor(() => { expect(browserCreateTab).toHaveBeenCalled() })
   })
 
   it('address-bar submit recovers when Host no longer has the persisted tab', async () => {

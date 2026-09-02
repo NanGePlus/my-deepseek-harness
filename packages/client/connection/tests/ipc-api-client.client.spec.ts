@@ -9,6 +9,7 @@ import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { readDesktopIpcBridge } from '../src/client/ipc-bridge.ts'
 import type { DesktopIpcBridge } from '../src/client/ipc-bridge.ts'
 import { IpcApiClient } from '../src/client/ipc-api-client.ts'
+import { createIpcConnectionRpc } from '../src/client/rpc.ts'
 import { ConnectionController } from '../src/client/connection.ts'
 import { BROWSER_WATCH_SCREENCAST_PATH, TERMINAL_STREAM_PATH } from '../src/api-path.ts'
 import { createHandlerBackedIpcBridge } from './ipc-bridge-fixture.client.ts'
@@ -156,6 +157,42 @@ describe('IpcApiClient protocol isomorphism', () => {
     expect(opened).toEqual(['terminal', 'screencast'])
     expect(terminal[0]?.payload).toMatchObject({ type: 'host/terminal-scrollback', text: 'hi', truncated: false })
     expect(screencast[0]?.payload).toMatchObject({ type: 'host/browser-screencast', width: 1, height: 1 })
+  })
+
+  it('generic RPC routes Typert Remotes through the IPC bridge instead of Renderer fetch', async () => {
+    const seen: { path: string; body: unknown }[] = []
+    const handler = {
+      fetch: async (input: URL | RequestInfo, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(input, init)
+        const body = JSON.parse(await request.text()) as { rpcId: string; method: string; payload: unknown }
+        seen.push({ path: new URL(request.url).pathname, body })
+        return Response.json({
+          type: 'server-response',
+          rpcId: body.rpcId,
+          result: { ok: true, value: { entries: [] } },
+        })
+      },
+    }
+    const bridge = createHandlerBackedIpcBridge(handler)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    try {
+      const result = await createIpcConnectionRpc(bridge).call('/api', 'messageFeedback/list', {
+        args: { sessionId: 'session-1' },
+      })
+      expect(result).toEqual({ ok: true, value: { entries: [] } })
+      expect(fetchSpy).not.toHaveBeenCalled()
+      expect(seen).toEqual([{
+        path: '/api/messageFeedback/list',
+        body: {
+          type: 'client-request',
+          method: 'messageFeedback/list',
+          payload: { args: { sessionId: 'session-1' } },
+          rpcId: expect.any(String),
+        },
+      }])
+    } finally {
+      fetchSpy.mockRestore()
+    }
   })
 
   it('stream loss triggers ConnectionController reconnect with backoff', async () => {
