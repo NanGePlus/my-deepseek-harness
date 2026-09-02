@@ -187,6 +187,7 @@ function mount(over: {
   movePath?: EditorSurfaceProps['movePath']
   createWorkspaceDirectory?: EditorSurfaceProps['createWorkspaceDirectory']
   watchPath?: EditorSurfaceProps['watchPath']
+  lspSyncDocument?: EditorSurfaceProps['lspSyncDocument']
   setDirtyPaths?: EditorSurfaceProps['setDirtyPaths']
 } = {}) {
   const listWorkspaceEntries = vi.fn(over.list ?? (async (_id: WorkspaceId, path: string) => listingFor(path)))
@@ -210,7 +211,7 @@ function mount(over: {
     path: `${parent}/${name}`,
   })))
   const watchPath = vi.fn(over.watchPath ?? (() => {}))
-  const lspSyncDocument = vi.fn(async () => ({ diagnostics: [] as const }))
+  const lspSyncDocument = vi.fn(over.lspSyncDocument ?? (async () => ({ diagnostics: [] as const })))
   const lspCloseDocument = vi.fn(async () => ({ closed: true as const }))
   const lspHoverDocument = vi.fn(async () => ({ hover: null }))
   const items = over.items ?? [workspace()]
@@ -244,7 +245,7 @@ function mount(over: {
   const view = render(<EditorSurface {...props} />)
   return {
     view, props, instance, sessionsStore, workspacesStore, listWorkspaceEntries, gitStatus, readFile, writeFile,
-    deletePath, renamePath, movePath, createWorkspaceDirectory, watchPath,
+    deletePath, renamePath, movePath, createWorkspaceDirectory, watchPath, lspSyncDocument,
   }
 }
 
@@ -946,10 +947,15 @@ describe('EditorSurface open / save', () => {
   it('re-fetches Git badges when the Explorer tab becomes visible again', async () => {
     const b = mount()
     await waitFor(() => { expect(b.gitStatus).toHaveBeenCalledTimes(1) })
+    const initialRootListings = b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length
     b.view.rerender(<EditorSurface {...b.props} visible={false} />)
     expect(b.gitStatus).toHaveBeenCalledTimes(1)
     b.view.rerender(<EditorSurface {...b.props} visible={true} />)
     await waitFor(() => { expect(b.gitStatus.mock.calls.length).toBeGreaterThan(1) })
+    await waitFor(() => {
+      expect(b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length)
+        .toBeGreaterThan(initialRootListings)
+    }, { timeout: 3000 })
   })
 
   it('segment-disk-refresh-hidden: segmentDiskRefreshEpoch re-fetches Git badges while Explorer stays hidden', async () => {
@@ -1603,6 +1609,19 @@ describe('EditorSurface file operations', () => {
     })
   })
 
+  it('drag-move: dropping on the root drop pad moves a nested file to the workspace root', async () => {
+    const b = mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    await selectRow('src')
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    const pad = document.querySelector('[data-tree-root-drop="true"]') as HTMLElement
+    expect(pad).toBeTruthy()
+    dragRowOnto(treeRow('app.ts'), pad)
+    await waitFor(() => {
+      expect(b.movePath).toHaveBeenCalledWith(WID, `${ROOT}/src/app.ts`, ROOT)
+    })
+  })
+
   it('drag-move: dropping onto a file or the source folder does not call Host move', async () => {
     const b = mount()
     await waitFor(() => { expect(screen.getByText('untracked.ts')).toBeTruthy() })
@@ -1783,6 +1802,28 @@ describe('EditorSurface file operations', () => {
     await waitFor(() => {
       expect(b.movePath).toHaveBeenCalledWith(WID, `${ROOT}/src`, `${ROOT}/node_modules`)
     })
+  })
+
+  it('drag-move: hovering a collapsed folder auto-expands it after a delay', async () => {
+    mount()
+    await waitFor(() => { expect(screen.getByText('src')).toBeTruthy() })
+    expect(screen.queryByText('app.ts')).toBeNull()
+    const dataTransfer = {
+      effectAllowed: 'none',
+      dropEffect: 'none',
+      setData: () => {},
+      getData: () => '',
+    }
+    vi.useFakeTimers()
+    try {
+      fireEvent.dragStart(treeRow('untracked.ts'), { dataTransfer })
+      fireEvent.dragOver(treeRow('src', { directory: true }), { dataTransfer })
+      await act(async () => { await vi.advanceTimersByTimeAsync(600) })
+    } finally {
+      vi.useRealTimers()
+    }
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    fireEvent.dragEnd(treeRow('untracked.ts'), { dataTransfer })
   })
 
   it('drag-move: drag-over blank chrome highlights the root drop target', async () => {
@@ -2490,6 +2531,55 @@ describe('EditorSurface external change', () => {
     }, { timeout: 3000 })
     await waitFor(() => { expect(screen.getByText('agent.ts')).toBeTruthy() })
   })
+
+  it('manual-refresh-relists-expanded: clicking 刷新 re-fetches expanded directory listings', async () => {
+    const srcPath = `${ROOT}/src`
+    let srcCalls = 0
+    const list = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === srcPath) {
+        srcCalls += 1
+        const base = listingFor(path)
+        return srcCalls === 1
+          ? base
+          : { ...base, entries: [...base.entries, entry('agent.ts', false)] }
+      }
+      return listingFor(path)
+    })
+    mount({ list })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(screen.getByText('src').closest('[role="treeitem"]')!)
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    expect(screen.queryByText('agent.ts')).toBeNull()
+    const bar = document.querySelector('[data-file-tree-toolbar="true"]')
+    expect(bar).not.toBeNull()
+    fireEvent.click(within(bar as HTMLElement).getByRole('button', { name: '刷新' }))
+    await waitFor(() => { expect(screen.getByText('agent.ts')).toBeTruthy() })
+  })
+
+  it('expanded-directory-watch-refreshes-tree: watch on an expanded folder re-lists that directory', async () => {
+    const watch = createWatchHarness()
+    const srcPath = `${ROOT}/src`
+    const agentFile = entry('agent.ts', false)
+    const list = vi.fn(async (_id: WorkspaceId, path: string) => {
+      const base = listingFor(path)
+      if (path === srcPath) {
+        return { ...base, entries: [...base.entries, agentFile] }
+      }
+      return base
+    })
+    const b = mount({ watchPath: watch.watchPath, list })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(screen.getByText('src').closest('[role="treeitem"]')!)
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    expect(watch.isWatching(srcPath)).toBe(true)
+    const initialSrcListings = b.listWorkspaceEntries.mock.calls.filter(call => call[1] === srcPath).length
+    await act(async () => { watch.trigger(srcPath) })
+    await waitFor(() => {
+      expect(b.listWorkspaceEntries.mock.calls.filter(call => call[1] === srcPath).length)
+        .toBeGreaterThan(initialSrcListings)
+    }, { timeout: 3000 })
+    await waitFor(() => { expect(screen.getByText('agent.ts')).toBeTruthy() })
+  })
 })
 
 describe('EditorSurface dirty guard', () => {
@@ -2601,5 +2691,50 @@ describe('EditorSurface dirty guard', () => {
     await waitFor(() => {
       expect(setDirtyPaths).toHaveBeenCalledWith([])
     })
+  })
+})
+
+describe('EditorSurface LSP diagnostics', () => {
+  const README = `${ROOT}/README.md`
+  const staleError = {
+    severity: 'error' as const,
+    message: 'stale diagnostic',
+    range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+  }
+
+  async function clickFile(name: string): Promise<void> {
+    const tree = await waitFor(() => screen.getByRole('tree', { name: 'alpha' }))
+    fireEvent.click(within(tree).getByText(name).closest('[role="treeitem"]')!)
+  }
+
+  it('ignores stale LSP sync responses after a newer edit supersedes the request', async () => {
+    let releaseStale!: () => void
+    const lspSyncDocument = vi.fn(async (_wid, _path, _text, version: number) => {
+      if (version === 1) {
+        await new Promise<void>((resolve) => {
+          releaseStale = resolve
+        })
+        return { diagnostics: [staleError] }
+      }
+      return { diagnostics: [] as const }
+    })
+    const { lspSyncDocument: syncMock } = mount({ lspSyncDocument })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy() })
+    const box = screen.getByRole('textbox', { name: /README\.md/ }) as HTMLTextAreaElement
+    vi.useFakeTimers()
+    try {
+      fireEvent.change(box, { target: { value: '# first\n' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      expect(syncMock).toHaveBeenCalledWith(WID, README, '# first\n', 1, expect.any(AbortSignal))
+      fireEvent.change(box, { target: { value: '# first\n\n' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      expect(syncMock).toHaveBeenCalledWith(WID, README, '# first\n\n', 2, expect.any(AbortSignal))
+      await act(async () => { releaseStale() })
+      await act(async () => { await Promise.resolve() })
+      expect(screen.queryAllByLabelText('1 个错误')).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

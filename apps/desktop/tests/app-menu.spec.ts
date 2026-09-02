@@ -31,7 +31,7 @@ describe('desktop application menu seam', () => {
     expect(requestQuit).toHaveBeenCalledOnce()
   })
 
-  it('keeps the platform Edit menu so clipboard accelerators stay bound', () => {
+  it('keeps clipboard Edit roles without native undo/redo accelerators', () => {
     const template = buildApplicationMenuTemplate({
       appName: DESKTOP_APP_DISPLAY_NAME,
       version: '1.2.3',
@@ -39,6 +39,12 @@ describe('desktop application menu seam', () => {
       focusSettings: () => undefined,
       requestQuit: () => undefined,
     })
-    expect(template.some(item => item.role === 'editMenu')).toBe(true)
+    const editMenu = template.find(item => item.role === 'editMenu')
+    expect(editMenu).toBeDefined()
+    const submenu = editMenu?.submenu as Array<{ role?: string }> | undefined
+    expect(submenu?.some(item => item.role === 'copy')).toBe(true)
+    expect(submenu?.some(item => item.role === 'paste')).toBe(true)
+    expect(submenu?.some(item => item.role === 'undo')).toBe(false)
+    expect(submenu?.some(item => item.role === 'redo')).toBe(false)
   })
 })

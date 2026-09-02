@@ -694,6 +694,16 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     let state = this.states.get(id)
     if (state === undefined) state = await this.adopt(id)
 
+    if (state.materialized) {
+      const stored = await this.backend.loadStored(id)
+      if (stored !== undefined && stored.events.length !== state.cursor) {
+        throw new Error(
+          `append cursor mismatch for "${id}": coordinator cursor is ${state.cursor} `
+          + `but stored log has ${stored.events.length} event(s); reload the session before appending`,
+        )
+      }
+    }
+
     // Contiguity contract: each event's seq must continue the stored log.
     for (const [i, event] of events.entries()) {
       if (event.seq !== state.cursor + i) {
@@ -1356,6 +1366,7 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     /* v8 ignore next -- state is always set by the awaited initialization */
     const cursor = state?.cursor ?? 0
     const fresh = batch.filter(e => e.seq >= cursor)
+    if (fresh.length === 0) return
     await this.appendCore(id, fresh)
   }
 }

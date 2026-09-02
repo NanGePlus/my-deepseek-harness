@@ -4,6 +4,44 @@ import type { LspEditorDiagnostic, LspEditorDiagnosticSeverity } from '@deepseek
 import type { LspPosition, LspRange } from '@deepseek-ai/dsh-lsp'
 
 /**
+ * Read the optional document version from a `textDocument/publishDiagnostics` params object.
+ * @param params - raw notification params.
+ * @returns the published version when present and valid; otherwise `undefined`.
+ */
+export function readPublishDiagnosticsVersion(params: unknown): number | undefined {
+  if (params === null || typeof params !== 'object') return undefined
+  const version = (params as { version?: unknown }).version
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 0) return undefined
+  return version
+}
+
+/**
+ * Whether a publishDiagnostics notification should resolve a sync waiter.
+ * @param publishedVersion - version from the notification, when present.
+ * @param expectedVersion - document version sent with the matching didChange/didOpen.
+ */
+export function shouldApplyPublishedDiagnostics(
+  publishedVersion: number | undefined,
+  expectedVersion: number,
+): boolean {
+  if (publishedVersion === undefined) return true
+  return publishedVersion === expectedVersion
+}
+
+/**
+ * Whether a publishDiagnostics notification should replace the cached diagnostics entry.
+ * @param publishedVersion - version from the notification, when present.
+ * @param documentVersion - current open-document version on the host.
+ */
+export function shouldUpdateDiagnosticsCache(
+  publishedVersion: number | undefined,
+  documentVersion: number,
+): boolean {
+  if (publishedVersion === undefined) return true
+  return publishedVersion >= documentVersion
+}
+
+/**
  * Normalize one `textDocument/publishDiagnostics` params object.
  * @param params - raw notification params.
  * @returns normalized diagnostics; empty when malformed.

@@ -1,6 +1,6 @@
 /** Left-pane file tree: lazy listings, filename filter, type icons, Git badges, file ops. */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import clsx from 'clsx'
 import {
@@ -27,6 +27,8 @@ import { flattenVisibleTree, paintVisibleRows } from './flatten-visible.ts'
 import { filterTreeEntries } from './tree-entry-filter.ts'
 import { withDirectoryListingTimeout } from './directory-listing-timeout.ts'
 import { rollupGitBadges } from './git-badge-rollup.ts'
+import { stepTreeDragAutoScroll } from './tree-drag-auto-scroll.ts'
+import { shouldScheduleDragExpand, TREE_DRAG_EXPAND_DELAY_MS } from './tree-drag-expand.ts'
 import css from './FileTreePane.module.css'
 import iconCss from './IconButton.module.css'
 import dialogCss from './FileTreeDialogs.module.css'
@@ -176,11 +178,19 @@ export interface FileTreePaneProps extends FileTreeHost, FileTreeMutationHost {
   diagnosticsByPath?: ReadonlyMap<string, readonly HostLspDiagnostic[]> | undefined
   /** Host-absolute path of the focused editor tab; reveals and selects the tree row. */
   activeEditorPath?: string
+  /**
+   * Report expanded directory paths so the host can watch nested listings for external writes.
+   * @param paths - host-absolute expanded directory paths.
+   */
+  onExpandedPathsChange?: (paths: readonly string[]) => void
   /** Cancel a pending open/error overlay when the user navigates the tree without opening a file. */
   onDismissOpenFeedback?: () => void
 }
 
 const ROW_HEIGHT_PX = 22
+/** Extra blank rows below the virtualized list so root drop stays reachable when the tree fills the pane. */
+const ROOT_DROP_PAD_ROWS = 2
+const ROOT_DROP_PAD_PX = ROW_HEIGHT_PX * ROOT_DROP_PAD_ROWS
 
 /**
  * Whether a Host failure indicates a sibling name collision.
@@ -239,6 +249,7 @@ export function FileTreePane({
   explorerRefreshMode = 'parent',
   collapsed = false, onHide, treeWidthPx = null,
   onPathDeleted, onPathRenamed, diagnosticsByPath, activeEditorPath, onDismissOpenFeedback,
+  onExpandedPathsChange,
 }: FileTreePaneProps) {
   const [childrenByPath, setChildrenByPath] = useState<Map<string, readonly WorkspaceEntry[]>>(
     () => new Map(),
@@ -264,6 +275,10 @@ export function FileTreePane({
   const [moveError, setMoveError] = useState<string | null>(null)
   const dragSourceRef = useRef<WorkspaceEntry | null>(null)
   const suppressClickAfterDragRef = useRef(false)
+  const dragPointerYRef = useRef<number | null>(null)
+  const dragScrollRafRef = useRef<number | null>(null)
+  const dragExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dragExpandTargetRef = useRef<string | null>(null)
   const listingAbort = useRef<AbortController | null>(null)
   const fetchAbortByPath = useRef<Map<string, AbortController>>(new Map())
   const listWorkspaceEntriesRef = useRef(listWorkspaceEntries)
@@ -480,12 +495,6 @@ export function FileTreePane({
     }
   }, [workspace])
 
-  const refreshExplorer = useCallback(async (): Promise<void> => {
-    if (workspace === undefined) return
-    await fetchDirectory(workspace.path, { force: true })
-    void refreshGitStatus()
-  }, [workspace, fetchDirectory, refreshGitStatus])
-
   const refreshVisibleDirectories = useCallback(async (): Promise<void> => {
     if (workspace === undefined) return
     const dirs = [workspace.path, ...expandedRef.current]
@@ -494,6 +503,14 @@ export function FileTreePane({
     }
     void refreshGitStatus()
   }, [workspace, fetchDirectory, refreshGitStatus])
+
+  const refreshExplorer = useCallback(async (): Promise<void> => {
+    await refreshVisibleDirectories()
+  }, [refreshVisibleDirectories])
+
+  useEffect(() => {
+    onExpandedPathsChange?.([...expanded])
+  }, [expanded, onExpandedPathsChange])
 
   useEffect(() => {
     const ac = new AbortController()
@@ -633,6 +650,32 @@ export function FileTreePane({
     await fetchDirectory(entry.path)
   }, [workspace, expanded, childrenByPath, failedPaths, fetchDirectory, clearLoadingPath, onDismissOpenFeedback])
 
+  const clearDragExpandTimer = useCallback((): void => {
+    if (dragExpandTimerRef.current !== null) {
+      clearTimeout(dragExpandTimerRef.current)
+      dragExpandTimerRef.current = null
+    }
+    dragExpandTargetRef.current = null
+  }, [])
+
+  const scheduleDragExpand = useCallback((entry: WorkspaceEntry): void => {
+    const sourcePath = dragSourceRef.current?.path
+    if (!shouldScheduleDragExpand(entry, expandedRef.current, sourcePath)) {
+      clearDragExpandTimer()
+      return
+    }
+    if (dragExpandTargetRef.current === entry.path) return
+    clearDragExpandTimer()
+    dragExpandTargetRef.current = entry.path
+    dragExpandTimerRef.current = setTimeout(() => {
+      dragExpandTimerRef.current = null
+      dragExpandTargetRef.current = null
+      if (dragSourceRef.current === null) return
+      if (!shouldScheduleDragExpand(entry, expandedRef.current, dragSourceRef.current.path)) return
+      void toggleDirectory(entry)
+    }, TREE_DRAG_EXPAND_DELAY_MS)
+  }, [clearDragExpandTimer, toggleDirectory])
+
   const workspaceBound = workspace !== undefined
   const rootEntries = workspace === undefined
     ? []
@@ -657,6 +700,7 @@ export function FileTreePane({
   })
   const virtualItems = virtualizer.getVirtualItems()
   const paintedRows = paintVisibleRows(rows, virtualItems, ROW_HEIGHT_PX)
+  const treeContentHeight = virtualizer.getTotalSize() + ROOT_DROP_PAD_PX
 
   useEffect(() => {
     if (workspace === undefined || activeEditorPath === undefined) return
@@ -891,6 +935,58 @@ export function FileTreePane({
     }
   }
 
+  const stopTreeDragScrollLoop = useCallback((): void => {
+    if (dragScrollRafRef.current !== null) {
+      cancelAnimationFrame(dragScrollRafRef.current)
+      dragScrollRafRef.current = null
+    }
+    dragPointerYRef.current = null
+  }, [])
+
+  const startTreeDragScrollLoop = useCallback((): void => {
+    if (dragScrollRafRef.current !== null) return
+    const tick = (): void => {
+      const y = dragPointerYRef.current
+      if (y !== null) stepTreeDragAutoScroll(scrollRef.current, y)
+      dragScrollRafRef.current = requestAnimationFrame(tick)
+    }
+    dragScrollRafRef.current = requestAnimationFrame(tick)
+  }, [])
+
+  useEffect(() => () => {
+    stopTreeDragScrollLoop()
+    clearDragExpandTimer()
+  }, [stopTreeDragScrollLoop, clearDragExpandTimer])
+
+  const noteTreeDragPointer = useCallback((clientY: number): void => {
+    dragPointerYRef.current = clientY
+    stepTreeDragAutoScroll(scrollRef.current, clientY)
+  }, [])
+
+  const handleRootDropHover = useCallback((event: DragEvent): void => {
+    if (event.target instanceof Element && event.target.closest('[role="treeitem"]') !== null) return
+    event.preventDefault()
+    clearDragExpandTimer()
+    noteTreeDragPointer(event.clientY)
+    const source = dragSourceRef.current
+    if (workspace === undefined || source === null) return
+    const dest = destinationDirectoryForTreeDrop(workspace.path, source.path, { kind: 'root' })
+    const transfer = event.dataTransfer
+    if (transfer != null) transfer.dropEffect = dest === null ? 'none' : 'move'
+    setDropOver(dest === null ? null : 'root')
+  }, [workspace, noteTreeDragPointer, clearDragExpandTimer])
+
+  const handleRootDrop = useCallback((event: DragEvent): void => {
+    if (event.target instanceof Element && event.target.closest('[role="treeitem"]') !== null) return
+    event.preventDefault()
+    noteTreeDragPointer(event.clientY)
+    const source = dragSourceRef.current
+    if (workspace === undefined || source === null) return
+    const dest = destinationDirectoryForTreeDrop(workspace.path, source.path, { kind: 'root' })
+    setDropOver(null)
+    if (dest !== null) void commitTreeMove(dest)
+  }, [workspace, noteTreeDragPointer, commitTreeMove])
+
   const nameDialogTitle = nameDialog?.kind === 'new-file'
     ? t('editor.dialog.newFile.title')
     : nameDialog?.kind === 'new-folder'
@@ -1032,29 +1128,8 @@ export function FileTreePane({
           setSelectedPath(undefined)
           setMoveError(null)
         }}
-        onDragOver={(event) => {
-          if (event.target instanceof Element && event.target.closest('[role="treeitem"]') !== null) {
-            return
-          }
-          event.preventDefault()
-          const source = dragSourceRef.current
-          if (workspace === undefined || source === null) return
-          const dest = destinationDirectoryForTreeDrop(workspace.path, source.path, { kind: 'root' })
-          const transfer = event.dataTransfer
-          if (transfer != null) transfer.dropEffect = dest === null ? 'none' : 'move'
-          setDropOver(dest === null ? null : 'root')
-        }}
-        onDrop={(event) => {
-          if (event.target instanceof Element && event.target.closest('[role="treeitem"]') !== null) {
-            return
-          }
-          event.preventDefault()
-          const source = dragSourceRef.current
-          if (workspace === undefined || source === null) return
-          const dest = destinationDirectoryForTreeDrop(workspace.path, source.path, { kind: 'root' })
-          setDropOver(null)
-          if (dest !== null) void commitTreeMove(dest)
-        }}
+        onDragOver={handleRootDropHover}
+        onDrop={handleRootDrop}
       >
         {showTreeEmpty && (
           <div className={css.empty}>
@@ -1076,7 +1151,7 @@ export function FileTreePane({
             role="tree"
             aria-label={treeLabel}
             className={css.tree}
-            style={{ height: `${virtualizer.getTotalSize()}px` }}
+            style={{ height: `${treeContentHeight}px` }}
           >
             {paintedRows.map(({ row, start }) => {
               const letter = gitByPath.get(row.entry.path)
@@ -1125,6 +1200,7 @@ export function FileTreePane({
                     dragSourceRef.current = row.entry
                     suppressClickAfterDragRef.current = false
                     setMoveError(null)
+                    startTreeDragScrollLoop()
                     const transfer = event.dataTransfer
                     if (transfer != null) {
                       transfer.effectAllowed = 'move'
@@ -1139,10 +1215,14 @@ export function FileTreePane({
                     dragSourceRef.current = null
                     setDropOver(null)
                     suppressClickAfterDragRef.current = true
+                    stopTreeDragScrollLoop()
+                    clearDragExpandTimer()
                   }}
                   onDragOver={(event) => {
                     event.preventDefault()
                     event.stopPropagation()
+                    noteTreeDragPointer(event.clientY)
+                    scheduleDragExpand(row.entry)
                     const source = dragSourceRef.current
                     if (workspace === undefined || source === null) return
                     const drop = row.entry.isDirectory
@@ -1217,6 +1297,16 @@ export function FileTreePane({
                 </div>
               )
             })}
+            <div
+              className={clsx(css.rootDropPad, dropOver === 'root' && css.rootDropPadDropTarget)}
+              data-tree-root-drop="true"
+              style={{
+                transform: `translateY(${virtualizer.getTotalSize()}px)`,
+                height: `${ROOT_DROP_PAD_PX}px`,
+              }}
+              onDragOver={handleRootDropHover}
+              onDrop={handleRootDrop}
+            />
           </div>
         )}
       </div>

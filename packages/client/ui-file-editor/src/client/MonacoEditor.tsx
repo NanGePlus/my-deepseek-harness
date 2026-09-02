@@ -8,6 +8,7 @@ import { loadMonacoEditor, type MonacoEditorModule, type MonacoStandaloneEditor 
 import { ensureMonacoConfigured } from './monaco-config.ts'
 import { monacoOptionsForContent, monacoSurfaceOptionsForLanguage } from './editor-file-policy.ts'
 import { installMonacoClickSelectionGuard } from './monaco-click-selection.ts'
+import { installMonacoDesktopUndoKeys } from './monaco-desktop-undo.ts'
 import { emitMonacoBuffer, markMonacoBufferPropApplied, planMonacoBufferPropApply } from './monaco-buffer-sync.ts'
 import { setLspHoverHandler } from './monaco-hover.ts'
 import { installMonacoEnvironment } from './monaco-environment.ts'
@@ -211,6 +212,7 @@ export function MonacoEditor({
     let cancelled = false
     let removeImeGuards: (() => void) | undefined
     let removeClickGuard: (() => void) | undefined
+    let removeDesktopUndo: (() => void) | undefined
     let removeScrollSubscription: (() => void) | undefined
     void loadMonacoEditor().then((monaco) => {
       if (cancelled) return
@@ -281,6 +283,7 @@ export function MonacoEditor({
       }
       removeImeGuards = installMonacoImeGuards(host, syncState.current, flushBuffer)
       removeClickGuard = installMonacoClickSelectionGuard(editor).dispose
+      removeDesktopUndo = installMonacoDesktopUndoKeys(editor)
       editor.onDidChangeModelContent(() => {
         if (syncState.current.composing) return
         flushBuffer()
@@ -321,6 +324,7 @@ export function MonacoEditor({
       cancelled = true
       removeImeGuards?.()
       removeClickGuard?.()
+      removeDesktopUndo?.()
       removeScrollSubscription?.()
       if (monacoScrollTimerRef.current !== null) {
         clearTimeout(monacoScrollTimerRef.current)

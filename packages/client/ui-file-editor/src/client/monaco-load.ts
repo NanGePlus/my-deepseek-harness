@@ -38,10 +38,22 @@ export interface MonacoStandaloneEditor {
    */
   onDidChangeCursorSelection: (listener: () => void) => { dispose: () => void }
   /**
+   * Subscribe to editor focus events.
+   * @param listener - called when the editor text surface receives focus.
+   */
+  onDidFocusEditorText: (listener: () => void) => { dispose: () => void }
+  /**
    * Subscribe to editor blur events.
    * @param listener - called when the editor text surface loses focus.
    */
   onDidBlurEditorText: (listener: () => void) => { dispose: () => void }
+  /**
+   * Run a Monaco editor command.
+   * @param source - command source label.
+   * @param handlerId - registered command id.
+   * @param payload - command payload.
+   */
+  trigger: (source: string, handlerId: string, payload: unknown) => void
   /**
    * Map a document position to coordinates inside the scrolled editor viewport.
    * @param position - one-based line and column.

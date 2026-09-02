@@ -14,7 +14,7 @@ import { deadline } from '@deepseek-ai/dsh-timeout'
 import { abortable, abortError } from './abort.ts'
 import { LspConnection } from './connection.ts'
 import type { ConnectionSpawner, ConnectionSpec } from './connection.ts'
-import { normalizePublishDiagnostics } from './diagnostics.ts'
+import { normalizePublishDiagnostics, readPublishDiagnosticsVersion, shouldApplyPublishedDiagnostics, shouldUpdateDiagnosticsCache } from './diagnostics.ts'
 import { resolveHostSourceUri } from './host.ts'
 import type { HostWorkspace } from './host.ts'
 import type { FileSystem } from '@deepseek-ai/dsh-fs'
@@ -36,9 +36,18 @@ interface OpenDocument {
   languageId: string
 }
 
+interface DiagnosticWaiter {
+  expectedVersion: number
+  resolve: (value: readonly LspEditorDiagnostic[]) => void
+  reject: (error: Error) => void
+}
+
 /**
  * Persistent-open language server for Monaco diagnostics.
  */
+/** Wait for publishDiagnostics to quiesce before resolving a sync waiter. */
+export const DIAGNOSTICS_SETTLE_MS = 300
+
 export class EditorLspInstance {
   private readonly connection: LspConnection
   private disposed = false
@@ -46,7 +55,10 @@ export class EditorLspInstance {
   private readonly ready: Promise<void>
   private readonly openDocuments = new Map<string, OpenDocument>()
   private readonly diagnosticsByUri = new Map<string, readonly LspEditorDiagnostic[]>()
-  private readonly diagnosticWaiters = new Map<string, Array<(value: readonly LspEditorDiagnostic[]) => void>>()
+  private readonly diagnosticWaiters = new Map<string, DiagnosticWaiter[]>()
+  private readonly diagnosticSettleTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly diagnosticSettleTokens = new Map<string, number>()
+  private readonly lastPublishedVersionByUri = new Map<string, number | undefined>()
 
   constructor(
     private readonly spec: EditorInstanceSpec,
@@ -78,7 +90,7 @@ export class EditorLspInstance {
     await abortable(this.ready, signal)
     const uri = await resolveHostSourceUri(this.fs, request.filePath, workspace, signal)
     await this.ensureDocumentOpen(uri, request.languageId, request.version, request.text)
-    return await this.waitForDiagnostics(uri, signal)
+    return await this.waitForDiagnostics(uri, request.version, signal)
   }
 
   async closeDocument(
@@ -91,8 +103,11 @@ export class EditorLspInstance {
     await abortable(this.ready, signal)
     const uri = await resolveHostSourceUri(this.fs, request.filePath, workspace, signal)
     if (!this.openDocuments.has(uri)) return
+    this.cancelDiagnosticSettle(uri)
+    this.supersedeDiagnosticWaiters(uri)
     this.openDocuments.delete(uri)
     this.diagnosticsByUri.delete(uri)
+    this.lastPublishedVersionByUri.delete(uri)
     try {
       await this.connection.notify('textDocument/didClose', { textDocument: { uri } })
     } catch {
@@ -127,8 +142,15 @@ export class EditorLspInstance {
 
   async dispose(): Promise<void> {
     this.disposed = true
+    for (const uri of [...this.diagnosticSettleTimers.keys()]) {
+      this.cancelDiagnosticSettle(uri)
+    }
+    for (const uri of [...this.diagnosticWaiters.keys()]) {
+      this.supersedeDiagnosticWaiters(uri)
+    }
     this.openDocuments.clear()
     this.diagnosticsByUri.clear()
+    this.lastPublishedVersionByUri.clear()
     const shutdownDeadline = deadline(undefined, this.spec.shutdownTimeoutMs, 'LSP_EDITOR_SHUTDOWN')
     try {
       await abortable(this.connection.request('shutdown', null), shutdownDeadline.signal)
@@ -159,15 +181,69 @@ export class EditorLspInstance {
     if (params === null || typeof params !== 'object') return
     const uri = (params as { uri?: unknown }).uri
     if (typeof uri !== 'string') return
-    this.publishDiagnostics(uri, normalizePublishDiagnostics(params))
+    this.publishDiagnostics(uri, params, normalizePublishDiagnostics(params))
   }
 
-  private publishDiagnostics(uri: string, diagnostics: readonly LspEditorDiagnostic[]): void {
+  private publishDiagnostics(
+    uri: string,
+    params: unknown,
+    diagnostics: readonly LspEditorDiagnostic[],
+  ): void {
+    const publishedVersion = readPublishDiagnosticsVersion(params)
+    const documentVersion = this.openDocuments.get(uri)?.version
+    if (documentVersion !== undefined && !shouldUpdateDiagnosticsCache(publishedVersion, documentVersion)) {
+      return
+    }
     this.diagnosticsByUri.set(uri, diagnostics)
+    this.scheduleDiagnosticSettle(uri, publishedVersion)
+  }
+
+  private scheduleDiagnosticSettle(uri: string, publishedVersion: number | undefined): void {
+    if (this.diagnosticWaiters.get(uri) === undefined) return
+    this.lastPublishedVersionByUri.set(uri, publishedVersion)
+    const existing = this.diagnosticSettleTimers.get(uri)
+    if (existing !== undefined) clearTimeout(existing)
+    const token = (this.diagnosticSettleTokens.get(uri) ?? 0) + 1
+    this.diagnosticSettleTokens.set(uri, token)
+    this.diagnosticSettleTimers.set(uri, setTimeout(() => {
+      this.diagnosticSettleTimers.delete(uri)
+      if (this.diagnosticSettleTokens.get(uri) !== token) return
+      this.flushDiagnosticWaiters(uri)
+    }, DIAGNOSTICS_SETTLE_MS))
+  }
+
+  private flushDiagnosticWaiters(uri: string): void {
+    const waiters = this.diagnosticWaiters.get(uri)
+    if (waiters === undefined) return
+    const publishedVersion = this.lastPublishedVersionByUri.get(uri)
+    const diagnostics = this.diagnosticsByUri.get(uri) ?? []
+    const remaining: DiagnosticWaiter[] = []
+    for (const waiter of waiters) {
+      if (shouldApplyPublishedDiagnostics(publishedVersion, waiter.expectedVersion)) {
+        waiter.resolve(diagnostics)
+      } else {
+        remaining.push(waiter)
+      }
+    }
+    if (remaining.length === 0) this.diagnosticWaiters.delete(uri)
+    else this.diagnosticWaiters.set(uri, remaining)
+  }
+
+  private cancelDiagnosticSettle(uri: string): void {
+    const timer = this.diagnosticSettleTimers.get(uri)
+    if (timer !== undefined) clearTimeout(timer)
+    this.diagnosticSettleTimers.delete(uri)
+    this.diagnosticSettleTokens.set(uri, (this.diagnosticSettleTokens.get(uri) ?? 0) + 1)
+  }
+
+  private supersedeDiagnosticWaiters(uri: string): void {
+    this.cancelDiagnosticSettle(uri)
     const waiters = this.diagnosticWaiters.get(uri)
     if (waiters === undefined) return
     this.diagnosticWaiters.delete(uri)
-    for (const resolve of waiters) resolve(diagnostics)
+    for (const waiter of waiters) {
+      waiter.reject(new LspError('LSP sync superseded by a newer edit', 'LSP_SUPERSEDED'))
+    }
   }
 
   private async ensureDocumentOpen(
@@ -195,6 +271,10 @@ export class EditorLspInstance {
       return
     }
     if (existing.text === text && existing.version === version) return
+    this.cancelDiagnosticSettle(uri)
+    this.supersedeDiagnosticWaiters(uri)
+    this.diagnosticsByUri.delete(uri)
+    this.lastPublishedVersionByUri.delete(uri)
     await this.connection.notify('textDocument/didChange', {
       textDocument: { uri, version },
       contentChanges: [{ text }],
@@ -203,20 +283,36 @@ export class EditorLspInstance {
     existing.text = text
   }
 
-  private waitForDiagnostics(uri: string, signal?: AbortSignal): Promise<readonly LspEditorDiagnostic[]> {
+  private waitForDiagnostics(
+    uri: string,
+    expectedVersion: number,
+    signal?: AbortSignal,
+  ): Promise<readonly LspEditorDiagnostic[]> {
     const wait = deadline(signal, this.spec.diagnosticsWaitMs, 'LSP_EDITOR_DIAGNOSTICS')
-    return new Promise<readonly LspEditorDiagnostic[]>((resolve) => {
-      const finish = (value: readonly LspEditorDiagnostic[]): void => {
-        wait[Symbol.dispose]()
-        resolve(value)
+    return abortable(new Promise<readonly LspEditorDiagnostic[]>((resolve, reject) => {
+      const waiter: DiagnosticWaiter = {
+        expectedVersion,
+        resolve: (value) => {
+          this.removeDiagnosticWaiter(uri, waiter)
+          resolve(value)
+        },
+        reject: (error) => {
+          this.removeDiagnosticWaiter(uri, waiter)
+          reject(error)
+        },
       }
-      wait.signal.addEventListener('abort', () => {
-        finish(this.diagnosticsByUri.get(uri) ?? [])
-      }, { once: true })
       const queue = this.diagnosticWaiters.get(uri) ?? []
-      queue.push(finish)
+      queue.push(waiter)
       this.diagnosticWaiters.set(uri, queue)
-    })
+    }), wait.signal).finally(() => { wait[Symbol.dispose]() })
+  }
+
+  private removeDiagnosticWaiter(uri: string, target: DiagnosticWaiter): void {
+    const queue = this.diagnosticWaiters.get(uri)
+    if (queue === undefined) return
+    const remaining = queue.filter(waiter => waiter !== target)
+    if (remaining.length === 0) this.diagnosticWaiters.delete(uri)
+    else this.diagnosticWaiters.set(uri, remaining)
   }
 
   private answerServerRequest(method: string, params: unknown): Promise<unknown> {
