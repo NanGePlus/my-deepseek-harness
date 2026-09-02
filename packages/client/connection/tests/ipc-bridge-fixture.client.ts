@@ -31,13 +31,13 @@ export function createHandlerBackedIpcBridge(handler: { fetch: typeof fetch }): 
       const abort = new AbortController()
       fetchAborters.set(request.requestId, abort)
       try {
-        const response = await handler.fetch(new URL(request.path, 'http://dsh.internal'), {
+        const response = await handler.fetch(new Request(new URL(request.path, 'http://dsh.internal'), {
           method: request.method,
           ...request.body === undefined
             ? {}
             : { headers: { 'content-type': 'application/json' }, body: request.body },
           signal: abort.signal,
-        })
+        }))
         return { status: response.status, body: await response.text() }
       } finally {
         fetchAborters.delete(request.requestId)
@@ -84,7 +84,7 @@ async function pumpStream(
     for (const listener of listeners) listener(...args)
   }
   try {
-    const response = await handler.fetch(new URL(path, 'http://dsh.internal'), { signal })
+    const response = await handler.fetch(new Request(new URL(path, 'http://dsh.internal'), { signal }))
     if (!response.ok || response.body === null) throw new Error(`stream open failed: HTTP ${response.status}`)
     emit(openedListeners, streamId)
     for await (const data of readSseDataLines(response)) {

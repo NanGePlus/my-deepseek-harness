@@ -10,7 +10,17 @@ import type { ApiProxy } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import { RpcId, type ClientRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { WebServer, WebRoute, WebUpgradeRoute } from '@deepseek-ai/dsh-host-webserver'
-import { API_PATH, apply, HOST_EVENTS_PATH, inject, MUX_EVENTS_PATH, WATCH_PATH_PATH, type HostConnectionHandle } from '../src/index.ts'
+import {
+  API_PATH,
+  apply,
+  createHostApiFetchHandler,
+  HOST_EVENTS_PATH,
+  HostConnectionService,
+  inject,
+  MUX_EVENTS_PATH,
+  WATCH_PATH_PATH,
+  type HostConnectionHandle,
+} from '../src/index.ts'
 
 /** Structural webServer fake recording both route registries. */
 function fakeHttpServer(
@@ -90,6 +100,76 @@ async function mounted(config?: { trustedHosts?: string[] }): Promise<{
 }
 
 describe('connection node half', () => {
+  it('provides ctx.connection without webServer so Typert Gateway can intercept IPC Remotes', async () => {
+    const ctx = new Context()
+    ctx.provide('apiProxy', {} as unknown as ApiProxy)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    expect(ctx.get('connection')).toBeDefined()
+    await fiber.dispose()
+  })
+
+  it('createHostApiFetchHandler routes Typert Remote intercepts before ApiProxy fallback', async () => {
+    const ctx = new Context()
+    ctx.provide('apiProxy', {} as unknown as ApiProxy)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    try {
+      const connection = ctx.get('connection') as HostConnectionHandle
+      await connection.rpc.intercept(
+        '/api',
+        endpoint => endpoint.startsWith('messageFeedback/'),
+        async () => ({
+          ok: true,
+          value: {
+            messageId: 'message-1',
+            rating: 'positive',
+            version: 'v1',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        }),
+        { authority: 'trusted-host' },
+      )
+      const handler = createHostApiFetchHandler(ctx, ctx.get('connection') as HostConnectionService)
+      const rpcId = RpcId('test-put')
+      const response = await handler.fetch(new Request('http://127.0.0.1/api/messageFeedback/put', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          type: 'client-request',
+          rpcId,
+          method: 'messageFeedback/put',
+          payload: {
+            args: {
+              sessionId: 'session-1',
+              messageId: 'message-1',
+              rating: 'positive',
+              ifVersion: null,
+            },
+          },
+        } satisfies ClientRequest),
+      }))
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({
+        type: 'server-response',
+        rpcId,
+        result: {
+          ok: true,
+          value: {
+            messageId: 'message-1',
+            rating: 'positive',
+            version: 'v1',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      })
+    } finally {
+      await fiber.dispose()
+    }
+  })
+
   it('declares no required inject so desktop Host can load the dsh.client row without webServer', async () => {
     expect(inject).toEqual([])
     const ctx = new Context()

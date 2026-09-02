@@ -6,8 +6,10 @@
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
 import { ipcMain } from 'electron'
+import type { Context } from '@deepseek-ai/cordis'
 import type { ApiProxy, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
-import { RpcId, toFetchHandler } from '@deepseek-ai/dsh-host-apiproxy'
+import { RpcId } from '@deepseek-ai/dsh-host-apiproxy'
+import { createHostApiFetchHandler, type HostConnectionService } from '@deepseek-ai/dsh-client-connection'
 import {
   IPC_API_FETCH,
   IPC_API_FETCH_CANCEL,
@@ -41,12 +43,21 @@ const fetchAborters = new Map<string, AbortController>()
 const streamAborters = new Map<string, AbortController>()
 
 /**
- * Register IPC handlers that forward Renderer RPC to the booted Host ApiProxy.
- * @param api - host-side API from `ctx.apiProxy`.
+ * Register IPC handlers that forward Renderer RPC through the same Host `/api`
+ * transport as loopback HTTP (Typert Gateway intercept + ApiProxy fallback).
+ * @param ctx - booted Host Cordis context.
  * @returns disposer removing IPC handlers and aborting live streams.
  */
-export function registerIpcApiBridge(api: ApiProxy): () => void {
-  const handler = toFetchHandler(api)
+export function registerIpcApiBridge(ctx: Context): () => void {
+  const connection = ctx.get('connection') as HostConnectionService | undefined
+  if (connection === undefined) {
+    throw new Error('desktop IPC bridge requires ctx.connection from the Host connection plugin')
+  }
+  const handler = createHostApiFetchHandler(ctx, connection)
+  const api = ctx.get('apiProxy') as ApiProxy | undefined
+  if (api === undefined) {
+    throw new Error('desktop IPC bridge requires ctx.apiProxy from the booted Host')
+  }
   ipcMain.handle(IPC_API_FETCH, async (event, request: {
     requestId: string
     path: string
@@ -56,13 +67,13 @@ export function registerIpcApiBridge(api: ApiProxy): () => void {
     const abort = new AbortController()
     fetchAborters.set(request.requestId, abort)
     try {
-      const response = await handler.fetch(new URL(request.path, 'http://dsh.internal'), {
+      const response = await handler.fetch(new Request(new URL(request.path, 'http://dsh.internal'), {
         method: request.method,
         ...request.body === undefined
           ? {}
           : { headers: { 'content-type': 'application/json' }, body: request.body },
         signal: abort.signal,
-      })
+      }))
       return { status: response.status, body: await response.text() }
     } finally {
       fetchAborters.delete(request.requestId)

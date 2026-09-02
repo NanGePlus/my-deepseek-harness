@@ -74,7 +74,7 @@ export class HostConnectionService extends Service implements HostConnectionHand
   ): FetchHandler {
     return {
       fetch: (request) => {
-        const endpoint = endpointFromPath(channel, new URL(request.url).pathname)
+        const endpoint = endpointFromPath(channel, new URL(requestHref(request)).pathname)
         const interceptor = this.interceptors.get(channel)
         if (endpoint === undefined || interceptor === undefined || !interceptor.matches(endpoint)) {
           return fallback.fetch(request)
@@ -147,7 +147,7 @@ function rpcFetchHandler(
 ): FetchHandler {
   return {
     async fetch(request: Request): Promise<Response> {
-      const endpoint = endpointFromPath(channel, new URL(request.url).pathname)
+      const endpoint = endpointFromPath(channel, new URL(requestHref(request)).pathname)
       if (request.method !== 'POST' || endpoint === undefined) {
         return new Response('not found', { status: 404 })
       }
@@ -195,6 +195,12 @@ function invalidEnvelopeResponse(body: unknown, issues: RpcErrorDetailsMap['bad-
     message: 'invalid client-request message',
     details: { issues },
   })
+}
+
+function requestHref(input: Request | URL | string): string {
+  if (typeof input === 'string') return input
+  if (input instanceof URL) return input.href
+  return input.url
 }
 
 function endpointFromPath(channel: string, pathname: string): string | undefined {

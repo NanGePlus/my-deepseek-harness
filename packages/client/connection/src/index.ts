@@ -6,7 +6,7 @@ import type {} from '@deepseek-ai/dsh-attachment'
 import type { WebRoute, WebUpgradeRoute } from '@deepseek-ai/dsh-host-webserver'
 import { toFetchHandler } from '@deepseek-ai/dsh-host-apiproxy'
 import { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH, WATCH_PATH_PATH } from './api-path.ts'
-import { bridge, DEFAULT_MAX_REQUEST_BODY_BYTES } from './http-bridge.ts'
+import { bridge, DEFAULT_MAX_REQUEST_BODY_BYTES, type FetchHandler } from './http-bridge.ts'
 import { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust.ts'
 import { HostConnectionService } from './rpc-host.ts'
 import { rejectWebSocketUpgrade, WebSocketDownlinks } from './websocket-downlink.ts'
@@ -128,28 +128,11 @@ const PRIVILEGED_METHODS = new Set([
   'llm.discoverModels',
 ])
 
-/**
- * Mounts the API gateway under the browser transport prefix when `webServer`
- * is present. Desktop Host has no webserver; apply then returns so the
- * `dsh.client` row can still enter the SPA boot graph. Every request on the
- * prefix passes the browser-trust fence first (DNS-rebinding and
- * cross-site defense — [api-request-trust](./api-request-trust.ts));
- * privileged methods additionally pass it with an empty trust list, which
- * pins them to loopback.
- * @param ctx - Host plugin context.
- * @param config - resolved plugin config (schema defaults applied).
- */
-export function apply(ctx: Context, config?: ConnectionConfig): void {
-  // The Loader resolves schema defaults; hand-built test contexts may pass none.
-  const trustedHosts = config?.trustedHosts ?? []
-  const maxRequestBodyBytes = config?.maxRequestBodyBytes ?? DEFAULT_MAX_REQUEST_BODY_BYTES
-  // Config boundary: a malformed entry fails the load loudly here rather than
-  // silently authorizing its hostname prefix at request time.
-  for (const entry of trustedHosts) assertTrustedAuthority(entry)
-  if (ctx.get('apiProxy') !== undefined) assertImageBodyCapacity(ctx, maxRequestBodyBytes)
-  if (ctx.get('webServer') === undefined) return
-  const connection = new HostConnectionService(ctx, trustedHosts)
-  const fetchHandler = connection.createSharedFetchHandler(API_PATH, {
+export function createHostApiFetchHandler(
+  ctx: Context,
+  connection: HostConnectionService,
+): FetchHandler {
+  return connection.createSharedFetchHandler(API_PATH, {
     async fetch(request) {
       const pathname = new URL(request.url).pathname
       const method = pathname.startsWith(`${API_PATH}/`)
@@ -175,6 +158,30 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
       return toFetchHandler(apiProxy).fetch(request)
     },
   })
+}
+
+/**
+ * Mounts Host Connection RPC and, when `webServer` is present, the browser
+ * transport prefix. Desktop Host has no webserver; apply still registers
+ * `ctx.connection` so Typert Gateway can intercept Typert Remotes for IPC.
+ * Every HTTP request on the prefix passes the browser-trust fence first
+ * (DNS-rebinding and cross-site defense — [api-request-trust](./api-request-trust.ts));
+ * privileged methods additionally pass it with an empty trust list, which
+ * pins them to loopback.
+ * @param ctx - Host plugin context.
+ * @param config - resolved plugin config (schema defaults applied).
+ */
+export function apply(ctx: Context, config?: ConnectionConfig): void {
+  // The Loader resolves schema defaults; hand-built test contexts may pass none.
+  const trustedHosts = config?.trustedHosts ?? []
+  const maxRequestBodyBytes = config?.maxRequestBodyBytes ?? DEFAULT_MAX_REQUEST_BODY_BYTES
+  // Config boundary: a malformed entry fails the load loudly here rather than
+  // silently authorizing its hostname prefix at request time.
+  for (const entry of trustedHosts) assertTrustedAuthority(entry)
+  if (ctx.get('apiProxy') !== undefined) assertImageBodyCapacity(ctx, maxRequestBodyBytes)
+  const connection = new HostConnectionService(ctx, trustedHosts)
+  const fetchHandler = createHostApiFetchHandler(ctx, connection)
+  if (ctx.get('webServer') === undefined) return
   const route: WebRoute = {
     kind: 'prefix',
     path: API_PATH,

@@ -10,7 +10,7 @@ import { FixtureApiClient } from './fixture.ts'
 import { WebApiClient } from './web-api-client.ts'
 import { IpcApiClient } from './ipc-api-client.ts'
 import { readDesktopIpcBridge } from './ipc-bridge.ts'
-import { createWebConnectionRpc } from './rpc.ts'
+import { createWebConnectionRpc, createIpcConnectionRpc } from './rpc.ts'
 import { isLoopbackHostname } from '../loopback-hostname.ts'
 import type { ClientConnectionRpc } from '../rpc.ts'
 
@@ -90,6 +90,13 @@ export interface ConnectionHandle {
   start(sinks: ConnectionSinks, config?: ConnectionConfig): { stop(): void }
 }
 
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Browser-side wire api, stream controller entry point, and generic rpc. */
+    connection: ConnectionHandle
+  }
+}
+
 /**
  * Client plugin body: pick the api by page mode and provide ctx.connection.
  * @param ctx - client cordis context.
@@ -100,7 +107,7 @@ export function apply(ctx: Context): void {
   const fixtureClient = fixture ? new FixtureApiClient() : undefined
   const ipcBridge = fixtureClient === undefined ? readDesktopIpcBridge() : undefined
   const api: IApiClient = fixtureClient ?? (ipcBridge !== undefined ? new IpcApiClient(ipcBridge) : new WebApiClient())
-  const rpc = fixtureClient?.rpc ?? createWebConnectionRpc()
+  const rpc = fixtureClient?.rpc ?? (ipcBridge !== undefined ? createIpcConnectionRpc(ipcBridge) : createWebConnectionRpc())
   let started = false
   let description: HostDescription | undefined
   const descriptionListeners = new Set<() => void>()
