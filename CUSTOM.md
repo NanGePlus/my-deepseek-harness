@@ -75,7 +75,7 @@
 - **文件夹重命名**时同步更新已打开子文件 Tab 路径；**删除文件夹**时关闭子树 Tab 并清理树缓存
 - 同名冲突：文件↔文件、文件夹↔文件夹分别提示；Host 层拦截路径类型冲突
 - 外部变更：`watchPath` 检测到 Agent 等外部改盘时**无确认框、自动重新加载**已打开 Tab（含未保存编辑；磁盘内容优先）；Git 面板撤销仍直接 reload
-- **文件树自动刷新**：新建/重命名/删除及 Workspace 根目录外部监听后重载 listing；**显式保存仅静默刷新 Git 徽章**，不重载目录 listing
+- **文件树自动刷新**：新建/重命名/删除、Workspace 根目录与**已展开文件夹**的外部 `watchPath`、工具栏 **刷新**（重载根 + 已展开层）、切回资源管理器 Tab 后重载可见 listing；**显式保存仅静默刷新 Git 徽章**，不重载目录 listing
 - Session 切换 / 关闭 dirty Tab **守卫**（保存 / 丢弃 / 取消）
 - Session 内文件路径链接可在 details 编辑器中打开
 - Monaco / 主题跟随 Harness light/dark；编辑画布（含非 Markdown）使用与 Markdown 相同的 `bg-base`
@@ -142,7 +142,7 @@
 | `scripts/dev-desktop.ts` | **新文件**（#115）：并行 Vite + Electron | 2026-08-31 |
 | `package.json` | **2026-08-31**（#115）`dev:desktop` script | 2026-08-31 |
 | `packages/host/apiproxy/` | **2026-08-26** `watchPath` 文件目标监视父目录；Git / 终端 / 浏览器 Host RPC（V2–V4）；**2026-08-31** 有头浏览器人类操作面与关窗恢复 | 2026-08 |
-| `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat；**2026-08-23** 保存/外部变更后文件树自动刷新；**2026-08-25** 资源管理器 `visible` 切回后重读 Git 徽章；**2026-08-25** 经 `setDirtyPaths` 发布 dirty Tab 路径供 Git 操作守卫；**2026-08-26** 编辑区 scroll-reveal 滚动条对齐会话区；**2026-08-26** Git 徽章上卷到未跟踪目录的祖先文件夹；**2026-08-26** 非 Markdown 编辑画布与 Markdown 同用 `bg-base`；**2026-08-26** listing 超时显示 **!** 而非卡住 spinner；**2026-08-28** 树空白点击回到根、拖拽移动；**2026-08-31**（#117）`requestExit` / `waitForExitDecision` 桌面退出守卫 + `desktop-shell.ts` IPC 接线 | 2026-08 |
+| `packages/client/ui-file-editor/` | **新包**：文件树 + Monaco 编辑器 surface；**2026-08-23** Markdown 预览 WYSIWYG（TipTap）；**2026-08-23** 全语言 Monaco 选区 Add to Chat；**2026-08-23** 保存/外部变更后文件树自动刷新；**2026-08-25** 资源管理器 `visible` 切回后重读 Git 徽章；**2026-08-25** 经 `setDirtyPaths` 发布 dirty Tab 路径供 Git 操作守卫；**2026-08-26** 编辑区 scroll-reveal 滚动条对齐会话区；**2026-08-26** Git 徽章上卷到未跟踪目录的祖先文件夹；**2026-08-26** 非 Markdown 编辑画布与 Markdown 同用 `bg-base`；**2026-08-26** listing 超时显示 **!** 而非卡住 spinner；**2026-08-28** 树空白点击回到根、拖拽移动；**2026-08-31**（#117）`requestExit` / `waitForExitDecision` 桌面退出守卫 + `desktop-shell.ts` IPC 接线；**2026-09-02** 资源管理器 **刷新** 与 Agent 写盘：重载已展开目录 + 对已展开文件夹注册 `watchPath`（修复嵌套新建后树 stale） | 2026-09-02 |
 | `packages/client/ui-settings-general/src/client/SettingsRoot.tsx` | **2026-08-31**（#117）应用菜单 Settings 经 `dsh:focus-settings` 打开设置面板 | 2026-08-31 |
 | `packages/client/connection/` | **2026-08-26** `host.watchPath` 浏览器下行改 WebSocket，避免 HTTP/1.1 六连接占满后文件树 listing 排队超时；**2026-08-30** connection schema 与 fetch client 扩展 `host.browser*`；**2026-08-31** `host.browserShowWindow`；**2026-08-31** node 半面 `inject` 不再强制 `webServer`（桌面 Host 可扫描 `dsh.client`，HTTP 路由等 webServer 才挂）；**2026-08-31** desktop IPC 下行增加 `terminalStream` / `browserWatchScreencast` | 2026-08 |
 | `packages/client/ui-git/` | **新包**：工具箱 Git 面板 occupant（绑定 Workspace、两段变更列表、四种空态、初始化）；**2026-08-25** 整文件暂存 / 取消暂存 / 丢弃确认 / 提交与按 Session 草稿；**2026-08-25** 单击行差异预览与按块暂存 / 取消暂存 / 丢弃；**2026-08-25** Git 操作守卫；**2026-08-25** 左侧操作区与差异预览分栏；**2026-08-25** 差异预览 VS Code 化；**2026-08-26** 提交区 UX（单行自动增高、可空说明、split 提交按钮）；**2026-08-26** 图标 tooltip / discard 尺寸；**2026-08-27** 未暂存长列表不再与「待提交」叠层；**2026-08-27** 未推送文案与 **推送** 放在分支名下一行，无未推送时隐藏；**2026-08-27** 选入/移出/撤销不再闪提交按钮；**2026-08-27** 待提交下方 Graph（主干 + 节点到节点合入弧、侧道换色、`origin/` 橙色胶囊）；**2026-08-27** Graph 每页 50 条，列表滚到底部继续加载直至全部；**2026-08-27** Graph 引用胶囊收窄省略，有引用时放在说明下一行靠右，悬停打开提交详情卡；**2026-08-27** Changes 与 Graph 同级可折叠，Changes 包住分支/提交/两段列表；**2026-08-27** CHANGES/GRAPH 全大写加粗，Graph 钉底，Changes body 与 Graph 列表缩进 14px；**2026-08-27** Graph 每行说明紧挨该行点或线；**2026-08-27** 单击 Graph 提交在右栏只读多文件差异；**2026-08-28** Graph 提交文件头默认折叠，展开后才渲染该文件预览；**2026-08-28** 进入面板 / 重读 Graph 不自动打开最新提交；**2026-08-28** 切回 Git Tab 时 Graph 与右栏不闪 loading；**2026-08-27** 提交/推送确认框贴触发按钮右下角并加描边阴影；**2026-08-27** CHANGES 段头右侧显示未暂存加待提交行数；**2026-08-27** 无 remote 时提交/推送显示「没有配置远程仓库地址」；**2026-08-27** 无 remote 时分支下行 **添加远程地址**；已有 `origin` 时显示 URL 与 **删除远程地址**；**2026-08-28** 无 HEAD 时添加 origin 不显示尚未推送到远程；**2026-08-28** 推送非快进拒绝显示「远程已有提交，无法快进推送」 | 2026-08 |
@@ -235,6 +235,7 @@
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-09-02 | 分支 `test/desktop-v5-validation`：Agent 在嵌套目录写文件后资源管理器不更新、点 **刷新** 无效 | 手动刷新只重拉 Workspace 根；根 `watchPath` 不递归。改为 **刷新** / 切回资源管理器重载根+已展开层；对已展开文件夹注册 `watchPath` |
 | 2026-09-01 | 桌面壳 macOS 菜单栏 dev 仍显示 **Electron**（应用子菜单已是 About NanGeAGI） | macOS 菜单栏/Cmd+Tab 读 Electron.app `Info.plist` 的 `CFBundleName`，`app.setName()` 无法覆盖；`dev:desktop` 启动前跑 `brand-dev-electron.ts` 补丁 |
 | 2026-09-01 | 分支 `test/desktop-v5-validation`：Agent `browser_navigate` 后未切到工具箱浏览器，且弹出外部 about:blank 窗口；**切换其他工具箱 Tab 立刻弹回浏览器** | Host desktop human reveal 仅限 `navigate` 与带 URL 的 `createTab`；`DesktopBrowserSurface.revealForHuman` + IPC；`dev:desktop` 启动前 bundle preload |
 | 2026-09-01 | 分支 `test/desktop-v5-validation`：工具箱浏览器 tab 显示 `chromewebdata` / `ERR_FAILED (-2)` | 导航失败时 Chromium 落到 `chrome-error://chromewebdata/`，Host 误当作成功 URL 写回 tab；重试会再次加载该内部页。`BrowserRegistry` 拒绝 net-error URL；Client 不持久化该 URL；`normalizeDesktopBrowserUrl` 复活 guest 时回退 `about:blank` |

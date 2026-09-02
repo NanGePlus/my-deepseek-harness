@@ -946,10 +946,15 @@ describe('EditorSurface open / save', () => {
   it('re-fetches Git badges when the Explorer tab becomes visible again', async () => {
     const b = mount()
     await waitFor(() => { expect(b.gitStatus).toHaveBeenCalledTimes(1) })
+    const initialRootListings = b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length
     b.view.rerender(<EditorSurface {...b.props} visible={false} />)
     expect(b.gitStatus).toHaveBeenCalledTimes(1)
     b.view.rerender(<EditorSurface {...b.props} visible={true} />)
     await waitFor(() => { expect(b.gitStatus.mock.calls.length).toBeGreaterThan(1) })
+    await waitFor(() => {
+      expect(b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length)
+        .toBeGreaterThan(initialRootListings)
+    }, { timeout: 3000 })
   })
 
   it('segment-disk-refresh-hidden: segmentDiskRefreshEpoch re-fetches Git badges while Explorer stays hidden', async () => {
@@ -2487,6 +2492,55 @@ describe('EditorSurface external change', () => {
     await waitFor(() => {
       expect(b.listWorkspaceEntries.mock.calls.filter(call => call[1] === ROOT).length)
         .toBeGreaterThan(initialRootListings)
+    }, { timeout: 3000 })
+    await waitFor(() => { expect(screen.getByText('agent.ts')).toBeTruthy() })
+  })
+
+  it('manual-refresh-relists-expanded: clicking 刷新 re-fetches expanded directory listings', async () => {
+    const srcPath = `${ROOT}/src`
+    let srcCalls = 0
+    const list = vi.fn(async (_id: WorkspaceId, path: string) => {
+      if (path === srcPath) {
+        srcCalls += 1
+        const base = listingFor(path)
+        return srcCalls === 1
+          ? base
+          : { ...base, entries: [...base.entries, entry('agent.ts', false)] }
+      }
+      return listingFor(path)
+    })
+    mount({ list })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(screen.getByText('src').closest('[role="treeitem"]')!)
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    expect(screen.queryByText('agent.ts')).toBeNull()
+    const bar = document.querySelector('[data-file-tree-toolbar="true"]')
+    expect(bar).not.toBeNull()
+    fireEvent.click(within(bar as HTMLElement).getByRole('button', { name: '刷新' }))
+    await waitFor(() => { expect(screen.getByText('agent.ts')).toBeTruthy() })
+  })
+
+  it('expanded-directory-watch-refreshes-tree: watch on an expanded folder re-lists that directory', async () => {
+    const watch = createWatchHarness()
+    const srcPath = `${ROOT}/src`
+    const agentFile = entry('agent.ts', false)
+    const list = vi.fn(async (_id: WorkspaceId, path: string) => {
+      const base = listingFor(path)
+      if (path === srcPath) {
+        return { ...base, entries: [...base.entries, agentFile] }
+      }
+      return base
+    })
+    const b = mount({ watchPath: watch.watchPath, list })
+    await waitFor(() => { expect(screen.getByText('README.md')).toBeTruthy() })
+    fireEvent.click(screen.getByText('src').closest('[role="treeitem"]')!)
+    await waitFor(() => { expect(screen.getByText('app.ts')).toBeTruthy() })
+    expect(watch.isWatching(srcPath)).toBe(true)
+    const initialSrcListings = b.listWorkspaceEntries.mock.calls.filter(call => call[1] === srcPath).length
+    await act(async () => { watch.trigger(srcPath) })
+    await waitFor(() => {
+      expect(b.listWorkspaceEntries.mock.calls.filter(call => call[1] === srcPath).length)
+        .toBeGreaterThan(initialSrcListings)
     }, { timeout: 3000 })
     await waitFor(() => { expect(screen.getByText('agent.ts')).toBeTruthy() })
   })

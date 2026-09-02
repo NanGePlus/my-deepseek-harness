@@ -270,6 +270,7 @@ export function EditorSurface({
   const retryRef = useRef<(() => void) | null>(null)
   const watchAbort = useRef<Map<string, AbortController>>(new Map())
   const workspaceRootWatchAbort = useRef<AbortController | null>(null)
+  const expandedDirWatchAbort = useRef<Map<string, AbortController>>(new Map())
   const explorerRefreshDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const unwatchedPaths = useRef<Set<string>>(new Set())
   const pendingBulkCloseRef = useRef<{
@@ -322,12 +323,6 @@ export function EditorSurface({
     return Date.now() < suppressExplorerRefreshUntilRef.current
   }, [])
 
-  useEffect(() => {
-    const wasHidden = prevExplorerVisible.current === false
-    prevExplorerVisible.current = visible
-    if (visible && wasHidden) bumpGitRefresh()
-  }, [visible, bumpGitRefresh])
-
   const bumpExplorerRefresh = useCallback((path: string, mode: 'parent' | 'visible' = 'parent') => {
     if (shouldSuppressExplorerRefresh()) return
     setExplorerRefresh(prev => ({
@@ -346,6 +341,40 @@ export function EditorSurface({
       bumpExplorerRefresh(workspace.path, 'visible')
     }, 200)
   }, [workspace, bumpExplorerRefresh, shouldSuppressExplorerRefresh])
+
+  const syncExpandedDirectoryWatches = useCallback((expandedPaths: readonly string[]) => {
+    if (workspace === undefined) {
+      for (const controller of expandedDirWatchAbort.current.values()) controller.abort()
+      expandedDirWatchAbort.current.clear()
+      return
+    }
+    const desired = new Set(expandedPaths)
+    for (const [path, controller] of expandedDirWatchAbort.current) {
+      if (desired.has(path)) continue
+      controller.abort()
+      expandedDirWatchAbort.current.delete(path)
+    }
+    for (const path of desired) {
+      if (expandedDirWatchAbort.current.has(path)) continue
+      const controller = new AbortController()
+      expandedDirWatchAbort.current.set(path, controller)
+      watchPath(
+        workspace.workspaceId,
+        path,
+        scheduleVisibleExplorerRefresh,
+        controller.signal,
+      )
+    }
+  }, [workspace, watchPath, scheduleVisibleExplorerRefresh])
+
+  useEffect(() => {
+    const wasHidden = prevExplorerVisible.current === false
+    prevExplorerVisible.current = visible
+    if (visible && wasHidden) {
+      bumpGitRefresh()
+      scheduleVisibleExplorerRefresh()
+    }
+  }, [visible, bumpGitRefresh, scheduleVisibleExplorerRefresh])
 
   const saveTab = useCallback(async (path: string): Promise<boolean> => {
     const tab = tabsRef.current.find(item => item.path === path)
@@ -652,10 +681,11 @@ export function EditorSurface({
   useEffect(() => {
     if (segmentDiskRefreshEpoch === 0) return
     bumpGitRefresh()
+    scheduleVisibleExplorerRefresh()
     for (const tab of tabsRef.current) {
       if (tab.kind === 'text') void syncOpenTabFromDisk(tab.path)
     }
-  }, [segmentDiskRefreshEpoch, bumpGitRefresh, syncOpenTabFromDisk])
+  }, [segmentDiskRefreshEpoch, bumpGitRefresh, scheduleVisibleExplorerRefresh, syncOpenTabFromDisk])
 
   useEffect(() => {
     if (workspace === undefined) return
@@ -722,6 +752,8 @@ export function EditorSurface({
     if (explorerRefreshDebounce.current !== null) clearTimeout(explorerRefreshDebounce.current)
     workspaceRootWatchAbort.current?.abort()
     workspaceRootWatchAbort.current = null
+    for (const controller of expandedDirWatchAbort.current.values()) controller.abort()
+    expandedDirWatchAbort.current.clear()
     for (const controller of watchAbort.current.values()) controller.abort()
     watchAbort.current.clear()
     unwatchedPaths.current.clear()
@@ -902,6 +934,7 @@ export function EditorSurface({
         onPathRenamed={handlePathRenamed}
         onOpenFile={(entry) => { void openEntry(entry) }}
         onDismissOpenFeedback={dismissOpenFeedback}
+        onExpandedPathsChange={syncExpandedDirectoryWatches}
         diagnosticsByPath={lspDiagnostics}
         {...(activePath !== undefined ? { activeEditorPath: activePath } : {})}
       />

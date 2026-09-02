@@ -176,6 +176,11 @@ export interface FileTreePaneProps extends FileTreeHost, FileTreeMutationHost {
   diagnosticsByPath?: ReadonlyMap<string, readonly HostLspDiagnostic[]> | undefined
   /** Host-absolute path of the focused editor tab; reveals and selects the tree row. */
   activeEditorPath?: string
+  /**
+   * Report expanded directory paths so the host can watch nested listings for external writes.
+   * @param paths - host-absolute expanded directory paths.
+   */
+  onExpandedPathsChange?: (paths: readonly string[]) => void
   /** Cancel a pending open/error overlay when the user navigates the tree without opening a file. */
   onDismissOpenFeedback?: () => void
 }
@@ -239,6 +244,7 @@ export function FileTreePane({
   explorerRefreshMode = 'parent',
   collapsed = false, onHide, treeWidthPx = null,
   onPathDeleted, onPathRenamed, diagnosticsByPath, activeEditorPath, onDismissOpenFeedback,
+  onExpandedPathsChange,
 }: FileTreePaneProps) {
   const [childrenByPath, setChildrenByPath] = useState<Map<string, readonly WorkspaceEntry[]>>(
     () => new Map(),
@@ -480,12 +486,6 @@ export function FileTreePane({
     }
   }, [workspace])
 
-  const refreshExplorer = useCallback(async (): Promise<void> => {
-    if (workspace === undefined) return
-    await fetchDirectory(workspace.path, { force: true })
-    void refreshGitStatus()
-  }, [workspace, fetchDirectory, refreshGitStatus])
-
   const refreshVisibleDirectories = useCallback(async (): Promise<void> => {
     if (workspace === undefined) return
     const dirs = [workspace.path, ...expandedRef.current]
@@ -494,6 +494,14 @@ export function FileTreePane({
     }
     void refreshGitStatus()
   }, [workspace, fetchDirectory, refreshGitStatus])
+
+  const refreshExplorer = useCallback(async (): Promise<void> => {
+    await refreshVisibleDirectories()
+  }, [refreshVisibleDirectories])
+
+  useEffect(() => {
+    onExpandedPathsChange?.([...expanded])
+  }, [expanded, onExpandedPathsChange])
 
   useEffect(() => {
     const ac = new AbortController()
