@@ -3,7 +3,7 @@
  * @module @deepseek-ai/dsh-desktop-shell/browser-view-manager
  */
 
-import { BrowserView, type BrowserWindow } from 'electron'
+import { BrowserView, type BrowserWindow, type WebContents } from 'electron'
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
 import type { WorkspaceId } from '@deepseek-ai/dsh-host-apiproxy/api/workspace'
 import type { DesktopBrowserHumanRevealRequest, DesktopBrowserSurface } from '@deepseek-ai/dsh-host-apiproxy'
@@ -16,6 +16,7 @@ import {
 } from './browser-view-bounds.ts'
 import {
   findCdpPageByUrl,
+  isChromiumInternalErrorUrl,
   isDesktopCdpBrowserLive,
   normalizeDesktopBrowserUrl,
 } from './desktop-browser-cdp.ts'
@@ -25,6 +26,10 @@ interface TabRecord {
   attachment: BrowserViewAttachmentState
   lastUrl: string
 }
+
+const BLANK_GUEST_URL = 'about:blank'
+/** Backstop when Electron never settles loadURL on unreachable hosts. */
+const GUEST_LOAD_TIMEOUT_MS = 8_000
 
 /** Factory for one sandbox BrowserView (injectable in tests). */
 export type DesktopBrowserViewFactory = () => BrowserView
@@ -46,6 +51,7 @@ export const defaultDesktopBrowserViewFactory: DesktopBrowserViewFactory = defau
 export class DesktopBrowserViewManager implements DesktopBrowserSurface {
   private readonly tabs = new Map<string, TabRecord>()
   private readonly pages = new Map<string, Page>()
+  private readonly guestRecovery = new WeakMap<WebContents, Promise<void>>()
   private cdpBrowser: Browser | undefined
   private selectedKey: string | undefined
   private occupantBounds: BrowserOccupantBounds | undefined
@@ -85,9 +91,8 @@ export class DesktopBrowserViewManager implements DesktopBrowserSurface {
     }
     record.lastUrl = url
     this.pages.delete(key)
-    // Fresh BrowserView reports getURL() === '' until a load; skipping about:blank
-    // left Playwright's about:blank unmatched and waitForEvent('page') timed out.
-    await record.view.webContents.loadURL(normalizeDesktopBrowserUrl(url))
+    await this.loadGuest(record.view, url)
+    record.lastUrl = normalizeDesktopBrowserUrl(record.view.webContents.getURL())
   }
 
   /** @inheritdoc */
@@ -208,6 +213,7 @@ export class DesktopBrowserViewManager implements DesktopBrowserSurface {
 
   private insertView(key: string, lastUrl: string): TabRecord {
     const view = this.createView()
+    this.wireGuestNavigation(view)
     const record: TabRecord = { view, attachment: { attached: false }, lastUrl }
     this.tabs.set(key, record)
     this.watchDestroyed(key, view)
@@ -223,8 +229,104 @@ export class DesktopBrowserViewManager implements DesktopBrowserSurface {
   private reviveView(key: string, record: TabRecord): TabRecord {
     if (!this.viewDestroyed(record.view)) return record
     const next = this.replaceDestroyedView(key, record)
-    void next.view.webContents.loadURL(normalizeDesktopBrowserUrl(next.lastUrl))
+    void this.loadGuest(next.view, next.lastUrl)
     return next
+  }
+
+  private wireGuestNavigation(view: BrowserView): void {
+    view.webContents.on(
+      'did-fail-load',
+      (_event, _errorCode, _errorDescription, validatedURL, isMainFrame) => {
+        if (!isMainFrame || this.viewDestroyed(view)) return
+        if (validatedURL === BLANK_GUEST_URL || validatedURL.startsWith('about:')) return
+        void this.recoverNetErrorGuest(view, true)
+      },
+    )
+  }
+
+  /** Load one guest URL and collapse unreachable navigations to a blank document. */
+  private async loadGuest(view: BrowserView, url: string): Promise<void> {
+    if (this.viewDestroyed(view)) return
+    const wc = view.webContents
+    const target = normalizeDesktopBrowserUrl(url)
+    const failed = await this.waitGuestNavigation(wc, target)
+    if (target !== BLANK_GUEST_URL && failed) {
+      await this.recoverNetErrorGuest(view, true)
+      return
+    }
+    await this.recoverNetErrorGuest(view, false)
+  }
+
+  /**
+   * Wait for one guest navigation to finish or fail.
+   * Electron may never resolve `loadURL` on unreachable hosts; `did-fail-load` and a
+   * timeout backstop keep Host `browserCreateTab` from blocking bootstrap forever.
+   * @returns true when the navigation failed or timed out.
+   */
+  private waitGuestNavigation(wc: WebContents, url: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      let settled = false
+      const finish = (failed: boolean) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        wc.removeListener('did-finish-load', onFinish)
+        wc.removeListener('did-fail-load', onFail)
+        resolve(failed)
+      }
+      const onFinish = () => { finish(false) }
+      const onFail = (
+        _event: unknown,
+        _errorCode: number,
+        _errorDescription: string,
+        _validatedURL: string,
+        isMainFrame: boolean,
+      ) => {
+        if (isMainFrame) finish(true)
+      }
+      const timer = setTimeout(() => { finish(true) }, GUEST_LOAD_TIMEOUT_MS)
+      wc.once('did-finish-load', onFinish)
+      wc.once('did-fail-load', onFail)
+      void wc.loadURL(url).catch(() => { finish(true) })
+    })
+  }
+
+  /**
+   * Replace a failed guest document with a blank page so the toolbox stays usable.
+   * Electron often keeps `webContents.getURL()` as the intended http(s) URL after
+   * `ERR_CONNECTION_REFUSED` instead of `chrome-error://`.
+   * Concurrent recoveries share one in-flight load so `ensureTab` waits for blank.
+   * @param force - recover even when the current URL is not a Chromium error document.
+   */
+  private recoverNetErrorGuest(view: BrowserView, force: boolean): Promise<void> {
+    if (this.viewDestroyed(view)) return Promise.resolve()
+    const wc = view.webContents
+    const inflight = this.guestRecovery.get(wc)
+    if (inflight !== undefined) return inflight
+    const run = this.runNetErrorRecovery(view, wc, force)
+    this.guestRecovery.set(wc, run)
+    return run
+  }
+
+  private async runNetErrorRecovery(
+    view: BrowserView,
+    wc: WebContents,
+    force: boolean,
+  ): Promise<void> {
+    try {
+      if (this.viewDestroyed(view)) return
+      const current = wc.getURL()
+      if (!force && current !== '' && !isChromiumInternalErrorUrl(current)) return
+      if (current === BLANK_GUEST_URL) return
+      wc.stop()
+      try {
+        await wc.loadURL(BLANK_GUEST_URL)
+      } catch {
+        // A concurrent navigation may abort blank recovery; the guest is already unusable.
+      }
+    } finally {
+      this.guestRecovery.delete(wc)
+    }
   }
 
   private detachQuietly(record: TabRecord): void {

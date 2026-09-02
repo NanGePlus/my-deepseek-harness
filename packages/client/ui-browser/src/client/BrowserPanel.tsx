@@ -292,6 +292,7 @@ export function BrowserPanel({
       creatingRef.current = true
       actions.setCreating(workspaceId, true)
       actions.setInlineError(workspaceId, undefined)
+      actions.setNavError(workspaceId, undefined)
       actions.setBrowserUnavailable(workspaceId, undefined)
       const listed = await browserList(workspaceId, ac.signal)
       /* v8 ignore next -- superseded create calls abort before settlement. */
@@ -594,6 +595,7 @@ export function BrowserPanel({
     /* v8 ignore next -- tab rows only render after a bound Workspace bootstrap. */
     if (workspaceId === undefined) return
     actions.setSelectedTab(workspaceId, tabId)
+    if (isDesktopOccupant) actions.setNavError(workspaceId, undefined)
     const ac = new AbortController()
     try {
       await browserSelectTab(workspaceId, tabId, ac.signal)
@@ -603,7 +605,7 @@ export function BrowserPanel({
       /* v8 ignore next -- unexpected Host failures propagate to the runtime error boundary. */
       throw error
     }
-  }, [actions, browserSelectTab, workspaceId])
+  }, [actions, browserSelectTab, isDesktopOccupant, workspaceId])
 
   const handleCloseTab = useCallback(async (tabId: string) => {
     /* v8 ignore next -- the close affordance hides while only one tab remains. */
@@ -787,8 +789,8 @@ export function BrowserPanel({
       } catch (error: unknown) {
         /* v8 ignore next -- bootstrap aborts when the segment hides or Workspace changes. */
         if (ac.signal.aborted) return
-        setHostTabsReady(false)
         reportBrowserFailure(actions, workspaceId, error)
+        setHostTabsReady(isDesktopOccupant)
       }
     })()
     return () => {
@@ -797,7 +799,7 @@ export function BrowserPanel({
     }
   }, [
     actions, bootstrapAttempt, browserList, createBlankTab, deferAutoCreate,
-    recreateHostTabsFromStore, visible, workspaceId,
+    isDesktopOccupant, recreateHostTabsFromStore, visible, workspaceId,
   ])
 
   useEffect(() => {
@@ -1055,7 +1057,7 @@ export function BrowserPanel({
           {externalInfo}
         </div>
       )}
-      {navError !== undefined && (
+      {navError !== undefined && !isDesktopOccupant && (
         <div className={css.inlineError} role="alert">
           <span className={css.inlineErrorMessage}>{navError}</span>
           <button type="button" className={css.inlineErrorRetry} onClick={retryNav}>
@@ -1063,7 +1065,7 @@ export function BrowserPanel({
           </button>
         </div>
       )}
-      {inlineError !== undefined && (
+      {inlineError !== undefined && !isDesktopOccupant && (
         <div className={css.inlineError} role="alert">
           <span className={css.inlineErrorMessage}>{inlineError}</span>
           <button type="button" className={css.inlineErrorRetry} onClick={retryInline}>
@@ -1126,7 +1128,7 @@ export function BrowserPanel({
             </div>
           </div>
         )}
-        {navError !== undefined && browserUnavailable === undefined && (
+        {navError !== undefined && !isDesktopOccupant && browserUnavailable === undefined && (
           <div className={css.navFailureOverlay} role="alert">
             <span className={css.navFailureIcon} aria-hidden="true">
               <IconGlobeOutline14 size={48} />
