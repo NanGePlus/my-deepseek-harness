@@ -128,7 +128,7 @@
 | `packages/bundle/desktop-app/cordis.patch.yml` | **#118**：`api-gateway.config.browserDelivery: desktop` | 2026-08-31 |
 | `packages/client/connection/src/client/ipc-api-client.ts` | **新文件**（#116）：`IpcApiClient` desktop carrier；**2026-08-31** `openTerminalStream` / `openBrowserWatchScreencast` 走 IPC 流 | 2026-08-31 |
 | `packages/client/connection/src/client/ipc-bridge.ts` | **新文件**（#116）：preload 桥类型 + `readDesktopIpcBridge` | 2026-08-31 |
-| `packages/client/connection/src/client/index.ts` | **#116**：integrated desktop 选用 `IpcApiClient`；**2026-09-02** integrated desktop 的 Typert Remote（`ctx.connection.rpc`，含消息反馈）改走 `createIpcConnectionRpc`，不再误用 Renderer `fetch` | 2026-09-02 |
+| `packages/client/connection/src/client/index.ts` | **#116**：integrated desktop 选用 `IpcApiClient`；**2026-09-02** integrated desktop 的 Typert Remote（`ctx.connection.rpc`，含消息反馈）改走 `createIpcConnectionRpc`，不再误用 Renderer `fetch`；**2026-09-02** 声明 client 侧 `ctx.connection: ConnectionHandle`，修复 client typecheck 误用 Host 合并类型 | 2026-09-02 |
 | `packages/client/connection/src/index.ts` | **2026-09-02** 无 webServer 时也注册 Host `ctx.connection`，导出 `createHostApiFetchHandler` 供桌面 IPC 与 loopback HTTP 共用 Typert Gateway intercept | 2026-09-02 |
 | `apps/desktop/src/ipc-api-bridge.ts` | **2026-09-02** IPC unary 改走 `createHostApiFetchHandler`（Typert Remote + ApiProxy fallback），不再直连 `toFetchHandler(apiProxy)`；修复 stream 路径仍引用已删除的 `api` 变量导致 mux/host 下行失败 | 2026-09-02 |
 | `packages/client/connection/src/client/rpc.ts` | **2026-09-02** 新增 `createIpcConnectionRpc`：与 Web 共用 envelope，经 preload `fetch` 转发 Main in-process handler | 2026-09-02 |
