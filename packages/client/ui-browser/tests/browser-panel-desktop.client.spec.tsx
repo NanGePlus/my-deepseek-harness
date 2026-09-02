@@ -372,6 +372,32 @@ describe('BrowserPanel desktop occupant', () => {
     })
   })
 
+  it('tab context menu: insets occupant bounds below the portaled menu on desktop', async () => {
+    const reportBounds = stubDesktop()
+    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: function (this: HTMLElement) {
+        if (this.getAttribute('role') === 'menu') {
+          return { x: 12, y: 72, width: 160, height: 180, top: 72, left: 12, right: 172, bottom: 252 }
+        }
+        if (this.id === 'browser-occupant') {
+          return { x: 12, y: 112, width: 640, height: 480, top: 112, left: 12, right: 652, bottom: 592 }
+        }
+        return { x: 12, y: 40, width: 120, height: 32, top: 40, left: 12, right: 132, bottom: 72 }
+      },
+    })
+    mount({ browserList: vi.fn(async () => ({ tabs: [BLANK_TAB] })) })
+    await waitFor(() => { expect(screen.getByRole('tablist')).toBeTruthy() })
+    reportBounds.mockClear()
+    fireEvent.contextMenu(screen.getByRole('tab', { name: /about:blank/ }))
+    await waitFor(() => { expect(screen.getByRole('menuitem', { name: '关闭' })).toBeTruthy() })
+    await waitFor(() => {
+      expect(reportBounds).toHaveBeenCalledWith({
+        x: 12, y: 252, width: 640, height: 340, visible: true,
+      })
+    })
+  })
+
   it('keeps V4 navigation and tab chrome on fake desktop', async () => {
     stubDesktop()
     const browserNavigate = vi.fn(async (_wid, _tabId, url: string) => ({

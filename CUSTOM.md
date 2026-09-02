@@ -240,7 +240,7 @@
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
-| 2026-09-02 | 桌面端浏览器 `ERR_CONNECTION_REFUSED` 阻塞新建 Tab | BrowserView 原生错误页（非 React 遮罩）：`browser-view-manager` 在 `did-fail-load` / `chrome-error://` 后 load `about:blank`；Host 桌面 navigate 改走 `ensureTab` + net-error 回退；Client 桌面 occupant 不显示导航红条；**续** `loadURL` 对不可达主机可能永不 settle → bootstrap 卡在「正在准备浏览器…」，改为导航事件 + 8s 超时后再回退 blank；**再续** Electron 失败后 `getURL()` 仍为原 http URL（非 `chrome-error://`），须 **强制** 回退 blank；bootstrap 失败时桌面仍结束 preparing overlay |
+| 2026-09-02 | 桌面 Tab 右键菜单被 BrowserView 遮挡闪烁 | 恢复 `insetOccupantBoundsForOverlay`：菜单打开时测量 portaled `[role="menu"]` 并内缩 occupant bounds；Tab 菜单改 `side="bottom"` 向下展开 |
 | 2026-09-02 | 分支 `test/desktop-v5-validation`：桌面端消息 👍/👎 悬停显示「反馈状态加载失败」且文案竖排 | 根因：`IpcApiClient` 已走 IPC，但 `ctx.connection.rpc` 仍用 Renderer `fetch` 打 Typert Remote（`messageFeedback/list`）。新增 `createIpcConnectionRpc`；`.failure` 加 `white-space: nowrap` |
 | 2026-09-02 | 分支 `test/desktop-v5-validation`：桌面端会话历史加载失败 `seq gap … expected 28664, got 28663` | 根因：Host 冷恢复写 `session/end-seed` 后内存 cursor 与磁盘不同步，再发消息时 `agent/inbox/spliced` 复用 seq。`PersistenceCoordinator.appendCore` 追加前校验 stored 前缀；`appendLiveBatch` 空 batch 跳过；`scripts/repair-session-log.ts` 修复已损坏 zstd 日志；已修复 `session-745c04f7-…` |
 | 2026-09-02 | 分支 `test/desktop-v5-validation`：拖拽文件悬停未展开文件夹时自动展开 | 悬停 600ms 后调用现有 `toggleDirectory`；Web/桌面共用 |

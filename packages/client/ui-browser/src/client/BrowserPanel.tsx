@@ -1,6 +1,6 @@
 /** Embedded-browser occupant of the details column Browser tab. */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   Button,
@@ -35,6 +35,7 @@ import {
   reportBrowserOccupantBounds,
   subscribeDesktopEmbeddedBrowserOpen,
   subscribeDesktopToolboxBrowserReveal,
+  type BrowserOccupantOverlay,
   type DesktopToolboxBrowserRevealRequest,
   openDesktopExternalUrl,
 } from './browser-desktop-occupant.ts'
@@ -211,6 +212,7 @@ export function BrowserPanel({
   const [revealAttempt, setRevealAttempt] = useState(0)
   const [navigating, setNavigating] = useState(false)
   const [tabMenu, setTabMenu] = useState<{ anchorTabId: string; rect: DOMRect } | null>(null)
+  const [chromeMenuOverlay, setChromeMenuOverlay] = useState<BrowserOccupantOverlay | null>(null)
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
   const navRetryRef = useRef<(() => void) | null>(null)
   const pendingNavigateUrlRef = useRef<string | undefined>(undefined)
@@ -816,6 +818,33 @@ export function BrowserPanel({
     return () => { ac.abort() }
   }, [actions, hostTabsReady, isDesktopOccupant, revealAttempt, revealWindow, selectedTabId, visible, workspaceId])
 
+  const chromeMenuOpen = tabMenu !== null
+
+  useLayoutEffect(() => {
+    if (!isDesktopOccupant || !chromeMenuOpen) {
+      setChromeMenuOverlay(null)
+      return
+    }
+    const readOverlay = (): void => {
+      const menu = document.querySelector('[role="menu"]')
+      if (!(menu instanceof HTMLElement)) return
+      const rect = menu.getBoundingClientRect()
+      if (rect.height <= 0) return
+      setChromeMenuOverlay({
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+      })
+    }
+    readOverlay()
+    const menu = document.querySelector('[role="menu"]')
+    if (menu === null || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => { readOverlay() })
+    observer.observe(menu)
+    return () => { observer.disconnect() }
+  }, [chromeMenuOpen, isDesktopOccupant])
+
   useEffect(() => {
     if (!isDesktopOccupant) return
     const publish = (): void => {
@@ -823,6 +852,7 @@ export function BrowserPanel({
         desktopReporter,
         occupantRef.current,
         visible,
+        chromeMenuOverlay,
       )
     }
     if (!visible) {
@@ -836,7 +866,7 @@ export function BrowserPanel({
     observer.observe(element)
     return () => { observer.disconnect() }
   }, [
-    desktopReporter, hostTabsReady, isDesktopOccupant,
+    chromeMenuOverlay, desktopReporter, hostTabsReady, isDesktopOccupant,
     revealAttempt, selectedTabId, visible,
   ])
 
@@ -858,7 +888,6 @@ export function BrowserPanel({
   const showConnectingOverlay = !isDesktopOccupant && connecting
   const showLoadingOverlay = showPreparingOverlay || showNavOverlay || showConnectingOverlay
   const chromeTooltipSide = isDesktopOccupant ? 'top' : 'bottom'
-  const chromeMenuSide = isDesktopOccupant ? 'top' : 'bottom'
   const loadingMessage = showPreparingOverlay
     ? t('browser.loading.preparing')
     : showConnectingOverlay
@@ -957,7 +986,7 @@ export function BrowserPanel({
             portal
             compact
             align="start"
-            side={chromeMenuSide}
+            side="bottom"
             anchor={<span aria-hidden="true" />}
             items={tabCloseMenuItems}
             onSelect={(id) => {
