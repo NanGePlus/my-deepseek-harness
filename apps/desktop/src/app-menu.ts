@@ -15,14 +15,32 @@ export interface ApplicationMenuActions {
 }
 
 /**
- * Build the application menu. Includes the platform Edit menu: replacing the
- * default menu without copy/paste roles unbinds clipboard accelerators in every webContents.
+ * Build the application menu. Includes the platform Edit menu with clipboard
+ * roles only: a full {@link role} `editMenu` also registers Undo/Redo
+ * accelerators that call `webContents.undo()`, which bypasses Monaco and
+ * TipTap document undo (CJK IME preedit shows romanization instead of reverting).
  * @param actions - menu callbacks.
  * @returns Electron menu template.
  */
 export function buildApplicationMenuTemplate(
   actions: ApplicationMenuActions,
 ): MenuItemConstructorOptions[] {
+  const editSubmenu: MenuItemConstructorOptions[] = [
+    { role: 'cut' },
+    { role: 'copy' },
+    { role: 'paste' },
+    ...(process.platform === 'darwin'
+      ? [
+        { role: 'pasteAndMatchStyle' as const },
+        { role: 'delete' as const },
+        { role: 'selectAll' as const },
+      ]
+      : [
+        { role: 'delete' as const },
+        { type: 'separator' as const },
+        { role: 'selectAll' as const },
+      ]),
+  ]
   return [{
     label: actions.appName,
     submenu: [
@@ -43,5 +61,5 @@ export function buildApplicationMenuTemplate(
         click: () => { actions.requestQuit() },
       },
     ],
-  }, { role: 'editMenu' }]
+  }, { role: 'editMenu', submenu: editSubmenu }]
 }

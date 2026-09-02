@@ -18,6 +18,7 @@ import { clampTreeWidth, TREE_WIDTH_DEFAULT } from './tree-layout.ts'
 import { languageForPath, openKindForPath } from './open-kind.ts'
 import { createFileEditorStore, tabIsDirty, workspaceEditorState, type EditorTab } from './stores.ts'
 import { createDirtyGuard, type DirtyGuard, type WorkspaceEditorBridge } from './dirty-guard.ts'
+import { filterDiagnosticsForText, lspErrorCount, shouldApplyLspSyncDiagnostics } from './diagnostics-ui.ts'
 import { shouldSkipLsp, yieldToMain } from './editor-file-policy.ts'
 import { remapPathAfterRename } from './file-tree-parent.ts'
 import { FILE_READ_TIMEOUT_MS, withHostIoTimeout } from './host-io-timeout.ts'
@@ -281,6 +282,7 @@ export function EditorSurface({
   const lspSyncAbort = useRef<Map<string, AbortController>>(new Map())
   const lspDebounce = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const lspSyncPromises = useRef<Map<string, Promise<void>>>(new Map())
+  const lspConfirmDebounce = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const [lspDiagnostics, setLspDiagnostics] = useState<ReadonlyMap<string, readonly HostLspDiagnostic[]>>(new Map())
   const tabsRef = useRef(tabs)
   tabsRef.current = tabs
@@ -299,6 +301,13 @@ export function EditorSurface({
     ioAbort.current?.abort()
     ioAbort.current = null
     setStatus({ kind: 'idle' })
+    for (const controller of lspSyncAbort.current.values()) controller.abort()
+    lspSyncAbort.current.clear()
+    for (const pending of lspDebounce.current.values()) clearTimeout(pending)
+    lspDebounce.current.clear()
+    for (const pending of lspConfirmDebounce.current.values()) clearTimeout(pending)
+    lspConfirmDebounce.current.clear()
+    lspVersions.current.clear()
   }, [workspaceId])
 
   const guardMode = useSyncExternalStore(dirtyGuard.subscribe, dirtyGuard.getSnapshot)
@@ -409,13 +418,29 @@ export function EditorSurface({
     lspSyncAbort.current.get(path)?.abort()
     const controller = new AbortController()
     lspSyncAbort.current.set(path, controller)
-    const promise = lspSyncDocument(workspace.workspaceId, path, text, version, controller.signal).then((result) => {
+    const syncVersion = version
+    const syncText = text
+    const promise = lspSyncDocument(workspace.workspaceId, path, syncText, syncVersion, controller.signal).then((result) => {
       if (controller.signal.aborted) return
+      if (!shouldApplyLspSyncDiagnostics(syncVersion, lspVersions.current.get(path))) return
+      const tab = tabsRef.current.find(item => item.path === path)
+      if (tab?.kind !== 'text' || tab.buffer !== syncText) return
+      const filtered = filterDiagnosticsForText(syncText, result.diagnostics)
       setLspDiagnostics((prev) => {
         const next = new Map(prev)
-        next.set(path, result.diagnostics)
+        next.set(path, filtered)
         return next
       })
+      if (lspErrorCount(filtered) > 0) {
+        const pendingConfirm = lspConfirmDebounce.current.get(path)
+        if (pendingConfirm !== undefined) clearTimeout(pendingConfirm)
+        lspConfirmDebounce.current.set(path, setTimeout(() => {
+          lspConfirmDebounce.current.delete(path)
+          const current = tabsRef.current.find(item => item.path === path)
+          if (current?.kind !== 'text' || current.buffer !== syncText) return
+          void syncLsp(path, current.buffer)
+        }, 600))
+      }
     }).catch(() => {}).finally(() => {
       if (lspSyncPromises.current.get(path) === promise) {
         lspSyncPromises.current.delete(path)
@@ -424,6 +449,15 @@ export function EditorSurface({
     lspSyncPromises.current.set(path, promise)
     return promise
   }, [workspace, lspSyncDocument])
+
+  const clearLspDiagnosticsForPath = useCallback((path: string) => {
+    setLspDiagnostics((prev) => {
+      if (!prev.has(path)) return prev
+      const next = new Map(prev)
+      next.delete(path)
+      return next
+    })
+  }, [])
 
   const scheduleLspSync = useCallback((path: string, text: string) => {
     if (shouldSkipLsp(text)) return
@@ -442,9 +476,28 @@ export function EditorSurface({
     const pending = lspDebounce.current.get(path)
     if (pending !== undefined) clearTimeout(pending)
     lspDebounce.current.delete(path)
+    const pendingConfirm = lspConfirmDebounce.current.get(path)
+    if (pendingConfirm !== undefined) clearTimeout(pendingConfirm)
+    lspConfirmDebounce.current.delete(path)
     lspVersions.current.delete(path)
     void lspCloseDocument(workspace.workspaceId, path).catch(() => {})
   }, [workspace, lspCloseDocument])
+
+  useEffect(() => {
+    if (workspaceId === undefined) return
+    for (const tab of tabsRef.current) {
+      if (tab.kind !== 'text' || shouldSkipLsp(tab.buffer)) continue
+      scheduleLspSync(tab.path, tab.buffer)
+    }
+  }, [workspaceId, scheduleLspSync])
+
+  useEffect(() => {
+    if (!visible || workspace === undefined) return
+    for (const tab of tabsRef.current) {
+      if (tab.kind !== 'text' || shouldSkipLsp(tab.buffer)) continue
+      scheduleLspSync(tab.path, tab.buffer)
+    }
+  }, [visible, workspace, scheduleLspSync])
 
   useEffect(() => {
     if (workspaceId === undefined) return
@@ -652,13 +705,15 @@ export function EditorSurface({
           continue
         }
         editorActions?.reloadTextTab(path, result.text)
+        clearLspDiagnosticsForPath(path)
+        if (!shouldSkipLsp(result.text)) scheduleLspSync(path, result.text)
         return
       } catch (error: unknown) {
         void error
         return
       }
     }
-  }, [workspace, readFile, editorActions])
+  }, [workspace, readFile, editorActions, clearLspDiagnosticsForPath, scheduleLspSync])
 
   const reloadGitDiskPaths = useCallback(async (paths: readonly string[]): Promise<void> => {
     if (workspace === undefined) return
@@ -960,6 +1015,7 @@ export function EditorSurface({
         onCloseTabs={handleCloseTabs}
         onBufferChange={(path, buffer) => {
           editorActions?.setBuffer(path, buffer)
+          clearLspDiagnosticsForPath(path)
           scheduleLspSync(path, buffer)
         }}
         diagnosticsByPath={lspDiagnostics}

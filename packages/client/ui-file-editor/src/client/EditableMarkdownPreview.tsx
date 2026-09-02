@@ -6,6 +6,7 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import type { MarkdownCodeLabels, MermaidSecurityLevel } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { createEditableMarkdownExtensions } from './editable-markdown-extensions.ts'
+import { isDesktopShellDelivery } from './desktop-shell-delivery.ts'
 import { MarkdownSelectionToolbar } from './MarkdownSelectionToolbar.tsx'
 import { installPreviewClickSelectionGuard } from './preview-click-selection.ts'
 import css from './EditableMarkdownPreview.module.css'
@@ -109,6 +110,23 @@ export function EditableMarkdownPreview({
     lastEmitted.current = value
     if (force) lastDiskReloadTicket.current = diskReloadTicket
   }, [editor, value, diskReloadTicket])
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !isDesktopShellDelivery()) return
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!editor.isFocused) return
+      if (!event.metaKey && !event.ctrlKey) return
+      if (event.altKey) return
+      const key = event.key.toLowerCase()
+      if (key !== 'z' && !(key === 'y' && event.ctrlKey && !event.metaKey)) return
+      event.preventDefault()
+      const redo = key === 'y' || event.shiftKey
+      if (redo) editor.commands.redo()
+      else editor.commands.undo()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => { window.removeEventListener('keydown', onKeyDown, true) }
+  }, [editor])
 
   useEffect(() => {
     if (!editor || editor.isDestroyed) return

@@ -187,6 +187,7 @@ function mount(over: {
   movePath?: EditorSurfaceProps['movePath']
   createWorkspaceDirectory?: EditorSurfaceProps['createWorkspaceDirectory']
   watchPath?: EditorSurfaceProps['watchPath']
+  lspSyncDocument?: EditorSurfaceProps['lspSyncDocument']
   setDirtyPaths?: EditorSurfaceProps['setDirtyPaths']
 } = {}) {
   const listWorkspaceEntries = vi.fn(over.list ?? (async (_id: WorkspaceId, path: string) => listingFor(path)))
@@ -210,7 +211,7 @@ function mount(over: {
     path: `${parent}/${name}`,
   })))
   const watchPath = vi.fn(over.watchPath ?? (() => {}))
-  const lspSyncDocument = vi.fn(async () => ({ diagnostics: [] as const }))
+  const lspSyncDocument = vi.fn(over.lspSyncDocument ?? (async () => ({ diagnostics: [] as const })))
   const lspCloseDocument = vi.fn(async () => ({ closed: true as const }))
   const lspHoverDocument = vi.fn(async () => ({ hover: null }))
   const items = over.items ?? [workspace()]
@@ -244,7 +245,7 @@ function mount(over: {
   const view = render(<EditorSurface {...props} />)
   return {
     view, props, instance, sessionsStore, workspacesStore, listWorkspaceEntries, gitStatus, readFile, writeFile,
-    deletePath, renamePath, movePath, createWorkspaceDirectory, watchPath,
+    deletePath, renamePath, movePath, createWorkspaceDirectory, watchPath, lspSyncDocument,
   }
 }
 
@@ -2655,5 +2656,50 @@ describe('EditorSurface dirty guard', () => {
     await waitFor(() => {
       expect(setDirtyPaths).toHaveBeenCalledWith([])
     })
+  })
+})
+
+describe('EditorSurface LSP diagnostics', () => {
+  const README = `${ROOT}/README.md`
+  const staleError = {
+    severity: 'error' as const,
+    message: 'stale diagnostic',
+    range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+  }
+
+  async function clickFile(name: string): Promise<void> {
+    const tree = await waitFor(() => screen.getByRole('tree', { name: 'alpha' }))
+    fireEvent.click(within(tree).getByText(name).closest('[role="treeitem"]')!)
+  }
+
+  it('ignores stale LSP sync responses after a newer edit supersedes the request', async () => {
+    let releaseStale!: () => void
+    const lspSyncDocument = vi.fn(async (_wid, _path, _text, version: number) => {
+      if (version === 1) {
+        await new Promise<void>((resolve) => {
+          releaseStale = resolve
+        })
+        return { diagnostics: [staleError] }
+      }
+      return { diagnostics: [] as const }
+    })
+    const { lspSyncDocument: syncMock } = mount({ lspSyncDocument })
+    await clickFile('README.md')
+    await waitFor(() => { expect(screen.getByRole('textbox', { name: /README\.md/ })).toBeTruthy() })
+    const box = screen.getByRole('textbox', { name: /README\.md/ }) as HTMLTextAreaElement
+    vi.useFakeTimers()
+    try {
+      fireEvent.change(box, { target: { value: '# first\n' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      expect(syncMock).toHaveBeenCalledWith(WID, README, '# first\n', 1, expect.any(AbortSignal))
+      fireEvent.change(box, { target: { value: '# first\n\n' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      expect(syncMock).toHaveBeenCalledWith(WID, README, '# first\n\n', 2, expect.any(AbortSignal))
+      await act(async () => { releaseStale() })
+      await act(async () => { await Promise.resolve() })
+      expect(screen.queryAllByLabelText('1 个错误')).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

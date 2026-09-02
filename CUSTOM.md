@@ -235,6 +235,8 @@
 ## 近期操作记录
 | 日期 | 操作 | 备注 |
 |------|------|------|
+| 2026-09-02 | 分支 `test/desktop-v5-validation`：编辑 Python 加空行后 Tab/文件树误报 1 个 LSP 错误，切换 Session 后消失 | pyright 连发多次 `publishDiagnostics`，Host 需 300ms settle 后再返回；Client 过滤超行号诊断、编辑清标记、有 error 时 600ms 二次 sync。此前 `build:lib:host` 因 pyright e2e 测试类型错误失败，`lib/` 未更新导致桌面 Host 仍跑旧 100ms 逻辑 |
+| 2026-09-02 | 分支 `test/desktop-v5-validation`：Markdown 源码 / Monaco 按 Cmd+Z 撤销异常（露出拼音） | Electron 全量 `editMenu` 把 Cmd+Z 绑到 `webContents.undo()`，与 Monaco undo 栈冲突；Edit 子菜单去掉 undo/redo；桌面 Renderer 捕获 Cmd+Z 并 `trigger` Monaco/TipTap undo |
 | 2026-09-02 | 分支 `test/desktop-v5-validation`：Agent 在嵌套目录写文件后资源管理器不更新、点 **刷新** 无效 | 手动刷新只重拉 Workspace 根；根 `watchPath` 不递归。改为 **刷新** / 切回资源管理器重载根+已展开层；对已展开文件夹注册 `watchPath` |
 | 2026-09-01 | 桌面壳 macOS 菜单栏 dev 仍显示 **Electron**（应用子菜单已是 About NanGeAGI） | macOS 菜单栏/Cmd+Tab 读 Electron.app `Info.plist` 的 `CFBundleName`，`app.setName()` 无法覆盖；`dev:desktop` 启动前跑 `brand-dev-electron.ts` 补丁 |
 | 2026-09-01 | 分支 `test/desktop-v5-validation`：Agent `browser_navigate` 后未切到工具箱浏览器，且弹出外部 about:blank 窗口；**切换其他工具箱 Tab 立刻弹回浏览器** | Host desktop human reveal 仅限 `navigate` 与带 URL 的 `createTab`；`DesktopBrowserSurface.revealForHuman` + IPC；`dev:desktop` 启动前 bundle preload |
