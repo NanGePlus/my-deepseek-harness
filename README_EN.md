@@ -8,6 +8,8 @@ Chat with the agent in the browser or desktop app, and edit files, run Git, use 
 
 [中文](README.md) · Customizations: [CUSTOM.md](CUSTOM.md)
 
+![NanGeAGI](pictures/image02.png)
+
 ---
 
 ## AI Coding Skills
@@ -18,42 +20,57 @@ From domain vocabulary and PRDs through Issue slices to Host RPC and Client plug
 
 **Get AI Coding Skills**
 
-| Channel | Link |
-| --- | --- |
+
+| Channel  | Link                                                                                                                                                                                                            |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Bilibili | [Get AI Coding Skills (Bilibili)](https://mall.bilibili.com/neul-next/detailuniversal/detail.html?page=detailuniversal_detail&itemsId=41424824&loadingShow=1&noTitleBar=1#noReffer=true&msource=merchant_share) |
-| Patreon | [Get AI Coding Skills (Patreon)](https://www.patreon.com/nangeagi/posts/ni-shi-bu-shi-ye-166882633?utm_medium=clipboard_copy&utm_source=copyLink&utm_campaign=postshare_creator&utm_content=join_link) |
+| Patreon  | [Get AI Coding Skills (Patreon)](https://www.patreon.com/nangeagi/posts/ni-shi-bu-shi-ye-166882633?utm_medium=clipboard_copy&utm_source=copyLink&utm_campaign=postshare_creator&utm_content=join_link)          |
+
 
 For an introduction and how to use AI Coding Skills, see:
 
 Bilibili video: [https://www.bilibili.com/video/BV1zQNM6MEqf/](https://www.bilibili.com/video/BV1zQNM6MEqf/)
+
 YouTube playlist: [https://www.youtube.com/playlist?list=PLRsjhp02BBRE](https://www.youtube.com/playlist?list=PLRsjhp02BBRE)
 
 ---
 
+
+
 ## Capabilities
+
+
 
 ### Agent platform (inherited from DeepSeek Harness)
 
-| Capability | Description |
-| --- | --- |
-| **Multi-session agent chat** | Streaming replies; visible context and token usage |
-| **Workspace** | Bind a local project directory; the agent reads, writes, and executes within it |
-| **Tool calling** | Files, shell, web search, subagents, todo, plan, browser automation, etc. |
-| **Permissions & approval** | Configurable confirmation for sensitive operations |
-| **Model configuration** | DeepSeek API; Settings supports OpenAI-compatible endpoints |
-| **Cordis plugin architecture** | Extend Host / Client capabilities as needed |
+
+| Capability                     | Description                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------- |
+| **Multi-session agent chat**   | Streaming replies; visible context and token usage                              |
+| **Workspace**                  | Bind a local project directory; the agent reads, writes, and executes within it |
+| **Tool calling**               | Files, shell, web search, subagents, todo, plan, browser automation, etc.       |
+| **Permissions & approval**     | Configurable confirmation for sensitive operations                              |
+| **Model configuration**        | DeepSeek API; Settings supports OpenAI-compatible endpoints                     |
+| **Cordis plugin architecture** | Extend Host / Client capabilities as needed                                     |
+
+
+
 
 ### This fork: five toolbox segments
 
 In this fork, Harness’s upstream **details column** is product-named **Toolbox**. Open or close it from the session header **icon + “Toolbox”** capsule; the panel is resizable.
 
-| Segment | Module | Highlights |
-| --- | --- | --- |
-| **Resource manager** | File editor | Monaco multi-tab, Markdown preview/source, syntax highlighting, LSP diagnostics, explicit save, Git line badges, drag-and-drop moves |
-| **Git panel** | Source control | Change lists and commit graph, diff preview, hunk stage/discard, commit and push, Git action guards |
-| **Terminal** | Human terminal | Multi-tab interactive shell (xterm), **fully separate** from agent `terminal_*` tools |
-| **Browser** | Embedded browser | Multi-tab navigation; Web uses a headed Chromium window; desktop app uses in-panel WebView; agent `browser_*` shares the same instance with humans |
-| **Tool details** | Tool output | Inspect agent tool calls; click tool rows in the message stream to jump here |
+
+| Segment              | Module           | Highlights                                                                                                                                         |
+| -------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Resource manager** | File editor      | Monaco multi-tab, Markdown preview/source, syntax highlighting, LSP diagnostics, explicit save, Git line badges, drag-and-drop moves               |
+| **Git panel**        | Source control   | Change lists and commit graph, diff preview, hunk stage/discard, commit and push, Git action guards                                                |
+| **Terminal**         | Human terminal   | Multi-tab interactive shell (xterm), **fully separate** from agent `terminal_`* tools                                                              |
+| **Browser**          | Embedded browser | Multi-tab navigation; Web uses a headed Chromium window; desktop app uses in-panel WebView; agent `browser_`* shares the same instance with humans |
+| **Tool details**     | Tool output      | Inspect agent tool calls; click tool rows in the message stream to jump here                                                                       |
+
+
+
 
 ### Conversation enhancements
 
@@ -61,16 +78,22 @@ In this fork, Harness’s upstream **details column** is product-named **Toolbox
 - Markdown / image ZoomPan viewing
 - Selection **Add to Chat**; file paths in sent messages open in the editor
 
+
+
 ### Two delivery modes (both from source)
 
-| Mode | Command | Notes |
-| --- | --- | --- |
-| **Web** | `pnpm dsh web` | Open the loopback URL printed in the terminal |
+
+| Mode            | Command                                      | Notes                                                                    |
+| --------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
+| **Web**         | `pnpm dsh web`                               | Open the loopback URL printed in the terminal                            |
 | **Desktop app** | `pnpm run dev:desktop` or `pnpm dsh desktop` | Electron shell + same SPA; prefer `dev:desktop` for daily dev (Vite HMR) |
+
 
 Desktop and Web are **feature-equivalent** (same SPA + same Host capabilities). Desktop connects to the local Host over Electron IPC and does not bind a loopback HTTP port.
 
 ---
+
+
 
 ## Install & run
 
@@ -116,14 +139,18 @@ git pull && pnpm install && pnpm run build
 # If only Client plugin UI changed, bundle the package then restart / hard-refresh
 ```
 
-| Symptom | Fix |
-| --- | --- |
-| Official `npx @deepseek-ai/dsh web` lacks custom features | Build and run from this repo with `pnpm dsh web` |
-| “Toolbox” or five segments not visible | Confirm `custom/main` and `pnpm run build`; hard-refresh |
-| Client UI changes not showing | `pnpm --filter <package> run bundle`, then restart web or hard-refresh |
-| Resource manager: file too large / directory “…” | ~5 MB per file; 1000 entries per directory level |
+
+| Symptom                                                   | Fix                                                                    |
+| --------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Official `npx @deepseek-ai/dsh web` lacks custom features | Build and run from this repo with `pnpm dsh web`                       |
+| “Toolbox” or five segments not visible                    | Confirm `custom/main` and `pnpm run build`; hard-refresh               |
+| Client UI changes not showing                             | `pnpm --filter <package> run bundle`, then restart web or hard-refresh |
+| Resource manager: file too large / directory “…”          | ~5 MB per file; 1000 entries per directory level                       |
+
 
 ---
+
+
 
 ## Basic usage
 
@@ -136,6 +163,8 @@ git pull && pnpm install && pnpm run build
 **Guards**: Unsaved editor tabs prompt save/discard when switching sessions or quitting the desktop app. Running terminal or browser tabs **do not** block session switches.
 
 ---
+
+
 
 ## Architecture (brief)
 
@@ -162,6 +191,8 @@ See [docs/architecture.md](docs/architecture.md) and [AGENTS.md](AGENTS.md) for 
 
 ---
 
+
+
 ## Development & build
 
 ```sh
@@ -183,6 +214,8 @@ Fork differences from upstream: [CUSTOM.md](CUSTOM.md). Domain vocabulary: [CONT
 
 ---
 
+
+
 ## Known limitations
 
 - **Fork** of DeepSeek Harness; merging upstream is manual (integration branch `custom/main`).
@@ -193,17 +226,23 @@ Fork differences from upstream: [CUSTOM.md](CUSTOM.md). Domain vocabulary: [CONT
 
 ---
 
+
+
 ## Documentation
 
-| Document | Contents |
-| --- | --- |
-| [CUSTOM.md](CUSTOM.md) | Fork customization ledger and changelog |
-| [CONTEXT.md](CONTEXT.md) | Domain language (toolbox, bound workspace, etc.) |
-| [docs/prd/](docs/prd/) | Product specs (V1–V5) |
-| [docs/adr/](docs/adr/) | Architecture decision records |
-| [DeepSeek Harness docs](https://github.com/deepseek-ai/deepseek-harness) | Upstream platform and plugin development |
+
+| Document                                                                 | Contents                                         |
+| ------------------------------------------------------------------------ | ------------------------------------------------ |
+| [CUSTOM.md](CUSTOM.md)                                                   | Fork customization ledger and changelog          |
+| [CONTEXT.md](CONTEXT.md)                                                 | Domain language (toolbox, bound workspace, etc.) |
+| [docs/prd/](docs/prd/)                                                   | Product specs (V1–V5)                            |
+| [docs/adr/](docs/adr/)                                                   | Architecture decision records                    |
+| [DeepSeek Harness docs](https://github.com/deepseek-ai/deepseek-harness) | Upstream platform and plugin development         |
+
 
 ---
+
+
 
 ## License
 
