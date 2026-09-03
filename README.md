@@ -9,6 +9,9 @@
 [English](README_EN.md) · 定制说明：[CUSTOM.md](CUSTOM.md)
 
 ![NanGeAGI](pictures/image01.png)
+![NanGeAGI](pictures/image03.png)
+![NanGeAGI](pictures/image04.png)
+![NanGeAGI](pictures/image05.png)
 
 ---
 
