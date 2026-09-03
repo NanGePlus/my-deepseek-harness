@@ -8,6 +8,8 @@
 
 [English](README_EN.md) · 定制说明：[CUSTOM.md](CUSTOM.md)
 
+![NanGeAGI](pictures/image01.png)
+
 ---
 
 ## AI Coding Skills
@@ -28,11 +30,16 @@
 关于 AI Coding Skills 的介绍及使用方式，大家可参考：
 
 B站视频链接：[https://www.bilibili.com/video/BV1zQNM6MEqf/](https://www.bilibili.com/video/BV1zQNM6MEqf/)
+
 YouTube视频链接：[https://www.youtube.com/playlist?list=PLRsjhp02BBRE](https://www.youtube.com/playlist?list=PLRsjhp02BBRE)
 
 ---
 
+
+
 ## 能力概览
+
+
 
 ### Agent 平台（继承 DeepSeek Harness）
 
@@ -45,6 +52,8 @@ YouTube视频链接：[https://www.youtube.com/playlist?list=PLRsjhp02BBRE](http
 | **权限与审批**        | 敏感操作可配置确认策略                               |
 | **模型配置**         | DeepSeek API；设置页支持 OpenAI 兼容端点            |
 | **Cordis 插件架构**  | 可按需扩展 Host / Client 能力                    |
+
+
 
 
 ### 本仓库定制：工具箱五段
@@ -61,11 +70,15 @@ Harness 原右侧 **详情栏**（details）在本 fork 中统一称为 **工具
 | **工具详情**   | Tool 输出 | 查看 Agent 工具调用详情；点击消息流工具行可跳转                                                  |
 
 
+
+
 ### 对话区增强
 
 - Mermaid 图表渲染与缩放预览
 - Markdown / 图片 ZoomPan 浏览
 - 选区 **Add to Chat**、已发送消息中的文件路径可打开编辑器
+
+
 
 ### 两种交付方式（均从源码启动）
 
@@ -79,6 +92,8 @@ Harness 原右侧 **详情栏**（details）在本 fork 中统一称为 **工具
 桌面与 Web **功能对等**（同一 SPA + 同一 Host 能力）；桌面通过 Electron IPC 连接本机 Host，不占用 loopback HTTP 端口。
 
 ---
+
+
 
 ## 安装与运行
 
@@ -135,6 +150,8 @@ git pull && pnpm install && pnpm run build
 
 ---
 
+
+
 ## 基本使用
 
 1. **配置模型** — 设置 → 模型，填入 API Key（详见 [模型提供方指南](docs/user/guide/providers.zh.md)）。
@@ -146,6 +163,8 @@ git pull && pnpm install && pnpm run build
 **守卫规则**：存在未保存的编辑器 Tab 时，切换 Session 或退出桌面 App 会提示保存/丢弃；运行中的终端或浏览器 Tab **不会**阻断切换。
 
 ---
+
+
 
 ## 架构简述
 
@@ -172,6 +191,8 @@ Web Client（浏览器 / Electron Renderer）
 
 ---
 
+
+
 ## 开发与构建
 
 ```sh
@@ -193,6 +214,8 @@ pnpm --filter @deepseek-ai/dsh-client-ui-file-editor run bundle
 
 ---
 
+
+
 ## 已知限制
 
 - 基于 DeepSeek Harness 的 **fork**；合并上游需手动对齐（集成分支 `custom/main`）。
@@ -202,6 +225,8 @@ pnpm --filter @deepseek-ai/dsh-client-ui-file-editor run bundle
 - 官方 `npx @deepseek-ai/dsh web` **不包含**本仓库工具箱定制，须从本仓库构建运行。
 
 ---
+
+
 
 ## 文档
 
@@ -216,6 +241,8 @@ pnpm --filter @deepseek-ai/dsh-client-ui-file-editor run bundle
 
 
 ---
+
+
 
 ## 许可证
 
