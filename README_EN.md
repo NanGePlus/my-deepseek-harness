@@ -8,7 +8,10 @@ Chat with the agent in the browser or desktop app, and edit files, run Git, use 
 
 [中文](README.md) · Customizations: [CUSTOM.md](CUSTOM.md)
 
-![NanGeAGI](pictures/image02.png)
+![NanGeAGI](pictures/image01.png)
+![NanGeAGI](pictures/image03.png)
+![NanGeAGI](pictures/image04.png)
+![NanGeAGI](pictures/image05.png)
 
 ---
 
