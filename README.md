@@ -36,6 +36,11 @@ B站视频链接：[https://www.bilibili.com/video/BV1zQNM6MEqf/](https://www.bi
 
 YouTube视频链接：[https://www.youtube.com/playlist?list=PLRsjhp02BBRE](https://www.youtube.com/playlist?list=PLRsjhp02BBRE)
 
+关于本项目介绍视频：               
+#01 资源管理器视频：[B站](https://www.bilibili.com/video/BV1UPhu6JEuG/) [YouTube](https://youtu.be/OQCLfUDIdO0)                
+#02 Git 面板视频：[B站](https://www.bilibili.com/video/BV159466kEiZ/) [YouTube](https://youtu.be/1165WCro46k)                  
+#03 终端、浏览器和桌面端视频：[B站](https://www.bilibili.com/video/BV1D2tL6PEiy/) [YouTube](https://youtu.be/X098a4RVX90)                
+
 ---
 
 
